@@ -1,0 +1,51 @@
+# Docker Compose for local testing
+# Usage: docker compose run --rm review
+#
+# Before running, set environment variables:
+#   export GITEA_TOKEN=your_token
+#   export DEEPSEEK_API_KEY=your_api_key
+
+services:
+  review:
+    build: .
+    image: ghcr.io/ccsert/opencode-review:latest
+    volumes:
+      # Mount current directory as workspace
+      - .:/workspace:ro
+      # Optional: Mount custom config to override built-in
+      # - ./.opencode-review:/app/.opencode-review:ro
+    environment:
+      # Required
+      - GITEA_TOKEN=${GITEA_TOKEN}
+      - GITEA_SERVER_URL=${GITEA_SERVER_URL:-https://gitea.com}
+      
+      # LLM API Keys (at least one required)
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      
+      # Configuration
+      - MODEL=${MODEL:-deepseek/deepseek-chat}
+      - REVIEW_LANGUAGE=${REVIEW_LANGUAGE:-auto}
+      - REVIEW_STYLE=${REVIEW_STYLE:-balanced}
+      - AUTO_APPROVE=${AUTO_APPROVE:-false}
+      
+      # PR Context (for testing)
+      - PR_NUMBER=${PR_NUMBER:-1}
+      - REPO_OWNER=${REPO_OWNER:-owner}
+      - REPO_NAME=${REPO_NAME:-repo}
+    working_dir: /workspace
+    
+  # Development mode with shell access
+  dev:
+    build: .
+    volumes:
+      - .:/workspace
+      - ./.opencode-review:/app/.opencode-review
+    environment:
+      - GITEA_TOKEN=${GITEA_TOKEN}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - MODEL=${MODEL:-deepseek/deepseek-chat}
+    entrypoint: /bin/bash
+    stdin_open: true
+    tty: true

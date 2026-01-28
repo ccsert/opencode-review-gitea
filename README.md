@@ -1,6 +1,7 @@
 # OpenCode Gitea Review
 
 [![OpenCode](https://img.shields.io/badge/OpenCode-AI%20Code%20Review-blue)](https://opencode.ai)
+[![Docker Image](https://img.shields.io/badge/Docker-ghcr.io-blue)](https://ghcr.io/ccsert/opencode-review)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文文档](README_zh.md) | English
@@ -9,15 +10,16 @@ An AI-powered **automatic code review tool for Gitea/Forgejo PRs**, built on the
 
 ## ✨ Features
 
-- 🤖 **AI-Powered Code Review** - Uses Claude/GPT models to analyze code changes
+- 🤖 **AI-Powered Code Review** - Uses Claude/GPT/DeepSeek models to analyze code changes
 - 📝 **Line-Level Comments** - Provides precise feedback on specific code lines
 - ✅ **Review Decisions** - Supports approve, request_changes, and comment states
 - 🔄 **Auto-Trigger** - Triggered by `/oc` or `/opencode` comments
+- 🐳 **Docker Support** - Zero-config installation with pre-built image
 - 🛡️ **Isolated Configuration** - Uses `.opencode-review/` directory, won't conflict with your existing `.opencode/` setup
 
-## 📦 Quick Installation
+## 📦 Installation
 
-### Option 1: One-Line Install Script (Recommended)
+### Interactive Installation (Recommended)
 
 Run in your project root:
 
@@ -25,23 +27,30 @@ Run in your project root:
 curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash
 ```
 
-### Option 2: Manual Installation
+You'll see an interactive menu to choose your installation method.
+
+### Direct Installation Options
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/ccsert/opencode-review-gitea.git /tmp/opencode-review-gitea
+# Docker-based (Recommended) - Zero files added to repo
+curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash -s -- --docker
 
-# 2. Copy files to your project
-cp -r /tmp/opencode-review-gitea/.opencode-review .
-mkdir -p .gitea/workflows
-cp /tmp/opencode-review-gitea/.gitea/workflows/opencode-review.yaml .gitea/workflows/
+# Source-based - Full customization
+curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash -s -- --source
 
-# 3. Install dependencies
-cd .opencode-review && bun install && cd ..
-
-# 4. Cleanup
-rm -rf /tmp/opencode-review-gitea
+# Both methods
+curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash -s -- --both
 ```
+
+## 🔄 Installation Methods Comparison
+
+| Aspect | Docker 🐳 | Source 📦 |
+|--------|----------|-----------|
+| **Files added** | 1 workflow file | .opencode-review/ + workflow |
+| **CI speed** | Fast (cached image) | Slower (install deps each run) |
+| **Customization** | Environment variables | Full control over agents/tools |
+| **Updates** | Automatic with `:latest` | Manual update required |
+| **Best for** | Quick setup, standard use | Custom prompts, advanced users |
 
 ## ⚙️ Configuration
 
@@ -52,38 +61,28 @@ Configure the following secrets in your Gitea repository:
 | Secret Name | Description |
 |-------------|-------------|
 | `OPENCODE_GIT_TOKEN` | Gitea API Token (requires repo permissions) |
-| `DEEPSEEK_API_KEY` | DeepSeek API Key (or other LLM provider) |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key (default model) |
 
 ### 2. Configure Model (Optional)
 
-Edit `.gitea/workflows/opencode-review.yaml` to change the default model:
+Edit `.gitea/workflows/opencode-review.yaml`:
 
 ```yaml
 env:
   # Format: provider/model-id
-  MODEL: deepseek/deepseek-chat  # Default (requires DEEPSEEK_API_KEY)
-  # Or use other providers:
+  MODEL: deepseek/deepseek-chat        # Default (requires DEEPSEEK_API_KEY)
   # MODEL: anthropic/claude-sonnet-4-5  # Requires ANTHROPIC_API_KEY
-  # MODEL: openai/gpt-4o               # Requires OPENAI_API_KEY
+  # MODEL: openai/gpt-4o                # Requires OPENAI_API_KEY
 ```
 
-### 3. Isolated from Your Development Environment
+### 3. Docker-specific Options
 
-This tool uses the **`OPENCODE_CONFIG_DIR`** environment variable ([official docs](https://opencode.ai/docs/config/#custom-directory)) to load agents from `.opencode-review/` instead of `.opencode/`:
-
+```yaml
+env:
+  REVIEW_LANGUAGE: auto      # auto | en | zh-CN
+  REVIEW_STYLE: balanced     # concise | balanced | thorough | security
+  AUTO_APPROVE: false        # Auto-approve if no issues found
 ```
-.opencode-review/           # ← Isolated! Won't affect your .opencode/
-├── agents/                 # AI Agent definitions
-├── tools/                  # Custom Gitea API tools
-├── skills/                 # Reusable skills
-└── package.json            # Dependencies
-```
-
-**Why this matters:**
-- Your existing `.opencode/` configuration remains untouched
-- The CI workflow sets `OPENCODE_CONFIG_DIR` to point to `.opencode-review/`
-- Locally, without this env var, `opencode` only sees your `.opencode/`
-- No tool naming conflicts
 
 ## 🚀 Usage
 
@@ -101,25 +100,31 @@ or
 /opencode please review this PR
 ```
 
-### Local Testing
+### Local Testing (Docker)
 
 ```bash
-# Set environment variables
-export GITEA_TOKEN="your-token"
-export GITEA_SERVER_URL="https://your-gitea.example.com"
-export PR_NUMBER=123
-export REPO_OWNER="your-org"
-export REPO_NAME="your-repo"
-
-# IMPORTANT: Set custom config directory
-export OPENCODE_CONFIG_DIR="$(pwd)/.opencode-review"
-
-# Run review
-opencode run --agent code-review \
-  "Please review PR #${PR_NUMBER} in ${REPO_OWNER}/${REPO_NAME}"
+docker run --rm \
+  -v $(pwd):/workspace \
+  -e GITEA_TOKEN="your-token" \
+  -e DEEPSEEK_API_KEY="your-key" \
+  -e PR_NUMBER=123 \
+  -e REPO_OWNER="your-org" \
+  -e REPO_NAME="your-repo" \
+  ghcr.io/ccsert/opencode-review:latest
 ```
 
-## 🔧 Customization
+### Local Testing (Source)
+
+```bash
+export GITEA_TOKEN="your-token"
+export GITEA_SERVER_URL="https://your-gitea.example.com"
+export OPENCODE_CONFIG_DIR="$(pwd)/.opencode-review"
+
+opencode run --agent code-review \
+  "Please review PR #123 in owner/repo"
+```
+
+## 🔧 Customization (Source Installation)
 
 ### Modify Review Style
 
@@ -128,7 +133,6 @@ Edit `.opencode-review/agents/code-review.md`:
 ```markdown
 ---
 description: AI code reviewer for Gitea/Forgejo PRs
-model: opencode/claude-sonnet-4-5
 tools:
   "*": false
   "gitea-review": true
@@ -140,7 +144,7 @@ You are a code review expert focusing on [your domain]...
 
 ### Add New Tools
 
-Create a new TypeScript file in `.opencode-review/tools/`:
+Create a TypeScript file in `.opencode-review/tools/`:
 
 ```typescript
 import { tool } from "@opencode-ai/plugin"
@@ -151,7 +155,6 @@ export default tool({
     param: tool.schema.string().describe("Parameter description"),
   },
   async execute(args, context) {
-    // Tool logic
     return "Result"
   },
 })
@@ -161,21 +164,23 @@ export default tool({
 
 ```
 .
-├── .gitea/
-│   └── workflows/
-│       └── opencode-review.yaml    # Gitea Actions workflow
+├── Dockerfile                      # Docker image definition
+├── docker-compose.yaml             # Local testing
+├── entrypoint.sh                   # Container entrypoint
+├── install.sh                      # Installation script
+├── templates/
+│   ├── workflow-docker.yaml        # Docker workflow template
+│   └── workflow-source.yaml        # Source workflow template
+├── .github/workflows/
+│   └── docker-publish.yaml         # Auto-build Docker image
+├── .gitea/workflows/
+│   └── opencode-review.yaml        # Gitea Actions workflow
 └── .opencode-review/               # Isolated config directory
     ├── agents/
-    │   ├── code-review.md          # Code review agent
-    │   └── gitea-assistant.md      # General assistant agent
+    │   └── code-review.md          # Code review agent
     ├── tools/
-    │   ├── gitea-comment.ts        # Post comments
     │   ├── gitea-pr-diff.ts        # Get PR diff
     │   └── gitea-review.ts         # Submit review
-    ├── skills/
-    │   └── pr-review/
-    │       └── SKILL.md            # PR review skill
-    ├── opencode.json               # OpenCode config
     └── package.json                # Dependencies
 ```
 
@@ -183,8 +188,8 @@ export default tool({
 
 - [OpenCode Documentation](https://opencode.ai/docs)
 - [OpenCode Custom Tools](https://opencode.ai/docs/custom-tools/)
-- [OpenCode Agent Configuration](https://opencode.ai/docs/agents/)
 - [Gitea API Documentation](https://docs.gitea.io/en-us/api-usage/)
+- [Docker Image](https://ghcr.io/ccsert/opencode-review)
 
 ## 📄 License
 

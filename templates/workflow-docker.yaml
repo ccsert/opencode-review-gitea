@@ -1,0 +1,66 @@
+# OpenCode Review - Docker Installation Workflow Template
+# 
+# This workflow uses the Docker image-based installation method.
+# No additional files required - just this workflow file!
+#
+# Installation:
+#   curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash -s -- --docker
+
+name: OpenCode Review
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  opencode-review:
+    # Trigger on /oc or /opencode command, or on new/updated PR
+    if: |
+      github.event_name == 'pull_request' ||
+      contains(github.event.comment.body, '/oc') ||
+      contains(github.event.comment.body, '/opencode')
+    runs-on: ubuntu-latest
+    
+    # Use pre-built Docker image with all dependencies
+    container:
+      image: ghcr.io/ccsert/opencode-review:latest
+      # Optional: pin to specific version for stability
+      # image: ghcr.io/ccsert/opencode-review:v1.0.0
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run code review
+        env:
+          # Gitea/Forgejo configuration
+          GITEA_TOKEN: ${{ secrets.OPENCODE_GIT_TOKEN }}
+          GITEA_SERVER_URL: ${{ gitea.server_url }}
+          
+          # Model configuration (provider/model-id format)
+          # Examples: deepseek/deepseek-chat, anthropic/claude-sonnet-4-5, openai/gpt-4o
+          MODEL: deepseek/deepseek-chat
+          
+          # Review behavior
+          # REVIEW_LANGUAGE: auto          # auto | en | zh-CN
+          # REVIEW_STYLE: balanced         # concise | balanced | thorough | security
+          # AUTO_APPROVE: false            # Auto-approve if no issues found
+          
+          # LLM API Keys (configure the one matching your MODEL)
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          
+          # PR context
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          # The entrypoint handles everything automatically
+          /entrypoint.sh review
