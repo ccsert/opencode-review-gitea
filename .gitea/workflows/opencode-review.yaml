@@ -41,8 +41,9 @@ jobs:
           # IMPORTANT: Use custom config directory to avoid conflicts with user's .opencode/
           # See: https://opencode.ai/docs/config/#custom-directory
           OPENCODE_CONFIG_DIR: ${{ github.workspace }}/.opencode-review
-          # Model configuration - change as needed
-          MODEL: opencode/claude-sonnet-4-5
+          # Model configuration - use format: provider/model-id
+          # Examples: deepseek/deepseek-chat, anthropic/claude-sonnet-4-5, openai/gpt-4o
+          MODEL: deepseek/deepseek-chat
           # Gitea API configuration
           GITEA_TOKEN: ${{ secrets.OPENCODE_GIT_TOKEN }}
           GITEA_SERVER_URL: ${{ gitea.server_url }}

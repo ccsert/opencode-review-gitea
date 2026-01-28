@@ -60,7 +60,11 @@ rm -rf /tmp/opencode-review-gitea
 
 ```yaml
 env:
-  MODEL: opencode/claude-sonnet-4-5  # 或 opencode/gpt-4o 等
+  # 格式：provider/model-id
+  MODEL: deepseek/deepseek-chat  # 默认（需要 DEEPSEEK_API_KEY）
+  # 或使用其他 Provider：
+  # MODEL: anthropic/claude-sonnet-4-5  # 需要 ANTHROPIC_API_KEY
+  # MODEL: openai/gpt-4o               # 需要 OPENAI_API_KEY
 ```
 
 ### 3. 与现有开发环境隔离

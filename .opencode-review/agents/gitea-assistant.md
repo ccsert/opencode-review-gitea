@@ -1,6 +1,6 @@
 ---
 description: General assistant for Gitea/Forgejo issues and PRs
-model: opencode/claude-sonnet-4-5
+# Model is configured via MODEL env var or opencode.json
 color: "#38A3EE"
 tools:
   "*": true

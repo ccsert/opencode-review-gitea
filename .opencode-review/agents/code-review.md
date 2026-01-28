@@ -1,6 +1,7 @@
 ---
 description: AI code reviewer for Gitea/Forgejo PRs
-model: opencode/claude-sonnet-4-5
+# Model is configured via MODEL env var or opencode.json
+# Examples: anthropic/claude-sonnet-4-5, deepseek/deepseek-chat, openai/gpt-4o
 color: "#44BA81"
 tools:
   "*": false

@@ -60,7 +60,11 @@ Edit `.gitea/workflows/opencode-review.yaml` to change the default model:
 
 ```yaml
 env:
-  MODEL: opencode/claude-sonnet-4-5  # or opencode/gpt-4o etc.
+  # Format: provider/model-id
+  MODEL: deepseek/deepseek-chat  # Default (requires DEEPSEEK_API_KEY)
+  # Or use other providers:
+  # MODEL: anthropic/claude-sonnet-4-5  # Requires ANTHROPIC_API_KEY
+  # MODEL: openai/gpt-4o               # Requires OPENAI_API_KEY
 ```
 
 ### 3. Isolated from Your Development Environment
