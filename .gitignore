@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+.opencode-review/node_modules/
+
+# Bun
+*.lockb
+
+# Build outputs
+dist/
+*.js
+*.js.map
+*.d.ts
+!*.config.js
+
+# Logs
+*.log
+.opencode-review/.opencode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files (may contain secrets)
+.env
+.env.local
+.env.*.local

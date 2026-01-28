@@ -1,0 +1,15 @@
+Submit a code review on a Gitea/Forgejo pull request.
+
+This tool allows you to:
+- Post a summary review comment
+- Add line-level comments on specific code changes
+- Approve, request changes, or just comment
+
+Use this tool after analyzing a PR's code changes to provide structured feedback.
+
+Example usage:
+- Review a PR with approval: provide summary, comments array, and set approval to "approve"
+- Request changes: provide specific comments on problematic lines and set approval to "request_changes"
+- General feedback: provide comments with approval as "comment" (default)
+
+The comments will appear in the PR's "Files Changed" tab at the specified line numbers.

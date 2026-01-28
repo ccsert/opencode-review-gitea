@@ -1,0 +1,16 @@
+Fetch the diff (code changes) for a Gitea/Forgejo pull request.
+
+This tool retrieves all file changes in a PR with line numbers.
+
+Output formats:
+- "parsed" (default): Shows each line with [LINE_NUM] prefix for easy reference when creating review comments
+- "raw": Returns the raw unified diff format
+
+Use this tool before submitting a code review to understand what changes were made.
+
+The parsed format shows:
+- [42] +new line  - Added line at line 42
+- [DEL] -old line - Deleted line
+- [42]  context   - Unchanged context line
+
+Use the line numbers in [brackets] when creating review comments with gitea-review tool.

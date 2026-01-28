@@ -1,0 +1,14 @@
+Post a comment on a Gitea/Forgejo issue or pull request.
+
+Use this tool to respond to issues, provide feedback, or communicate with users.
+
+The comment supports full Markdown formatting including:
+- Code blocks with syntax highlighting
+- Tables
+- Lists
+- Links and images
+
+This is useful for:
+- Responding to user questions
+- Providing status updates
+- Sharing analysis results
