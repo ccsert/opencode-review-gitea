@@ -28,7 +28,6 @@ services:
       - MODEL=${MODEL:-deepseek/deepseek-chat}
       - REVIEW_LANGUAGE=${REVIEW_LANGUAGE:-auto}
       - REVIEW_STYLE=${REVIEW_STYLE:-balanced}
-      - AUTO_APPROVE=${AUTO_APPROVE:-false}
       
       # PR Context (for testing)
       - PR_NUMBER=${PR_NUMBER:-1}
