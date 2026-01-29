@@ -224,10 +224,16 @@ print_next_steps() {
     echo "   - OPENCODE_GIT_TOKEN: Your Gitea API Token"
     echo "   - DEEPSEEK_API_KEY: Your LLM API Key (default model)"
     echo ""
-    if [ "$mode" = "docker" ] || [ "$mode" = "both" ]; then
+    if [ "$mode" = "docker" ]; then
         echo "2. Commit and push:"
         echo "   git add .gitea"
         echo "   git commit -m 'Add OpenCode AI Review (Docker)'"
+        echo "   git push"
+    fi
+    if [ "$mode" = "both" ]; then
+        echo "2. Commit and push:"
+        echo "   git add .gitea .opencode-review"
+        echo "   git commit -m 'Add OpenCode AI Review (Docker + Source)'"
         echo "   git push"
     fi
     if [ "$mode" = "source" ]; then
