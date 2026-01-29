@@ -205,7 +205,7 @@ install_dependencies() {
     if [ -d "$project_root/.opencode-review" ]; then
         log_info "Installing npm dependencies..."
         cd "$project_root/.opencode-review"
-        bun install
+        "$HOME/.bun/bin/bun" install
         cd - > /dev/null
         log_success "Dependencies installed"
     fi
