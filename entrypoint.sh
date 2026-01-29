@@ -29,7 +29,10 @@ setup_config() {
         if [ -f "/workspace/.opencode-review/package.json" ]; then
             log_info "Installing custom tool dependencies..."
             cd /workspace/.opencode-review
-            bun install 2>/dev/null || log_warn "Failed to install custom dependencies"
+            if ! bun install; then
+                log_error "Failed to install custom dependencies in /workspace/.opencode-review. See bun output above for details."
+                exit 1
+            fi
             cd /workspace
         fi
     else
