@@ -31,9 +31,16 @@ setup_config() {
             cd /workspace/.opencode-review
             if ! bun install; then
                 log_error "Failed to install custom dependencies in /workspace/.opencode-review. See bun output above for details."
-                exit 1
+            local orig_dir
+            orig_dir="$(pwd)"
+            if cd /workspace/.opencode-review; then
+                bun install 2>/dev/null || log_warn "Failed to install custom dependencies"
+                if ! cd "$orig_dir"; then
+                    log_warn "Failed to return to original directory: $orig_dir"
+                fi
+            else
+                log_warn "Failed to access /workspace/.opencode-review; skipping dependency installation"
             fi
-            cd /workspace
         fi
     else
         log_info "Using built-in config from /app/.opencode-review"
