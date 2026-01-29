@@ -68,7 +68,7 @@ show_help() {
 print_banner() {
     echo ""
     echo -e "${CYAN}+--------------------------------------------------------------+${NC}"
-    echo -e "${CYAN}|${NC}     ${BOLD}OpenCode Gitea Review - AI-Powered Code Review${NC}          ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}        ${BOLD}OpenCode Gitea Review - AI-Powered Code Review${NC}        ${CYAN}|${NC}"
     echo -e "${CYAN}+--------------------------------------------------------------+${NC}"
     echo ""
 }
