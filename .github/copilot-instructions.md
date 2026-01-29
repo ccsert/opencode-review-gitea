@@ -7,7 +7,7 @@ This is an **AI-powered Gitea/Forgejo PR code review tool** built on the [OpenCo
 ## Architecture
 
 ```
-.                              
+.
 ├── Dockerfile                 → Docker image definition
 ├── docker-compose.yaml        → Local testing
 ├── entrypoint.sh              → Container entrypoint with env var handling
@@ -30,11 +30,11 @@ This is an **AI-powered Gitea/Forgejo PR code review tool** built on the [OpenCo
 
 ## Installation Methods
 
-| Method | Command | Files Added |
-|--------|---------|-------------|
-| Docker (Recommended) | `bash -s -- --docker` | 1 workflow file |
-| Source | `bash -s -- --source` | .opencode-review/ + workflow |
-| Both | `bash -s -- --both` | Both for customization |
+| Method               | Command               | Files Added                  |
+| -------------------- | --------------------- | ---------------------------- |
+| Docker (Recommended) | `bash -s -- --docker` | 1 workflow file              |
+| Source               | `bash -s -- --source` | .opencode-review/ + workflow |
+| Both                 | `bash -s -- --both`   | Both for customization       |
 
 ## Custom Tool Pattern
 
