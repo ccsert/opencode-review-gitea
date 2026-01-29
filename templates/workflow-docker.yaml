@@ -50,7 +50,6 @@ jobs:
           # Review behavior
           # REVIEW_LANGUAGE: auto          # auto | en | zh-CN
           # REVIEW_STYLE: balanced         # concise | balanced | thorough | security
-          # AUTO_APPROVE: false            # Auto-approve if no issues found
           
           # LLM API Keys (configure the one matching your MODEL)
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
