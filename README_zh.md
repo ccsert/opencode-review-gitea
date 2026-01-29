@@ -81,7 +81,6 @@ env:
 env:
   REVIEW_LANGUAGE: auto      # auto | en | zh-CN
   REVIEW_STYLE: balanced     # concise | balanced | thorough | security
-  AUTO_APPROVE: false        # 无问题时自动 Approve
 ```
 
 ## 🚀 使用方法
