@@ -111,8 +111,9 @@ select_install_mode() {
     echo "     - Docker workflow can mount local config for customization"
     echo ""
     
+    # Read from /dev/tty to handle curl | bash execution
     while true; do
-        read -p "Enter choice [1-3]: " choice
+        read -p "Enter choice [1-3]: " choice < /dev/tty
         case $choice in
             1) INSTALL_MODE="docker"; break ;;
             2) INSTALL_MODE="source"; break ;;
@@ -190,7 +191,7 @@ install_docker_workflow() {
     local workflow_target="$project_root/.gitea/workflows/opencode-review.yaml"
     if [ -f "$workflow_target" ]; then
         log_warn "Workflow already exists"
-        read -p "Overwrite with Docker version? [y/N] " -n 1 -r
+        read -p "Overwrite with Docker version? [y/N] " -n 1 -r < /dev/tty
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             log_info "Skipping workflow installation"
@@ -208,7 +209,7 @@ install_source_files() {
     local target_dir="$project_root/.opencode-review"
     if [ -d "$target_dir" ]; then
         log_warn ".opencode-review already exists"
-        read -p "Overwrite? [y/N] " -n 1 -r
+        read -p "Overwrite? [y/N] " -n 1 -r < /dev/tty
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             log_info "Skipping .opencode-review installation"
@@ -230,7 +231,7 @@ install_source_workflow() {
     local workflow_target="$project_root/.gitea/workflows/opencode-review.yaml"
     if [ -f "$workflow_target" ]; then
         log_warn "Workflow already exists"
-        read -p "Overwrite with source version? [y/N] " -n 1 -r
+        read -p "Overwrite with source version? [y/N] " -n 1 -r < /dev/tty
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             log_info "Skipping workflow installation"
