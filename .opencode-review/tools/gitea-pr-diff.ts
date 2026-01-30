@@ -146,6 +146,56 @@ function formatDiffForReview(files: ParsedFile[]): string {
   return parts.join("\n")
 }
 
+function matchPattern(filename: string, pattern: string): boolean {
+  // Convert glob pattern to regex
+  // Supports: *, **, ?, [abc], [!abc]
+  const regexPattern = pattern
+    .replace(/\./g, "\\.")
+    .replace(/\*\*/g, "{{GLOBSTAR}}")
+    .replace(/\*/g, "[^/]*")
+    .replace(/{{GLOBSTAR}}/g, ".*")
+    .replace(/\?/g, ".")
+  
+  const regex = new RegExp(`^${regexPattern}$`)
+  return regex.test(filename)
+}
+
+function filterFilesByPatterns(files: ParsedFile[], patterns: string[]): ParsedFile[] {
+  if (!patterns || patterns.length === 0) {
+    return files
+  }
+  
+  return files.filter(file => 
+    patterns.some(pattern => matchPattern(file.path, pattern))
+  )
+}
+
+function formatAsRawDiff(files: ParsedFile[]): string {
+  // Reconstruct a simplified raw diff from parsed files
+  const parts: string[] = []
+  
+  for (const file of files) {
+    parts.push(`diff --git a/${file.path} b/${file.path}`)
+    
+    for (const hunk of file.hunks) {
+      parts.push(`@@ -${hunk.oldStart},0 +${hunk.newStart},0 @@`)
+      
+      for (const change of hunk.changes) {
+        if (change.type === "add") {
+          parts.push(`+${change.content}`)
+        } else if (change.type === "del") {
+          parts.push(`-${change.content}`)
+        } else {
+          parts.push(` ${change.content}`)
+        }
+      }
+    }
+    parts.push("")
+  }
+  
+  return parts.join("\n")
+}
+
 export default tool({
   description: DESCRIPTION,
   args: {
@@ -157,24 +207,42 @@ export default tool({
       .optional()
       .default("parsed")
       .describe("Output format: 'raw' for unified diff, 'parsed' for line-numbered format"),
+    file_patterns: tool.schema
+      .array(tool.schema.string())
+      .optional()
+      .describe("Optional glob patterns to filter files (e.g., ['*.ts', 'src/**/*.go']). Only matching files will be included in the diff."),
   },
   async execute(args) {
-    const { owner, repo, pull_number, format = "parsed" } = args
+    const { owner, repo, pull_number, format = "parsed", file_patterns } = args
 
     const response = await giteaFetch(`/repos/${owner}/${repo}/pulls/${pull_number}.diff`, {
       headers: { Accept: "text/plain" },
     })
     const diffText = await response.text()
 
+    let parsed = parseDiff(diffText)
+    
+    // Apply file filtering if patterns provided
+    if (file_patterns && file_patterns.length > 0) {
+      parsed = filterFilesByPatterns(parsed, file_patterns)
+    }
+
     if (format === "raw") {
+      // For raw format with filtering, we reconstruct from parsed
+      if (file_patterns && file_patterns.length > 0) {
+        return formatAsRawDiff(parsed)
+      }
       return diffText
     }
 
-    const parsed = parseDiff(diffText)
     const formatted = formatDiffForReview(parsed)
 
     const summary = parsed.map((f) => `- ${f.path} (${f.status})`).join("\n")
+    
+    const filterNote = file_patterns && file_patterns.length > 0 
+      ? `\n**Filter:** ${file_patterns.join(", ")}\n` 
+      : ""
 
-    return `# PR #${pull_number} Diff\n\n**Files Changed:**\n${summary}\n\n---\n${formatted}`
+    return `# PR #${pull_number} Diff\n${filterNote}\n**Files Changed:**\n${summary}\n\n---\n${formatted}`
   },
 })

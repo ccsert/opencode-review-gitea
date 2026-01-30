@@ -59,6 +59,11 @@ jobs:
           GITEA_TOKEN: ${{ secrets.OPENCODE_GIT_TOKEN }}
           GITEA_SERVER_URL: ${{ gitea.server_url }}
           
+          # Review configuration
+          REVIEW_LANGUAGE: auto          # auto | en | zh-CN
+          # REVIEW_STYLE: balanced       # concise | balanced | thorough | security
+          # FILE_PATTERNS: ""            # Glob patterns to filter files (e.g., "*.ts,*.go,src/**")
+          
           # LLM API Keys (configure the one matching your MODEL)
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -72,7 +77,20 @@ jobs:
           # Logging
           OPENCODE_LOG_LEVEL: info
         run: |
+          # Build language instruction
+          LANG_INSTRUCTION=""
+          case "${REVIEW_LANGUAGE:-auto}" in
+            zh-CN|zh) LANG_INSTRUCTION="请使用中文回复。" ;;
+            en) LANG_INSTRUCTION="Reply in English." ;;
+          esac
+          
+          # Build file filter instruction
+          FILE_INSTRUCTION=""
+          if [ -n "$FILE_PATTERNS" ]; then
+            FILE_INSTRUCTION="Only review files matching: $FILE_PATTERNS."
+          fi
+          
           opencode run --agent code-review \
-            "Please review PR #${PR_NUMBER} in ${REPO_OWNER}/${REPO_NAME}. \
-             Analyze the code changes, identify issues, suggest improvements, \
-             and submit a review with inline comments."
+            "Review PR #${PR_NUMBER} in ${REPO_OWNER}/${REPO_NAME}. \
+             Analyze code changes, identify issues, and submit review with inline comments. \
+             ${LANG_INSTRUCTION} ${FILE_INSTRUCTION}"
