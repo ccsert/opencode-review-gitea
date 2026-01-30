@@ -28,14 +28,11 @@ setup_config() {
         # Install dependencies if package.json exists
         if [ -f "/workspace/.opencode-review/package.json" ]; then
             log_info "Installing custom tool dependencies..."
-            local orig_dir
-            orig_dir="$(pwd)"
-            if cd /workspace/.opencode-review; then
-                bun install 2>/dev/null || log_warn "Failed to install custom dependencies"
-                cd "$orig_dir" || log_warn "Failed to return to original directory"
-            else
-                log_warn "Failed to access /workspace/.opencode-review"
-            fi
+            # Use subshell to avoid directory stack issues
+            (
+                cd /workspace/.opencode-review || exit 1
+                bun install 2>/dev/null || echo "[WARN] Failed to install custom dependencies"
+            )
         fi
     else
         log_info "Using built-in config from /app/.opencode-review"

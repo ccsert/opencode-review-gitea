@@ -249,19 +249,22 @@ install_dependencies() {
     fi
     if [ -d "$project_root/.opencode-review" ]; then
         log_info "Installing npm dependencies..."
-        cd "$project_root/.opencode-review"
-        if [ -f "$HOME/.bun/bin/bun" ]; then
-            "$HOME/.bun/bin/bun" install
-        elif command -v bun &> /dev/null; then
-            bun install
-        else
-            log_warn "bun not found, skipping dependency installation"
-            log_warn "Run 'cd .opencode-review && bun install' manually later"
-            cd - > /dev/null
-            return
+        # Use subshell to avoid directory stack issues with zsh hooks
+        (
+            cd "$project_root/.opencode-review" || exit 1
+            if [ -f "$HOME/.bun/bin/bun" ]; then
+                "$HOME/.bun/bin/bun" install
+            elif command -v bun &> /dev/null; then
+                bun install
+            else
+                echo "[WARN] bun not found, skipping dependency installation"
+                echo "[WARN] Run 'cd .opencode-review && bun install' manually later"
+                exit 0
+            fi
+        )
+        if [ $? -eq 0 ]; then
+            log_success "Dependencies installed"
         fi
-        cd - > /dev/null
-        log_success "Dependencies installed"
     fi
 }
 
