@@ -52,6 +52,11 @@ validate_env() {
         missing+=("GITEA_TOKEN or GITHUB_TOKEN")
     fi
     
+    # Check for server URL
+    if [ -z "$GITEA_SERVER_URL" ] && [ -z "$GITHUB_SERVER_URL" ]; then
+        missing+=("GITEA_SERVER_URL or GITHUB_SERVER_URL")
+    fi
+
     # Check for at least one LLM API key
     if [ -z "$DEEPSEEK_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$OPENAI_API_KEY" ]; then
         missing+=("DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY")
@@ -66,6 +71,63 @@ validate_env() {
     fi
     
     log_success "Environment validated"
+}
+
+infer_gitea_server_url() {
+    if [ -n "$GITEA_SERVER_URL" ]; then
+        return 0
+    fi
+
+    if [ -n "$GITHUB_SERVER_URL" ]; then
+        export GITEA_SERVER_URL="$GITHUB_SERVER_URL"
+        return 0
+    fi
+
+    # Best-effort inference from git remote when running locally with -v $(pwd):/workspace
+    if [ -d "/workspace/.git" ]; then
+        local remote
+        remote=$(git -C /workspace remote get-url origin 2>/dev/null || true)
+
+        if [[ "$remote" =~ ^https?:// ]]; then
+            local host
+            host=$(echo "$remote" | sed -E 's#^(https?://[^/]+).*#\1#')
+            if [ -n "$host" ]; then
+                export GITEA_SERVER_URL="$host"
+                log_info "Inferred GITEA_SERVER_URL from git remote: $GITEA_SERVER_URL"
+                return 0
+            fi
+        fi
+
+        # SSH-style: git@host:owner/repo.git -> assume https://host
+        if [[ "$remote" =~ ^git@[^:]+: ]]; then
+            local host
+            host=$(echo "$remote" | sed -E 's#^git@([^:]+):.*#\1#')
+            if [ -n "$host" ]; then
+                export GITEA_SERVER_URL="https://$host"
+                log_info "Inferred GITEA_SERVER_URL from git remote: $GITEA_SERVER_URL"
+                return 0
+            fi
+        fi
+    fi
+}
+
+normalize_repo_context() {
+    # Accept REPO_NAME as either "repo" or "owner/repo".
+    if [ -n "$REPO_NAME" ] && [[ "$REPO_NAME" == */* ]]; then
+        local owner_part="${REPO_NAME%%/*}"
+        local repo_part="${REPO_NAME#*/}"
+
+        if [ -z "$REPO_OWNER" ]; then
+            export REPO_OWNER="$owner_part"
+            export REPO_NAME="$repo_part"
+            return 0
+        fi
+
+        if [ "$owner_part" = "$REPO_OWNER" ]; then
+            export REPO_NAME="$repo_part"
+            return 0
+        fi
+    fi
 }
 
 # Build the review prompt based on environment
@@ -127,12 +189,16 @@ print_config() {
     echo "  Model:    ${MODEL:-deepseek/deepseek-chat}"
     echo "  Style:    ${REVIEW_STYLE:-balanced}"
     echo "  Language: ${REVIEW_LANGUAGE:-auto}"
+    echo "  Server:   ${GITEA_SERVER_URL:-${GITHUB_SERVER_URL:-}}"
     echo "  Config:   $OPENCODE_CONFIG_DIR"
     if [ -n "$FILE_PATTERNS" ]; then
         echo "  Filter:   $FILE_PATTERNS"
     fi
     if [ -n "$PR_NUMBER" ]; then
         echo "  PR:       #$PR_NUMBER"
+    fi
+    if [ -n "$REPO_OWNER" ] && [ -n "$REPO_NAME" ]; then
+        echo "  Repo:     $REPO_OWNER/$REPO_NAME"
     fi
 }
 
@@ -144,6 +210,8 @@ main() {
     case "$command" in
         review)
             setup_config
+            infer_gitea_server_url
+            normalize_repo_context
             validate_env
             print_config
             
@@ -180,6 +248,7 @@ main() {
             echo ""
             echo "Environment Variables:"
             echo "  GITEA_TOKEN        Gitea API token (required)"
+            echo "  GITEA_SERVER_URL   Base URL like https://gitea.example.com (required)"
             echo "  DEEPSEEK_API_KEY   DeepSeek API key"
             echo "  ANTHROPIC_API_KEY  Anthropic API key"
             echo "  OPENAI_API_KEY     OpenAI API key"

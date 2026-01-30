@@ -109,7 +109,9 @@ FILE_PATTERNS: "*.ts,*.tsx"
 FILE_PATTERNS: "src/**/*.go"
 
 # 多种模式
-FILE_PATTERNS: "*.py,*.js,!*.test.js"
+FILE_PATTERNS: "*.py,*.js"
+
+# 说明：目前仅支持正向匹配（不支持以 '!' 开头的排除模式）
 ```
 
 ## 🚀 使用方法
@@ -134,12 +136,15 @@ FILE_PATTERNS: "*.py,*.js,!*.test.js"
 docker run --rm \
   -v $(pwd):/workspace \
   -e GITEA_TOKEN="your-token" \
+  -e GITEA_SERVER_URL="https://your-gitea.example.com" \
   -e DEEPSEEK_API_KEY="your-key" \
   -e PR_NUMBER=123 \
   -e REPO_OWNER="your-org" \
   -e REPO_NAME="your-repo" \
   ghcr.io/ccsert/opencode-review:latest
 ```
+
+`REPO_NAME` 既可以传 `repo`，也可以传 `owner/repo`（entrypoint 会自动规范化）。
 
 ### 本地测试（源码）
 
