@@ -109,7 +109,9 @@ FILE_PATTERNS: "*.ts,*.tsx"
 FILE_PATTERNS: "src/**/*.go"
 
 # Multiple patterns
-FILE_PATTERNS: "*.py,*.js,!*.test.js"
+FILE_PATTERNS: "*.py,*.js"
+
+# Note: currently only positive matching is supported (no leading '!').
 ```
 
 ## 🚀 Usage
@@ -134,12 +136,15 @@ or
 docker run --rm \
   -v $(pwd):/workspace \
   -e GITEA_TOKEN="your-token" \
+  -e GITEA_SERVER_URL="https://your-gitea.example.com" \
   -e DEEPSEEK_API_KEY="your-key" \
   -e PR_NUMBER=123 \
   -e REPO_OWNER="your-org" \
   -e REPO_NAME="your-repo" \
   ghcr.io/ccsert/opencode-review:latest
 ```
+
+`REPO_NAME` can be either `repo` or `owner/repo` (entrypoint will normalize it).
 
 ### Local Testing (Source)
 
