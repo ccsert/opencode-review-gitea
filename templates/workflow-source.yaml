@@ -1,0 +1,78 @@
+# OpenCode Review - Source Installation Workflow Template
+# 
+# This workflow uses the source-based installation method.
+# Files required in your repository:
+#   - .opencode-review/ (agents, tools, skills)
+#   - .gitea/workflows/opencode-review.yaml (this file)
+#
+# Installation:
+#   curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash -s -- --source
+
+name: OpenCode Review
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  opencode-review:
+    # Trigger on /oc or /opencode command, or on new/updated PR
+    if: |
+      github.event_name == 'pull_request' ||
+      contains(github.event.comment.body, '/oc') ||
+      contains(github.event.comment.body, '/opencode')
+    runs-on: ubuntu-latest
+    container: catthehacker/ubuntu:act-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        working-directory: .opencode-review
+        run: ~/.bun/bin/bun install
+
+      - name: Install OpenCode CLI
+        run: ~/.bun/bin/bun add -g opencode-ai
+
+      - name: Run code review
+        env:
+          # OpenCode configuration
+          OPENCODE_CONFIG_DIR: ${{ github.workspace }}/.opencode-review
+          
+          # Model configuration (provider/model-id format)
+          # Examples: deepseek/deepseek-chat, anthropic/claude-sonnet-4-5, openai/gpt-4o
+          MODEL: deepseek/deepseek-chat
+          
+          # Gitea/Forgejo configuration
+          GITEA_TOKEN: ${{ secrets.OPENCODE_GIT_TOKEN }}
+          GITEA_SERVER_URL: ${{ gitea.server_url }}
+          
+          # LLM API Keys (configure the one matching your MODEL)
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          
+          # PR context
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          
+          # Logging
+          OPENCODE_LOG_LEVEL: info
+        run: |
+          opencode run --agent code-review \
+            "Please review PR #${PR_NUMBER} in ${REPO_OWNER}/${REPO_NAME}. \
+             Analyze the code changes, identify issues, suggest improvements, \
+             and submit a review with inline comments."

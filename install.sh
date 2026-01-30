@@ -4,10 +4,18 @@
 # Installs the Gitea/Forgejo PR code review tool to your project
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash
+#   Interactive:  curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash
+#   Docker only:  curl ... | bash -s -- --docker
+#   Source only:  curl ... | bash -s -- --source
+#   Offline:      cd /your/project && /path/to/install.sh --offline --docker
 #
-# This script installs to .opencode-review/ directory (NOT .opencode/)
-# to avoid conflicts with your existing OpenCode configuration.
+# Options:
+#   --docker         Install Docker-based workflow only (recommended)
+#   --source         Install source-based workflow with .opencode-review/
+#   --both           Install both installation methods
+#   --offline        Enable offline mode (use script's directory as source)
+#   --skip-deps      Skip bun install (useful for offline/CI environments)
+#   --help           Show help message
 #
 
 set -e
@@ -17,28 +25,104 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
 NC='\033[0m'
 
 # Repository URL
 REPO_URL="https://github.com/ccsert/opencode-review-gitea"
+DOCKER_IMAGE="ghcr.io/ccsert/opencode-review"
 
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+# Installation mode
+INSTALL_MODE=""
+
+# Offline mode settings
+OFFLINE_MODE=false
+SKIP_DEPS=false
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --docker) INSTALL_MODE="docker"; shift ;;
+            --source) INSTALL_MODE="source"; shift ;;
+            --both) INSTALL_MODE="both"; shift ;;
+            --offline) OFFLINE_MODE=true; shift ;;
+            --skip-deps) SKIP_DEPS=true; shift ;;
+            --help|-h) show_help; exit 0 ;;
+            *) log_error "Unknown option: $1"; show_help; exit 1 ;;
+        esac
+    done
 }
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+show_help() {
+    echo ""
+    echo "OpenCode Gitea Review - Installation Script"
+    echo ""
+    echo "Usage:"
+    echo "  Online:   curl -fsSL $REPO_URL/main/install.sh | bash [options]"
+    echo "  Offline:  cd /your/project && /path/to/opencode-review-gitea/install.sh --offline [options]"
+    echo ""
+    echo "Options:"
+    echo "  --docker         Install Docker-based workflow only (recommended)"
+    echo "  --source         Install source-based workflow with .opencode-review/"
+    echo "  --both           Install both installation methods"
+    echo "  --offline        Enable offline mode (use script's directory as source)"
+    echo "  --skip-deps      Skip 'bun install' (useful for offline/CI environments)"
+    echo "  --help           Show this help message"
+    echo ""
+    echo "Offline Installation:"
+    echo "  1. Clone repo:  git clone $REPO_URL"
+    echo "  2. In target project:  cd /your/project"
+    echo "  3. Run:  /path/to/opencode-review-gitea/install.sh --offline --docker"
+    echo ""
 }
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+print_banner() {
+    echo ""
+    echo -e "${CYAN}+--------------------------------------------------------------+${NC}"
+    echo -e "${CYAN}|${NC}        ${BOLD}OpenCode Gitea Review - AI-Powered Code Review${NC}        ${CYAN}|${NC}"
+    echo -e "${CYAN}+--------------------------------------------------------------+${NC}"
+    echo ""
 }
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+select_install_mode() {
+    echo -e "${BOLD}Select installation method:${NC}"
+    echo ""
+    echo -e "  ${GREEN}1)${NC} ${BOLD}Docker${NC} (Recommended)"
+    echo "     - Zero files added to your repo (just 1 workflow file)"
+    echo "     - Faster CI (pre-built image, no dependency installation)"
+    echo "     - Automatic updates with :latest tag"
+    echo ""
+    echo -e "  ${BLUE}2)${NC} ${BOLD}Source${NC}"
+    echo "     - Full control over agents, tools, and configuration"
+    echo "     - Can customize review behavior"
+    echo "     - Adds .opencode-review/ directory (~50KB)"
+    echo ""
+    echo -e "  ${YELLOW}3)${NC} ${BOLD}Both${NC}"
+    echo "     - Install both methods (Docker workflow + source files)"
+    echo "     - Docker workflow can mount local config for customization"
+    echo ""
+    
+    while true; do
+        read -p "Enter choice [1-3]: " choice
+        case $choice in
+            1) INSTALL_MODE="docker"; break ;;
+            2) INSTALL_MODE="source"; break ;;
+            3) INSTALL_MODE="both"; break ;;
+            *) echo "Invalid choice. Please enter 1, 2, or 3." ;;
+        esac
+    done
+    echo ""
 }
 
-# Check if in a git repository
 check_git_repo() {
     if ! git rev-parse --git-dir > /dev/null 2>&1; then
         log_error "Current directory is not a git repository"
@@ -47,54 +131,81 @@ check_git_repo() {
     fi
 }
 
-# Get project root
-get_project_root() {
-    git rev-parse --show-toplevel
-}
+get_project_root() { git rev-parse --show-toplevel; }
 
-# Check dependencies
-check_dependencies() {
+check_source_dependencies() {
     if ! command -v git &> /dev/null; then
         log_error "git is required but not installed"
         exit 1
     fi
-    
     if ! command -v bun &> /dev/null; then
-        log_warn "bun not found, attempting to install..."
-        curl -fsSL https://bun.sh/install | bash
-        export PATH="$HOME/.bun/bin:$PATH"
+        if [ "$OFFLINE_MODE" = true ]; then
+            log_warn "bun not found. In offline mode, please install bun manually first."
+            log_warn "Or use --skip-deps to skip dependency installation."
+            if [ "$SKIP_DEPS" = false ]; then
+                exit 1
+            fi
+        else
+            log_warn "bun not found, attempting to install..."
+            curl -fsSL https://bun.sh/install | bash
+            export PATH="$HOME/.bun/bin:$PATH"
+        fi
     fi
 }
 
-# Temporary directory
 TMP_DIR=$(mktemp -d)
 
-# Download repository
 download_repo() {
-    log_info "Downloading opencode-review-gitea..."
-    
-    if command -v git &> /dev/null; then
-        git clone --depth 1 "$REPO_URL.git" "$TMP_DIR/repo" 2>/dev/null || {
-            log_warn "Git clone failed, trying tarball..."
+    if [ "$OFFLINE_MODE" = true ]; then
+        log_info "Offline mode: using script directory as source"
+        log_info "Source: $SCRIPT_DIR"
+        if [ ! -f "$SCRIPT_DIR/templates/workflow-docker.yaml" ] && [ ! -f "$SCRIPT_DIR/templates/workflow-source.yaml" ]; then
+            log_error "Invalid source: templates/ not found in $SCRIPT_DIR"
+            log_error "Make sure you're running install.sh from the opencode-review-gitea repo"
+            exit 1
+        fi
+        # Copy to TMP_DIR for consistent handling
+        cp -r "$SCRIPT_DIR" "$TMP_DIR/repo"
+        log_success "Using local repository"
+    else
+        log_info "Downloading opencode-review-gitea..."
+        if command -v git &> /dev/null; then
+            git clone --depth 1 "$REPO_URL.git" "$TMP_DIR/repo" 2>/dev/null || {
+                log_warn "Git clone failed, trying tarball..."
+                curl -fsSL "$REPO_URL/archive/main.tar.gz" | tar -xz -C "$TMP_DIR"
+                mv "$TMP_DIR/opencode-review-gitea-main" "$TMP_DIR/repo"
+            }
+        else
             curl -fsSL "$REPO_URL/archive/main.tar.gz" | tar -xz -C "$TMP_DIR"
             mv "$TMP_DIR/opencode-review-gitea-main" "$TMP_DIR/repo"
-        }
-    else
-        curl -fsSL "$REPO_URL/archive/main.tar.gz" | tar -xz -C "$TMP_DIR"
-        mv "$TMP_DIR/opencode-review-gitea-main" "$TMP_DIR/repo"
+        fi
     fi
 }
 
-# Install files
-install_files() {
+install_docker_workflow() {
     local project_root="$1"
     local source_dir="$TMP_DIR/repo"
-    
-    log_info "Installing to $project_root..."
-    
-    # Install .opencode-review directory (isolated from user's .opencode)
+    log_info "Installing Docker-based workflow..."
+    mkdir -p "$project_root/.gitea/workflows"
+    local workflow_target="$project_root/.gitea/workflows/opencode-review.yaml"
+    if [ -f "$workflow_target" ]; then
+        log_warn "Workflow already exists"
+        read -p "Overwrite with Docker version? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_info "Skipping workflow installation"
+            return
+        fi
+    fi
+    cp "$source_dir/templates/workflow-docker.yaml" "$workflow_target"
+    log_success "Installed Docker workflow: .gitea/workflows/opencode-review.yaml"
+}
+
+install_source_files() {
+    local project_root="$1"
+    local source_dir="$TMP_DIR/repo"
+    log_info "Installing source files..."
     local target_dir="$project_root/.opencode-review"
-    
     if [ -d "$target_dir" ]; then
         log_warn ".opencode-review already exists"
         read -p "Overwrite? [y/N] " -n 1 -r
@@ -104,100 +215,141 @@ install_files() {
         else
             rm -rf "$target_dir"
             cp -r "$source_dir/.opencode-review" "$target_dir"
-            log_success "Installed .opencode-review/"
+            log_success "Updated .opencode-review/"
         fi
     else
         cp -r "$source_dir/.opencode-review" "$target_dir"
         log_success "Installed .opencode-review/"
     fi
-    
-    # Install Gitea Actions workflow
+}
+
+install_source_workflow() {
+    local project_root="$1"
+    local source_dir="$TMP_DIR/repo"
     mkdir -p "$project_root/.gitea/workflows"
     local workflow_target="$project_root/.gitea/workflows/opencode-review.yaml"
-    
     if [ -f "$workflow_target" ]; then
-        log_warn "Workflow already exists: .gitea/workflows/opencode-review.yaml"
-        read -p "Overwrite? [y/N] " -n 1 -r
+        log_warn "Workflow already exists"
+        read -p "Overwrite with source version? [y/N] " -n 1 -r
         echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            cp "$source_dir/.gitea/workflows/opencode-review.yaml" "$workflow_target"
-            log_success "Updated workflow: .gitea/workflows/opencode-review.yaml"
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_info "Skipping workflow installation"
+            return
         fi
-    else
-        cp "$source_dir/.gitea/workflows/opencode-review.yaml" "$workflow_target"
-        log_success "Installed workflow: .gitea/workflows/opencode-review.yaml"
     fi
+    cp "$source_dir/templates/workflow-source.yaml" "$workflow_target"
+    log_success "Installed source workflow: .gitea/workflows/opencode-review.yaml"
 }
 
-# Install npm dependencies
 install_dependencies() {
     local project_root="$1"
-    
-    log_info "Installing npm dependencies..."
-    cd "$project_root/.opencode-review"
-    bun install
-    cd - > /dev/null
+    if [ "$SKIP_DEPS" = true ]; then
+        log_info "Skipping dependency installation (--skip-deps)"
+        return
+    fi
+    if [ -d "$project_root/.opencode-review" ]; then
+        log_info "Installing npm dependencies..."
+        cd "$project_root/.opencode-review"
+        if [ -f "$HOME/.bun/bin/bun" ]; then
+            "$HOME/.bun/bin/bun" install
+        elif command -v bun &> /dev/null; then
+            bun install
+        else
+            log_warn "bun not found, skipping dependency installation"
+            log_warn "Run 'cd .opencode-review && bun install' manually later"
+            cd - > /dev/null
+            return
+        fi
+        cd - > /dev/null
+        log_success "Dependencies installed"
+    fi
 }
 
-# Cleanup
-cleanup() {
-    rm -rf "$TMP_DIR"
-}
+cleanup() { rm -rf "$TMP_DIR"; }
 
-# Print next steps
 print_next_steps() {
+    local mode="$1"
     echo ""
-    echo -e "${GREEN}✅ Installation complete!${NC}"
+    echo -e "${GREEN}Installation complete!${NC}"
     echo ""
-    echo "📋 Next steps:"
+    echo -e "${BOLD}Next steps:${NC}"
     echo ""
-    echo "1. Configure Gitea Secrets:"
+    echo "1. Configure Gitea/Forgejo Secrets:"
     echo "   - OPENCODE_GIT_TOKEN: Your Gitea API Token"
-    echo "   - DEEPSEEK_API_KEY: Your LLM API Key (or other provider)"
+    echo "   - DEEPSEEK_API_KEY: Your LLM API Key (default model)"
     echo ""
-    echo "2. Commit changes:"
-    echo "   git add .opencode-review .gitea"
-    echo "   git commit -m 'Add OpenCode Gitea Review'"
-    echo "   git push"
+    if [ "$mode" = "docker" ]; then
+        echo "2. Commit and push:"
+        echo "   git add .gitea"
+        echo "   git commit -m 'Add OpenCode AI Review (Docker)'"
+        echo "   git push"
+    fi
+    if [ "$mode" = "both" ]; then
+        echo "2. Commit and push:"
+        echo "   git add .gitea .opencode-review"
+        echo "   git commit -m 'Add OpenCode AI Review (Docker + Source)'"
+        echo "   git push"
+    fi
+    if [ "$mode" = "source" ]; then
+        echo "2. Commit and push:"
+        echo "   git add .opencode-review .gitea"
+        echo "   git commit -m 'Add OpenCode AI Review (Source)'"
+        echo "   git push"
+    fi
     echo ""
-    echo "3. Use /oc or /opencode in PR comments to trigger review"
+    echo "3. Trigger review by commenting /oc or /opencode on a PR"
     echo ""
-    echo "📚 Docs: https://github.com/ccsert/opencode-review-gitea"
+    echo -e "${BOLD}Documentation:${NC} $REPO_URL"
     echo ""
-    echo -e "${BLUE}ℹ️  Isolation:${NC} Uses OPENCODE_CONFIG_DIR environment variable"
-    echo "   to load from .opencode-review/ (won't affect your .opencode/)"
-    echo "   See: https://opencode.ai/docs/config/#custom-directory"
+    if [ "$mode" = "docker" ] || [ "$mode" = "both" ]; then
+        echo -e "${BLUE}Docker image:${NC} $DOCKER_IMAGE:latest"
+    fi
+    if [ "$mode" = "source" ] || [ "$mode" = "both" ]; then
+        echo -e "${BLUE}Isolation:${NC} Uses OPENCODE_CONFIG_DIR to load from .opencode-review/"
+    fi
     echo ""
 }
 
-# Main function
 main() {
-    echo ""
-    echo "╔══════════════════════════════════════════════════╗"
-    echo "║   OpenCode Gitea Review - Installation Script    ║"
-    echo "╚══════════════════════════════════════════════════╝"
-    echo ""
-    
+    parse_args "$@"
+    print_banner
     check_git_repo
     local project_root=$(get_project_root)
-    
     log_info "Project root: $project_root"
-    
-    # Check if .opencode exists
     if [ -d "$project_root/.opencode" ]; then
         log_info "Detected existing .opencode/ directory"
-        log_info "Installing to separate .opencode-review/ directory to avoid conflicts"
+        log_info "This tool uses isolated .opencode-review/ to avoid conflicts"
     fi
-    
-    check_dependencies
+    if [ -z "$INSTALL_MODE" ]; then
+        select_install_mode
+    fi
+    log_info "Installation mode: $INSTALL_MODE"
+    if [ "$OFFLINE_MODE" = true ]; then
+        log_info "Offline mode: enabled"
+    fi
+    if [ "$SKIP_DEPS" = true ]; then
+        log_info "Skip dependencies: enabled"
+    fi
+    echo ""
     download_repo
-    install_files "$project_root"
-    install_dependencies "$project_root"
+    case "$INSTALL_MODE" in
+        docker) install_docker_workflow "$project_root" ;;
+        source)
+            check_source_dependencies
+            install_source_files "$project_root"
+            install_source_workflow "$project_root"
+            install_dependencies "$project_root"
+            ;;
+        both)
+            check_source_dependencies
+            install_source_files "$project_root"
+            install_docker_workflow "$project_root"
+            install_dependencies "$project_root"
+            ;;
+    esac
     cleanup
-    print_next_steps
+    print_next_steps "$INSTALL_MODE"
 }
 
-# Error handling
 trap cleanup EXIT
-
 main "$@"
