@@ -68,6 +68,7 @@ validate_env() {
     fi
     
     log_success "Environment validated"
+    log_warn "Note: GITEA_TOKEN must have 'write:repository' scope to submit reviews"
 }
 
 infer_gitea_server_url() {

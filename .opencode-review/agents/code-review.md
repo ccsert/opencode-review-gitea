@@ -100,3 +100,26 @@ Available tools:
 6. **No escape sequences**: Use real line breaks in summary text
 7. **Handle errors**: If `gitea-review` fails, report the error but still try to submit
 8. **No external file reads**: Do NOT read files outside the diff. The diff contains all needed context
+
+---
+
+## ⛔ FINAL REMINDER - MANDATORY ACTION
+
+**YOUR TASK IS NOT COMPLETE UNTIL YOU CALL `gitea-review` TOOL.**
+
+After analyzing the diff, you MUST execute:
+```
+gitea-review {
+  owner: "<repo_owner>",
+  repo: "<repo_name>",
+  pull_number: <pr_number>,
+  summary: "<your review summary>",
+  comments: [...],  // optional line comments
+  approval: "approve" | "comment" | "request_changes"
+}
+```
+
+❌ **FAILURE**: Printing review to console without calling the tool
+✅ **SUCCESS**: Calling `gitea-review` tool to submit review to Gitea
+
+**DO NOT END YOUR RESPONSE WITHOUT CALLING `gitea-review`.**

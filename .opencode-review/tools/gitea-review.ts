@@ -52,6 +52,17 @@ async function giteaFetch(endpoint: string, options: RequestInit = {}) {
 
   if (!response.ok) {
     const text = await response.text()
+    
+    // Check for permission errors and provide helpful message
+    if (response.status === 403 || text.includes("required scope")) {
+      throw new Error(
+        `Gitea API permission error: Your token lacks required permissions.\n` +
+        `Required: write:repository scope\n` +
+        `Please create a new token with write:repository permission in Gitea Settings → Applications → Access Tokens\n` +
+        `Original error: ${text}`
+      )
+    }
+    
     throw new Error(`Gitea API error: ${response.status} ${response.statusText} - ${text}`)
   }
 
