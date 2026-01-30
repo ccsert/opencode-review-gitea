@@ -7,12 +7,15 @@
 #   Interactive:  curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash
 #   Docker only:  curl ... | bash -s -- --docker
 #   Source only:  curl ... | bash -s -- --source
+#   Offline:      cd /your/project && /path/to/install.sh --offline --docker
 #
 # Options:
-#   --docker    Install Docker-based workflow only (recommended)
-#   --source    Install source-based workflow with .opencode-review/
-#   --both      Install both installation methods
-#   --help      Show help message
+#   --docker         Install Docker-based workflow only (recommended)
+#   --source         Install source-based workflow with .opencode-review/
+#   --both           Install both installation methods
+#   --offline        Enable offline mode (use script's directory as source)
+#   --skip-deps      Skip bun install (useful for offline/CI environments)
+#   --help           Show help message
 #
 
 set -e
@@ -33,6 +36,13 @@ DOCKER_IMAGE="ghcr.io/ccsert/opencode-review"
 # Installation mode
 INSTALL_MODE=""
 
+# Offline mode settings
+OFFLINE_MODE=false
+SKIP_DEPS=false
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
@@ -44,6 +54,8 @@ parse_args() {
             --docker) INSTALL_MODE="docker"; shift ;;
             --source) INSTALL_MODE="source"; shift ;;
             --both) INSTALL_MODE="both"; shift ;;
+            --offline) OFFLINE_MODE=true; shift ;;
+            --skip-deps) SKIP_DEPS=true; shift ;;
             --help|-h) show_help; exit 0 ;;
             *) log_error "Unknown option: $1"; show_help; exit 1 ;;
         esac
@@ -55,13 +67,21 @@ show_help() {
     echo "OpenCode Gitea Review - Installation Script"
     echo ""
     echo "Usage:"
-    echo "  curl -fsSL $REPO_URL/main/install.sh | bash [options]"
+    echo "  Online:   curl -fsSL $REPO_URL/main/install.sh | bash [options]"
+    echo "  Offline:  cd /your/project && /path/to/opencode-review-gitea/install.sh --offline [options]"
     echo ""
     echo "Options:"
-    echo "  --docker    Install Docker-based workflow only (recommended)"
-    echo "  --source    Install source-based workflow with .opencode-review/"
-    echo "  --both      Install both installation methods"
-    echo "  --help      Show this help message"
+    echo "  --docker         Install Docker-based workflow only (recommended)"
+    echo "  --source         Install source-based workflow with .opencode-review/"
+    echo "  --both           Install both installation methods"
+    echo "  --offline        Enable offline mode (use script's directory as source)"
+    echo "  --skip-deps      Skip 'bun install' (useful for offline/CI environments)"
+    echo "  --help           Show this help message"
+    echo ""
+    echo "Offline Installation:"
+    echo "  1. Clone repo:  git clone $REPO_URL"
+    echo "  2. In target project:  cd /your/project"
+    echo "  3. Run:  /path/to/opencode-review-gitea/install.sh --offline --docker"
     echo ""
 }
 
@@ -119,25 +139,46 @@ check_source_dependencies() {
         exit 1
     fi
     if ! command -v bun &> /dev/null; then
-        log_warn "bun not found, attempting to install..."
-        curl -fsSL https://bun.sh/install | bash
-        export PATH="$HOME/.bun/bin:$PATH"
+        if [ "$OFFLINE_MODE" = true ]; then
+            log_warn "bun not found. In offline mode, please install bun manually first."
+            log_warn "Or use --skip-deps to skip dependency installation."
+            if [ "$SKIP_DEPS" = false ]; then
+                exit 1
+            fi
+        else
+            log_warn "bun not found, attempting to install..."
+            curl -fsSL https://bun.sh/install | bash
+            export PATH="$HOME/.bun/bin:$PATH"
+        fi
     fi
 }
 
 TMP_DIR=$(mktemp -d)
 
 download_repo() {
-    log_info "Downloading opencode-review-gitea..."
-    if command -v git &> /dev/null; then
-        git clone --depth 1 "$REPO_URL.git" "$TMP_DIR/repo" 2>/dev/null || {
-            log_warn "Git clone failed, trying tarball..."
+    if [ "$OFFLINE_MODE" = true ]; then
+        log_info "Offline mode: using script directory as source"
+        log_info "Source: $SCRIPT_DIR"
+        if [ ! -f "$SCRIPT_DIR/templates/workflow-docker.yaml" ] && [ ! -f "$SCRIPT_DIR/templates/workflow-source.yaml" ]; then
+            log_error "Invalid source: templates/ not found in $SCRIPT_DIR"
+            log_error "Make sure you're running install.sh from the opencode-review-gitea repo"
+            exit 1
+        fi
+        # Copy to TMP_DIR for consistent handling
+        cp -r "$SCRIPT_DIR" "$TMP_DIR/repo"
+        log_success "Using local repository"
+    else
+        log_info "Downloading opencode-review-gitea..."
+        if command -v git &> /dev/null; then
+            git clone --depth 1 "$REPO_URL.git" "$TMP_DIR/repo" 2>/dev/null || {
+                log_warn "Git clone failed, trying tarball..."
+                curl -fsSL "$REPO_URL/archive/main.tar.gz" | tar -xz -C "$TMP_DIR"
+                mv "$TMP_DIR/opencode-review-gitea-main" "$TMP_DIR/repo"
+            }
+        else
             curl -fsSL "$REPO_URL/archive/main.tar.gz" | tar -xz -C "$TMP_DIR"
             mv "$TMP_DIR/opencode-review-gitea-main" "$TMP_DIR/repo"
-        }
-    else
-        curl -fsSL "$REPO_URL/archive/main.tar.gz" | tar -xz -C "$TMP_DIR"
-        mv "$TMP_DIR/opencode-review-gitea-main" "$TMP_DIR/repo"
+        fi
     fi
 }
 
@@ -202,10 +243,23 @@ install_source_workflow() {
 
 install_dependencies() {
     local project_root="$1"
+    if [ "$SKIP_DEPS" = true ]; then
+        log_info "Skipping dependency installation (--skip-deps)"
+        return
+    fi
     if [ -d "$project_root/.opencode-review" ]; then
         log_info "Installing npm dependencies..."
         cd "$project_root/.opencode-review"
-        "$HOME/.bun/bin/bun" install
+        if [ -f "$HOME/.bun/bin/bun" ]; then
+            "$HOME/.bun/bin/bun" install
+        elif command -v bun &> /dev/null; then
+            bun install
+        else
+            log_warn "bun not found, skipping dependency installation"
+            log_warn "Run 'cd .opencode-review && bun install' manually later"
+            cd - > /dev/null
+            return
+        fi
         cd - > /dev/null
         log_success "Dependencies installed"
     fi
@@ -247,7 +301,7 @@ print_next_steps() {
     echo ""
     echo -e "${BOLD}Documentation:${NC} $REPO_URL"
     echo ""
-    if [ "$mode" = "docker" ]; then
+    if [ "$mode" = "docker" ] || [ "$mode" = "both" ]; then
         echo -e "${BLUE}Docker image:${NC} $DOCKER_IMAGE:latest"
     fi
     if [ "$mode" = "source" ] || [ "$mode" = "both" ]; then
@@ -270,6 +324,12 @@ main() {
         select_install_mode
     fi
     log_info "Installation mode: $INSTALL_MODE"
+    if [ "$OFFLINE_MODE" = true ]; then
+        log_info "Offline mode: enabled"
+    fi
+    if [ "$SKIP_DEPS" = true ]; then
+        log_info "Skip dependencies: enabled"
+    fi
     echo ""
     download_repo
     case "$INSTALL_MODE" in
