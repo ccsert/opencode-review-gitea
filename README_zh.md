@@ -75,12 +75,41 @@ env:
   # MODEL: openai/gpt-4o                # 需要 OPENAI_API_KEY
 ```
 
-### 3. Docker 专属选项
+### 3. 审查配置
+
+以下选项适用于 Docker 和源码两种安装方式：
 
 ```yaml
 env:
+  # 响应语言
   REVIEW_LANGUAGE: auto      # auto | en | zh-CN
+  
+  # 审查深度和关注点
   REVIEW_STYLE: balanced     # concise | balanced | thorough | security
+  
+  # 文件筛选（glob 模式，逗号分隔）
+  FILE_PATTERNS: ""          # 例如：「*.ts,*.go,src/**」（空 = 全部文件）
+```
+
+#### 语言选项
+
+| 值 | 说明 |
+|----|------|
+| `auto` | 根据代码注释自动检测（默认） |
+| `en` | 使用英文审查 |
+| `zh-CN` | 使用简体中文审查 |
+
+#### 文件筛选示例
+
+```yaml
+# 只审查 TypeScript 文件
+FILE_PATTERNS: "*.ts,*.tsx"
+
+# 只审查源码文件（排除测试）
+FILE_PATTERNS: "src/**/*.go"
+
+# 多种模式
+FILE_PATTERNS: "*.py,*.js,!*.test.js"
 ```
 
 ## 🚀 使用方法

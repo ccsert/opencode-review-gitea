@@ -74,7 +74,7 @@ build_prompt() {
     local repo_owner="${REPO_OWNER:-}"
     local repo_name="${REPO_NAME:-}"
     
-    local prompt="Please review"
+    local prompt="Review"
     
     if [ -n "$pr_num" ]; then
         prompt="$prompt PR #$pr_num"
@@ -84,32 +84,39 @@ build_prompt() {
         prompt="$prompt in $repo_owner/$repo_name"
     fi
     
+    prompt="$prompt."
+    
     # Add style instructions
     case "${REVIEW_STYLE:-balanced}" in
         concise)
-            prompt="$prompt. Be concise, focus only on critical issues."
+            prompt="$prompt Focus only on critical issues, be concise."
             ;;
         thorough)
-            prompt="$prompt. Provide thorough analysis including suggestions, best practices, and potential improvements."
+            prompt="$prompt Provide thorough analysis including best practices and improvements."
             ;;
         security)
-            prompt="$prompt. Focus on security vulnerabilities and potential risks."
+            prompt="$prompt Focus on security vulnerabilities and potential risks."
             ;;
         *)
-            prompt="$prompt. Provide balanced feedback on code quality, bugs, and improvements."
+            prompt="$prompt Provide balanced feedback on bugs, security, and code quality."
             ;;
     esac
     
     # Add language preference
     case "${REVIEW_LANGUAGE:-auto}" in
         zh-CN|zh)
-            prompt="$prompt Reply in Chinese (简体中文)."
+            prompt="$prompt 请使用简体中文回复。"
             ;;
         en)
             prompt="$prompt Reply in English."
             ;;
         # auto: let the model decide based on code content
     esac
+    
+    # Add file filter instructions
+    if [ -n "$FILE_PATTERNS" ]; then
+        prompt="$prompt Only review files matching: $FILE_PATTERNS."
+    fi
     
     echo "$prompt"
 }
@@ -121,6 +128,9 @@ print_config() {
     echo "  Style:    ${REVIEW_STYLE:-balanced}"
     echo "  Language: ${REVIEW_LANGUAGE:-auto}"
     echo "  Config:   $OPENCODE_CONFIG_DIR"
+    if [ -n "$FILE_PATTERNS" ]; then
+        echo "  Filter:   $FILE_PATTERNS"
+    fi
     if [ -n "$PR_NUMBER" ]; then
         echo "  PR:       #$PR_NUMBER"
     fi
@@ -176,6 +186,7 @@ main() {
             echo "  MODEL              AI model (default: deepseek/deepseek-chat)"
             echo "  REVIEW_LANGUAGE    auto|en|zh-CN (default: auto)"
             echo "  REVIEW_STYLE       concise|balanced|thorough|security (default: balanced)"
+            echo "  FILE_PATTERNS      Glob patterns to filter files (e.g., '*.ts,*.go')"
             echo "  PR_NUMBER          PR number to review"
             echo "  REPO_OWNER         Repository owner"
             echo "  REPO_NAME          Repository name"

@@ -75,12 +75,41 @@ env:
   # MODEL: openai/gpt-4o                # Requires OPENAI_API_KEY
 ```
 
-### 3. Docker-specific Options
+### 3. Review Configuration
+
+These options work with both Docker and Source installations:
 
 ```yaml
 env:
+  # Response language
   REVIEW_LANGUAGE: auto      # auto | en | zh-CN
+  
+  # Review depth and focus
   REVIEW_STYLE: balanced     # concise | balanced | thorough | security
+  
+  # File filtering (glob patterns, comma-separated)
+  FILE_PATTERNS: ""          # e.g., "*.ts,*.go,src/**" (empty = all files)
+```
+
+#### Language Options
+
+| Value | Description |
+|-------|-------------|
+| `auto` | Auto-detect from code comments (default) |
+| `en` | Review in English |
+| `zh-CN` | 使用简体中文审查 |
+
+#### File Filtering Examples
+
+```yaml
+# Only review TypeScript files
+FILE_PATTERNS: "*.ts,*.tsx"
+
+# Only review source files (exclude tests)
+FILE_PATTERNS: "src/**/*.go"
+
+# Multiple patterns
+FILE_PATTERNS: "*.py,*.js,!*.test.js"
 ```
 
 ## 🚀 Usage
