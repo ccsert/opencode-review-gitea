@@ -80,12 +80,13 @@ export default tool({
       .array(
         tool.schema.object({
           path: tool.schema.string().describe("File path"),
-          line: tool.schema.number().describe("Line number in the new file"),
+          line: tool.schema.number().optional().describe("Line number in the NEW file (for added/context lines). Use this OR old_line, not both."),
+          old_line: tool.schema.number().optional().describe("Line number in the OLD file (for deleted lines). Use this OR line, not both."),
           body: tool.schema.string().describe("Comment content"),
         }),
       )
       .optional()
-      .describe("Line-level review comments"),
+      .describe("Line-level review comments. Use 'line' for new/context lines, 'old_line' for deleted lines."),
     approval: tool.schema
       .enum(["comment", "approve", "request_changes"])
       .optional()
@@ -113,11 +114,30 @@ export default tool({
       .replace(/\\t/g, "\t")
 
     // Format review comments for API - also process escaped characters in comments
-    const reviewComments = comments.map((c) => ({
-      path: c.path,
-      body: c.body.replace(/\\n/g, "\n").replace(/\\t/g, "\t"),
-      new_position: c.line,
-    }))
+    // Per Gitea API: use new_position for new file lines, old_position for deleted lines
+    const reviewComments = comments.map((c) => {
+      const comment: {
+        path: string
+        body: string
+        new_position?: number
+        old_position?: number
+      } = {
+        path: c.path,
+        body: c.body.replace(/\\n/g, "\n").replace(/\\t/g, "\t"),
+      }
+      
+      if (c.old_line !== undefined && c.old_line > 0) {
+        // Comment on deleted line (old file)
+        comment.old_position = c.old_line
+        comment.new_position = 0
+      } else if (c.line !== undefined && c.line > 0) {
+        // Comment on new/context line (new file)
+        comment.new_position = c.line
+        comment.old_position = 0
+      }
+      
+      return comment
+    })
 
     // Create the review
     const reviewPayload: ReviewRequest = {

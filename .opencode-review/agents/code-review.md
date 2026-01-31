@@ -74,6 +74,34 @@ Available tools:
 
 ## Line Comment Guidelines
 
+### Line Number Format in Diff Output
+
+The diff output uses these line number formats:
+- `[NEW:123]` - Line 123 in the **new file** (added or context lines)
+- `[OLD:456]` - Line 456 in the **old file** (deleted lines)
+
+### When Submitting Comments
+
+- For lines marked `[NEW:X]` (added `+` or context lines): use `line: X`
+- For lines marked `[OLD:X]` (deleted `-` lines): use `old_line: X`
+
+Example:
+```json
+{
+  "path": "src/app.ts",
+  "line": 42,           // For [NEW:42] lines
+  "body": "Consider using const here"
+}
+// OR for deleted lines:
+{
+  "path": "src/app.ts",
+  "old_line": 38,       // For [OLD:38] lines  
+  "body": "This logic should be preserved"
+}
+```
+
+### Best Practices
+
 - **One issue per comment** - Don't combine multiple concerns
 - **Include fix suggestion** - Show the better approach
 - **Use code blocks** when suggesting code changes:
@@ -114,7 +142,10 @@ gitea-review {
   repo: "<repo_name>",
   pull_number: <pr_number>,
   summary: "<your review summary>",
-  comments: [...],  // optional line comments
+  comments: [
+    { path: "file.ts", line: 42, body: "..." },      // For [NEW:42] lines
+    { path: "file.ts", old_line: 38, body: "..." }   // For [OLD:38] deleted lines
+  ],
   approval: "approve" | "comment" | "request_changes"
 }
 ```

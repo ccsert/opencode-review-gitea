@@ -128,15 +128,18 @@ function formatDiffForReview(files: ParsedFile[]): string {
     parts.push(`\n## ${file.path} (${file.status})\n`)
 
     for (const hunk of file.hunks) {
-      parts.push(`@@ starting at line ${hunk.newStart} @@`)
+      parts.push(`@@ starting at line ${hunk.newStart} (old: ${hunk.oldStart}) @@`)
 
       for (const change of hunk.changes) {
         if (change.type === "add") {
-          parts.push(`[${change.newLine}] +${change.content}`)
+          // New line: [NEW:行号] +内容
+          parts.push(`[NEW:${change.newLine}] +${change.content}`)
         } else if (change.type === "del") {
-          parts.push(`[DEL] -${change.content}`)
+          // Deleted line: [OLD:行号] -内容 (用于 old_position 评论)
+          parts.push(`[OLD:${change.oldLine}] -${change.content}`)
         } else {
-          parts.push(`[${change.newLine}]  ${change.content}`)
+          // Context line: [NEW:行号] 内容
+          parts.push(`[NEW:${change.newLine}]  ${change.content}`)
         }
       }
       parts.push("")
