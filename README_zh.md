@@ -14,7 +14,9 @@
 - 📝 **行级评论** - 在具体代码行上提供精确反馈
 - ✅ **审查决策** - 支持 approve、request_changes、comment 三种审查状态
 - 🔄 **自动触发** - 通过 `/oc` 或 `/opencode` 评论触发审查
-- 🐳 **Docker 支持** - 预构建镜像，零配置安装
+- � **增量审查** - 仅审查上次审查后的新变更（适用于 PR 更新）
+- 🏷️ **结构化标签** - 按类型（BUG、SECURITY、PERFORMANCE）和严重程度分类问题
+- �🐳 **Docker 支持** - 预构建镜像，零配置安装
 - 🛡️ **隔离配置** - 使用独立的 `.opencode-review/` 目录，不会与你现有的 `.opencode/` 配置冲突
 
 ## 📦 安装
@@ -206,16 +208,22 @@ export default tool({
 │   └── workflow-source.yaml        # 源码 workflow 模板
 ├── .github/workflows/
 │   └── docker-publish.yaml         # 自动构建 Docker 镜像
-├── .gitea/workflows/
-│   └── opencode-review.yaml        # Gitea Actions 工作流
 └── .opencode-review/               # 隔离的配置目录
     ├── agents/
-    │   └── code-review.md          # 代码审查 Agent
+    │   ├── code-review.md          # 代码审查 Agent（主）
+    │   └── gitea-assistant.md      # 通用助手 Agent
     ├── tools/
-    │   ├── gitea-pr-diff.ts        # 获取 PR Diff
-    │   └── gitea-review.ts         # 提交审查
+    │   ├── gitea-pr-diff.ts        # 获取完整 PR Diff
+    │   ├── gitea-pr-files.ts       # 列出变更的文件
+    │   ├── gitea-incremental-diff.ts # 获取增量 Diff（仅新变更）
+    │   ├── gitea-review.ts         # 提交审查和评论
+    │   └── gitea-comment.ts        # 在 issue/PR 上发表评论
+    ├── skills/
+    │   └── pr-review/SKILL.md      # 可复用的审查技能
     └── package.json                # 依赖
 ```
+
+> **注意**: 安装后，会在你的项目中创建 `.gitea/workflows/opencode-review.yaml`。
 
 ## 🔗 相关链接
 
