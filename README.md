@@ -1,4 +1,4 @@
-# OpenCode Gitea Review
+# OpenCode Review Platform
 
 [![OpenCode](https://img.shields.io/badge/OpenCode-AI%20Code%20Review-blue)](https://opencode.ai)
 [![Docker Image](https://img.shields.io/badge/Docker-ghcr.io-blue)](https://ghcr.io/ccsert/opencode-review)
@@ -6,232 +6,280 @@
 
 [中文文档](README_zh.md) | English
 
-An AI-powered **automatic code review tool for Gitea/Forgejo PRs**, built on the [OpenCode](https://opencode.ai) plugin system. It listens for PR and comment events via Gitea Actions, automatically fetches code diffs, and submits structured reviews.
+An **AI-powered code review platform** for Gitea/Forgejo, GitHub, and GitLab. Built on the [OpenCode](https://opencode.ai) plugin system, it offers two deployment modes:
+
+1. **Gitea Actions Mode** - Works within your CI/CD pipeline
+2. **Platform Mode (NEW!)** - Standalone web service with UI, multi-repo support, and webhook integration
 
 ## ✨ Features
 
+### Core Features
 - 🤖 **AI-Powered Code Review** - Uses Claude/GPT/DeepSeek models to analyze code changes
 - 📝 **Line-Level Comments** - Provides precise feedback on specific code lines
 - ✅ **Review Decisions** - Supports approve, request_changes, and comment states
-- 🔄 **Auto-Trigger** - Triggered by `/oc` or `/opencode` comments
-- � **Incremental Review** - Only reviews new changes since last review (for updated PRs)
 - 🏷️ **Structured Tags** - Categorizes issues by type (BUG, SECURITY, PERFORMANCE) and severity
-- �🐳 **Docker Support** - Zero-config installation with pre-built image
-- 🛡️ **Isolated Configuration** - Uses `.opencode-review/` directory, won't conflict with your existing `.opencode/` setup
+
+### Gitea Actions Mode
+- 🔄 **Auto-Trigger** - Triggered by `/oc` or `/opencode` comments
+- 📊 **Incremental Review** - Only reviews new changes since last review
+- 🐳 **Docker Support** - Zero-config installation with pre-built image
+- 🛡️ **Isolated Configuration** - Uses `.opencode-review/` directory
+
+### Platform Mode (NEW!)
+- 🌐 **Web UI** - Beautiful dashboard for managing repositories and reviews
+- 🔐 **Authentication** - JWT + API Key authentication
+- 📂 **Multi-Repository** - Manage multiple repos from one place
+- 📋 **Custom Templates** - Create reusable review templates
+- 📈 **Statistics** - Track review history and metrics
+- 🔗 **Webhook Integration** - Direct webhook receiver without Gitea Actions Runner
+- 💾 **Flexible Database** - SQLite (default) or PostgreSQL
+
+---
 
 ## 📦 Installation
 
-### Interactive Installation (Recommended)
+### Option 1: Gitea Actions Mode (Original)
 
-Run in your project root:
+For CI/CD pipeline integration:
 
 ```bash
+# Interactive installation
 curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash
-```
 
-You'll see an interactive menu to choose your installation method.
-
-### Direct Installation Options
-
-```bash
-# Docker-based (Recommended) - Zero files added to repo
+# Or direct Docker-based installation
 curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash -s -- --docker
-
-# Source-based - Full customization
-curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash -s -- --source
-
-# Both methods
-curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash -s -- --both
 ```
 
-## 🔄 Installation Methods Comparison
+### Option 2: Platform Mode (NEW!)
 
-| Aspect | Docker 🐳 | Source 📦 |
-|--------|----------|-----------|
-| **Files added** | 1 workflow file | .opencode-review/ + workflow |
-| **CI speed** | Fast (cached image) | Slower (install deps each run) |
-| **Customization** | Environment variables | Full control over agents/tools |
-| **Updates** | Automatic with `:latest` | Manual update required |
-| **Best for** | Quick setup, standard use | Custom prompts, advanced users |
-
-## ⚙️ Configuration
-
-### 1. Set Up Secrets
-
-Configure the following secrets in your Gitea repository:
-
-| Secret Name | Description |
-|-------------|-------------|
-| `OPENCODE_GIT_TOKEN` | Gitea API Token (requires repo permissions) |
-| `DEEPSEEK_API_KEY` | DeepSeek API Key (default model) |
-
-### 2. Configure Model (Optional)
-
-Edit `.gitea/workflows/opencode-review.yaml`:
-
-```yaml
-env:
-  # Format: provider/model-id
-  MODEL: deepseek/deepseek-chat        # Default (requires DEEPSEEK_API_KEY)
-  # MODEL: anthropic/claude-sonnet-4-5  # Requires ANTHROPIC_API_KEY
-  # MODEL: openai/gpt-4o                # Requires OPENAI_API_KEY
-```
-
-### 3. Review Configuration
-
-These options work with both Docker and Source installations:
-
-```yaml
-env:
-  # Response language
-  REVIEW_LANGUAGE: auto      # auto | en | zh-CN
-  
-  # Review depth and focus
-  REVIEW_STYLE: balanced     # concise | balanced | thorough | security
-  
-  # File filtering (glob patterns, comma-separated)
-  FILE_PATTERNS: ""          # e.g., "*.ts,*.go,src/**" (empty = all files)
-```
-
-#### Language Options
-
-| Value | Description |
-|-------|-------------|
-| `auto` | Auto-detect from code comments (default) |
-| `en` | Review in English |
-| `zh-CN` | 使用简体中文审查 |
-
-#### File Filtering Examples
-
-```yaml
-# Only review TypeScript files
-FILE_PATTERNS: "*.ts,*.tsx"
-
-# Only review source files (exclude tests)
-FILE_PATTERNS: "src/**/*.go"
-
-# Multiple patterns
-FILE_PATTERNS: "*.py,*.js"
-
-# Note: currently only positive matching is supported (no leading '!').
-```
-
-## 🚀 Usage
-
-### Trigger Code Review
-
-Comment on a PR:
-
-```
-/oc
-```
-
-or
-
-```
-/opencode please review this PR
-```
-
-### Local Testing (Docker)
+For standalone web service:
 
 ```bash
-docker run --rm \
-  -v $(pwd):/workspace \
-  -e GITEA_TOKEN="your-token" \
-  -e GITEA_SERVER_URL="https://your-gitea.example.com" \
-  -e DEEPSEEK_API_KEY="your-key" \
-  -e PR_NUMBER=123 \
-  -e REPO_OWNER="your-org" \
-  -e REPO_NAME="your-repo" \
-  ghcr.io/ccsert/opencode-review:latest
+# Clone the repository
+git clone https://github.com/ccsert/opencode-review-gitea.git
+cd opencode-review-gitea
+
+# Using Docker Compose (SQLite)
+cd docker
+cp .env.example .env
+# Edit .env with your settings
+docker compose up -d
+
+# Using Docker Compose (PostgreSQL)
+docker compose -f docker-compose.postgres.yml up -d
 ```
 
-`REPO_NAME` can be either `repo` or `owner/repo` (entrypoint will normalize it).
+---
 
-### Local Testing (Source)
+## 🏗️ Architecture
+
+```
+opencode-review-gitea/
+├── .opencode-review/          # Gitea Actions mode config
+│   ├── agents/                # AI Agent definitions
+│   ├── tools/                 # Custom tools
+│   └── skills/                # Reusable skills
+├── packages/                  # Platform mode (Monorepo)
+│   ├── core/                  # Core library
+│   │   ├── providers/         # Git provider abstraction
+│   │   ├── events/            # Webhook event types
+│   │   ├── review/            # Review engine
+│   │   └── templates/         # Template system
+│   ├── server/                # Hono + Bun API server
+│   │   ├── routes/            # API endpoints
+│   │   ├── middleware/        # Auth, error handling
+│   │   └── db/                # Drizzle ORM schemas
+│   └── web/                   # React frontend (coming soon)
+├── docker/                    # Docker configurations
+└── docs/                      # Documentation
+    └── architecture/          # Design documents
+```
+
+---
+
+## 🔧 Configuration
+
+### Gitea Actions Mode
+
+Set these secrets in your Gitea repository:
+
+| Secret | Required | Description |
+|--------|----------|-------------|
+| `OPENAI_API_KEY` | * | OpenAI API Key |
+| `ANTHROPIC_API_KEY` | * | Anthropic API Key |
+| `MODEL` | No | Model to use (default: `claude-sonnet-4-20250514`) |
+
+*At least one AI provider key required
+
+### Platform Mode
+
+Environment variables (see `docker/.env.example`):
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | No | `file:./data/review.db` | SQLite or PostgreSQL URL |
+| `JWT_SECRET` | Yes | - | JWT signing secret |
+| `ADMIN_PASSWORD` | No | `admin123` | Initial admin password |
+| `OPENAI_API_KEY` | * | - | OpenAI API Key |
+| `DEFAULT_MODEL` | No | `gpt-4o-mini` | Default AI model |
+| `CORS_ORIGINS` | No | `localhost` | Allowed CORS origins |
+
+---
+
+## 📖 API Reference
+
+Platform mode exposes a RESTful API:
+
+### Authentication
+```
+POST   /api/v1/auth/login          # Login with username/password
+POST   /api/v1/auth/refresh        # Refresh JWT token
+GET    /api/v1/auth/me             # Get current user
+```
+
+### Repositories
+```
+GET    /api/v1/repositories        # List repositories
+POST   /api/v1/repositories        # Add repository
+GET    /api/v1/repositories/:id    # Get repository
+PATCH  /api/v1/repositories/:id    # Update repository
+DELETE /api/v1/repositories/:id    # Delete repository
+POST   /api/v1/repositories/:id/test  # Test connection
+```
+
+### Reviews
+```
+GET    /api/v1/reviews             # List reviews
+GET    /api/v1/reviews/stats       # Get statistics
+GET    /api/v1/reviews/:id         # Get review details
+POST   /api/v1/reviews/:id/retry   # Retry failed review
+```
+
+### Templates
+```
+GET    /api/v1/templates           # List templates
+POST   /api/v1/templates           # Create template
+GET    /api/v1/templates/:id       # Get template
+PATCH  /api/v1/templates/:id       # Update template
+DELETE /api/v1/templates/:id       # Delete template
+```
+
+### Webhooks
+```
+POST   /api/v1/webhooks/:provider/:repoId   # Receive webhook
+```
+
+### System
+```
+GET    /api/v1/system/health       # Health check
+GET    /api/v1/system/info         # System info
+GET    /api/v1/system/models       # Available AI models
+```
+
+---
+
+## 🔄 Webhook Setup
+
+### For Gitea/Forgejo
+
+1. Go to Repository → Settings → Webhooks → Add Webhook
+2. Set Payload URL to: `https://your-server/api/v1/webhooks/gitea/{repository_id}`
+3. Set Content Type to: `application/json`
+4. Set Secret to the value from your repository config
+5. Select events: Pull Request, Pull Request Comment
+
+### For GitHub
+
+1. Go to Repository → Settings → Webhooks → Add webhook
+2. Set Payload URL to: `https://your-server/api/v1/webhooks/github/{repository_id}`
+3. Set Content Type to: `application/json`
+4. Set Secret and select Pull request events
+
+---
+
+## 🛠️ Development
+
+### Prerequisites
+- [Bun](https://bun.sh) >= 1.0
+- Node.js >= 18 (optional, for compatibility)
+
+### Setup
 
 ```bash
-export GITEA_TOKEN="your-token"
-export GITEA_SERVER_URL="https://your-gitea.example.com"
-export OPENCODE_CONFIG_DIR="$(pwd)/.opencode-review"
+# Install dependencies
+bun install
 
-opencode run --agent code-review \
-  "Please review PR #123 in owner/repo"
+# Run development server
+bun run dev
+
+# Build for production
+bun run build
+
+# Run tests
+bun run test
 ```
 
-## 🔧 Customization (Source Installation)
+### Project Structure
 
-### Modify Review Style
+| Package | Description | Status |
+|---------|-------------|--------|
+| `@opencode-review/core` | Provider abstraction, events, templates | ✅ Complete |
+| `@opencode-review/server` | Hono API server | ✅ Complete |
+| `@opencode-review/web` | React web UI | 🔜 Coming soon |
 
-Edit `.opencode-review/agents/code-review.md`:
-
-```markdown
 ---
-description: AI code reviewer for Gitea/Forgejo PRs
-tools:
-  "*": false
-  "gitea-review": true
-  "gitea-pr-diff": true
+
+## 📊 Roadmap
+
+### ✅ Phase 1: Core Infrastructure (Completed)
+- [x] Gitea Actions integration (original CLI mode)
+- [x] Docker support for CLI mode
+- [x] Monorepo architecture with Turborepo
+- [x] Provider abstraction layer (`GitProvider` interface)
+- [x] GiteaProvider implementation
+- [x] Webhook event parsing & normalization
+- [x] Template system with built-in presets
+
+### ✅ Phase 2: Backend Platform (Completed)
+- [x] Hono + Bun HTTP server
+- [x] SQLite + Drizzle ORM database
+- [x] JWT + API Key authentication
+- [x] Repository management API
+- [x] Template CRUD API
+- [x] Review history API with statistics
+- [x] Webhook receiver endpoints
+- [x] System health & config API
+
+### 🔄 Phase 3: In Progress
+- [x] ReviewEngine framework (40% - SDK integration pending)
+- [x] Docker deployment configs (70% - frontend pending)
+- [ ] Web UI (React + Shadcn/UI + TailwindCSS)
+- [ ] OpenCode SDK integration
+
+### 📋 Phase 4: Future
+- [ ] GitHub Provider
+- [ ] GitLab Provider
+- [ ] OAuth integration (Gitea/GitHub/GitLab)
+- [ ] Review analytics dashboard
+- [ ] Slack/Discord notifications
+- [ ] Self-hosted AI model support (Ollama)
+
 ---
 
-You are a code review expert focusing on [your domain]...
-```
+## 🤝 Contributing
 
-### Add New Tools
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) first.
 
-Create a TypeScript file in `.opencode-review/tools/`:
-
-```typescript
-import { tool } from "@opencode-ai/plugin"
-
-export default tool({
-  description: "Tool description",
-  args: {
-    param: tool.schema.string().describe("Parameter description"),
-  },
-  async execute(args, context) {
-    return "Result"
-  },
-})
-```
-
-## 📁 Project Structure
-
-```
-.
-├── Dockerfile                      # Docker image definition
-├── docker-compose.yaml             # Local testing
-├── entrypoint.sh                   # Container entrypoint
-├── install.sh                      # Installation script
-├── templates/
-│   ├── workflow-docker.yaml        # Docker workflow template
-│   └── workflow-source.yaml        # Source workflow template
-├── .github/workflows/
-│   └── docker-publish.yaml         # Auto-build Docker image
-└── .opencode-review/               # Isolated config directory
-    ├── agents/
-    │   ├── code-review.md          # Code review agent (main)
-    │   └── gitea-assistant.md      # General assistant agent
-    ├── tools/
-    │   ├── gitea-pr-diff.ts        # Get full PR diff
-    │   ├── gitea-pr-files.ts       # List changed files
-    │   ├── gitea-incremental-diff.ts # Get incremental diff (new changes only)
-    │   ├── gitea-review.ts         # Submit review with comments
-    │   └── gitea-comment.ts        # Post comments on issues/PRs
-    ├── skills/
-    │   └── pr-review/SKILL.md      # Reusable review skill
-    └── package.json                # Dependencies
-```
-
-> **Note**: After installation, `.gitea/workflows/opencode-review.yaml` will be created in your project.
-
-## 🔗 Related Links
-
-- [OpenCode Documentation](https://opencode.ai/docs)
-- [OpenCode Custom Tools](https://opencode.ai/docs/custom-tools/)
-- [Gitea API Documentation](https://docs.gitea.io/en-us/api-usage/)
-- [Docker Image](https://ghcr.io/ccsert/opencode-review)
+---
 
 ## 📄 License
 
-MIT License - See [LICENSE](LICENSE)
+[MIT License](LICENSE)
+
+---
+
+## 🔗 Links
+
+- [OpenCode](https://opencode.ai) - The AI coding assistant
+- [Architecture Docs](docs/architecture/) - Detailed design documents
+- [API Design](docs/architecture/api-design.md) - Full API specification

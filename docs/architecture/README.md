@@ -189,23 +189,38 @@ services:
 
 ## 开发路线图
 
-### Phase 1: 基础架构（当前）
+### Phase 1: 基础架构 ✅ 完成
 - [x] 创建开发分支
-- [ ] 架构文档
-- [ ] Monorepo 初始化
-- [ ] 数据库层实现
+- [x] 架构文档
+- [x] Monorepo 初始化 (Turborepo + Bun)
+- [x] 数据库层实现 (Drizzle ORM + SQLite)
 
-### Phase 2: 核心功能
-- [ ] Provider 抽象层
-- [ ] Webhook 处理
-- [ ] Review 引擎集成
+### Phase 2: 核心功能 ✅ 完成
+- [x] Provider 抽象层 (`GitProvider` 接口)
+- [x] GiteaProvider 实现
+- [x] Webhook 事件解析与处理
+- [x] Review 引擎框架 (SDK 集成待完成)
+- [x] 模板系统 (内置 + 自定义)
 
-### Phase 3: Web 界面
-- [ ] 认证系统
-- [ ] 仓库管理 UI
+### Phase 3: API 服务 ✅ 完成
+- [x] 认证系统 (JWT + API Key)
+- [x] 仓库管理 API
+- [x] 模板管理 API
+- [x] Review 历史 API
+- [x] Webhook 接收端点
+- [x] 系统管理 API
+
+### Phase 4: Web 界面 🔜 进行中
+- [ ] React + Vite 项目初始化
+- [ ] Shadcn/UI + TailwindCSS 配置
+- [ ] 登录页面
+- [ ] 仓库管理界面
 - [ ] 模板编辑器
+- [ ] Review 历史查看
 
-### Phase 4: 部署与文档
-- [ ] Docker 配置
-- [ ] README 更新
-- [ ] 部署指南
+### Phase 5: 部署与扩展
+- [x] Docker 配置 (70%)
+- [ ] 前端 + 后端一体化镜像
+- [ ] GitHub Provider
+- [ ] GitLab Provider
+- [ ] OAuth 集成
