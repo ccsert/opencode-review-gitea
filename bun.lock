@@ -15,6 +15,7 @@
       "name": "@opencode-review/core",
       "version": "0.1.0",
       "dependencies": {
+        "@opencode-ai/sdk": "^1.1.48",
         "zod": "^3.22.0",
       },
       "devDependencies": {
@@ -99,6 +100,8 @@
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.19.12", "", { "os": "win32", "cpu": "x64" }, "sha512-T1QyPSDCyMXaO3pzBkF96E8xMkiRYbUEZADd29SyPGabqxMViNoii+NcK7eWJAEoU6RZyEm5lVSIjTmcdoB9HA=="],
 
     "@hono/zod-validator": ["@hono/zod-validator@0.4.3", "", { "peerDependencies": { "hono": ">=3.9.0", "zod": "^3.19.1" } }, "sha512-xIgMYXDyJ4Hj6ekm9T9Y27s080Nl9NXHcJkOvkXPhubOLj8hZkOL8pDnnXfvCf5xEE8Q4oMFenQUZZREUY2gqQ=="],
+
+    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.1.48", "https://registry.npmmirror.com/@opencode-ai/sdk/-/sdk-1.1.48.tgz", {}, "sha512-j5/79X45fUPWVD2Ffm/qvwLclDCdPeV+TYMDrm9to0p4pmzhmeKevCsyiRdLg0o0HE3AFRUnOo2rdO9NetN79A=="],
 
     "@opencode-review/core": ["@opencode-review/core@workspace:packages/core"],
 

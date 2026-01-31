@@ -3,18 +3,23 @@
  */
 
 import type { GitProvider } from '../providers/types'
-import type { ReviewTemplate, ReviewDecision, CreateReviewRequest } from '../types'
+import type { ReviewTemplate, ReviewDecision, CreateReviewRequest, LineCommentRequest } from '../types'
 import type { WebhookEvent } from '../events/types'
 import { renderTemplate } from '../templates/renderer'
+import { OpenCodeClient, type OpenCodeClientConfig } from '../ai/client'
 
 export interface ReviewEngineConfig {
   /** OpenCode 服务器配置 */
   opencode?: {
     port?: number
     hostname?: string
+    serverUrl?: string
   }
-  /** 默认模型 */
-  model?: string
+  /** 默认模型配置 */
+  model?: {
+    providerID: string
+    modelID: string
+  }
   /** 调试模式 */
   debug?: boolean
 }
@@ -56,13 +61,25 @@ export interface ReviewContext {
  */
 export class ReviewEngine {
   private config: ReviewEngineConfig
+  private aiClient: OpenCodeClient
 
   constructor(config: ReviewEngineConfig = {}) {
     this.config = {
-      model: 'deepseek/deepseek-chat',
+      model: {
+        providerID: 'opencode',
+        modelID: 'deepseek/deepseek-chat',
+      },
       debug: false,
       ...config,
     }
+
+    // 初始化 AI 客户端
+    this.aiClient = new OpenCodeClient({
+      hostname: config.opencode?.hostname,
+      port: config.opencode?.port,
+      serverUrl: config.opencode?.serverUrl,
+      model: this.config.model,
+    })
   }
 
   /**
@@ -94,12 +111,10 @@ export class ReviewEngine {
       const userPrompt = this.buildUserPrompt(context, diff, files)
 
       // 3. 调用 AI 执行审查
-      // TODO: 集成 @opencode-ai/sdk
-      // 暂时返回模拟结果
       const aiResult = await this.callAI(systemPrompt, userPrompt)
 
       // 4. 解析 AI 响应
-      const { decision, summary, comments } = this.parseAIResponse(aiResult)
+      const { decision, summary, comments } = this.parseAIResponse(aiResult, files)
 
       // 5. 提交 Review 到 Git 平台
       const review: CreateReviewRequest = {
@@ -187,58 +202,177 @@ ${files.map(f => `- ${f.filename}`).join('\n')}
 ${diff}
 \`\`\`
 
-请按照指定格式进行审查，并给出你的决策（APPROVED/REQUEST_CHANGES/COMMENT）。`
+请按照指定格式进行审查，并给出你的决策（APPROVED/REQUEST_CHANGES/COMMENT）。
+
+## 输出格式要求
+
+请使用以下 JSON 格式输出审查结果：
+
+\`\`\`json
+{
+  "decision": "APPROVED|REQUEST_CHANGES|COMMENT",
+  "summary": "审查总结内容",
+  "comments": [
+    {
+      "path": "文件路径",
+      "line": 行号,
+      "body": "评论内容，使用 **[CATEGORY:SEVERITY]** 格式标记问题类型"
+    }
+  ]
+}
+\`\`\`
+
+其中：
+- decision: 必须是 APPROVED、REQUEST_CHANGES 或 COMMENT 之一
+- summary: 整体审查总结
+- comments: 行级评论数组，每个评论必须指定 path（文件路径）、line（行号）和 body（评论内容）
+- 评论中使用标签格式：**[CATEGORY:SEVERITY]**
+  - CATEGORY: BUG, SECURITY, PERFORMANCE, STYLE, DOCS, TEST, LOGIC, REFACTOR
+  - SEVERITY: CRITICAL, HIGH, MEDIUM, LOW`
   }
 
   /**
    * 调用 AI 模型
-   * TODO: 使用 @opencode-ai/sdk 实现
+   * 使用 OpenCode SDK 执行代码审查
    */
   private async callAI(systemPrompt: string, userPrompt: string): Promise<string> {
-    // 临时实现：返回模拟响应
-    // 后续将替换为 OpenCode SDK 调用
-    console.log('[ReviewEngine] AI call with prompts:')
-    console.log('System:', systemPrompt.substring(0, 100) + '...')
-    console.log('User:', userPrompt.substring(0, 100) + '...')
-    
-    return `## 审查结果
+    try {
+      // 确保客户端已连接
+      if (!this.aiClient.connected) {
+        await this.aiClient.connect()
+      }
 
-**决策**: COMMENT
+      if (this.config.debug) {
+        console.log('[ReviewEngine] Connecting to OpenCode server...')
+        console.log('[ReviewEngine] System prompt:', systemPrompt.substring(0, 200) + '...')
+        console.log('[ReviewEngine] User prompt:', userPrompt.substring(0, 200) + '...')
+      }
 
-### 总结
-代码看起来不错，有一些小建议可以考虑。
+      // 调用 AI
+      const result = await this.aiClient.prompt(userPrompt, {
+        systemPrompt,
+        model: this.config.model,
+      })
 
-### 评论
-暂无行级评论。
-`
+      if (this.config.debug) {
+        console.log('[ReviewEngine] AI response:', result.text.substring(0, 500) + '...')
+      }
+
+      return result.text
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      console.error('[ReviewEngine] AI call failed:', errorMessage)
+      
+      // 返回一个安全的默认响应
+      return JSON.stringify({
+        decision: 'COMMENT',
+        summary: `AI 审查暂时不可用: ${errorMessage}`,
+        comments: [],
+      })
+    }
   }
 
   /**
    * 解析 AI 响应
+   * 支持 JSON 格式和 Markdown 格式的响应
    */
-  private parseAIResponse(response: string): {
+  private parseAIResponse(
+    response: string,
+    files: { filename: string }[]
+  ): {
     decision: ReviewDecision
     summary: string
-    comments?: { path: string; line: number; body: string }[]
+    comments: LineCommentRequest[]
+  } {
+    // 尝试从响应中提取 JSON
+    const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/)
+    
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1])
+        
+        // 验证并清理 decision
+        let decision: ReviewDecision = 'COMMENT'
+        if (parsed.decision === 'APPROVED') {
+          decision = 'APPROVED'
+        } else if (parsed.decision === 'REQUEST_CHANGES') {
+          decision = 'REQUEST_CHANGES'
+        }
+
+        // 验证并清理 comments
+        const validFiles = new Set(files.map(f => f.filename))
+        const comments: LineCommentRequest[] = (parsed.comments || [])
+          .filter((c: { path?: string; line?: number; body?: string }) => {
+            // 确保评论指向有效的文件
+            if (!c.path || !c.line || !c.body) return false
+            return validFiles.has(c.path)
+          })
+          .map((c: { path: string; line: number; body: string; side?: 'LEFT' | 'RIGHT' }) => ({
+            path: c.path,
+            line: c.line,
+            body: c.body,
+            side: c.side || 'RIGHT',
+          }))
+
+        return {
+          decision,
+          summary: parsed.summary || '代码审查完成。',
+          comments,
+        }
+      } catch (parseError) {
+        if (this.config.debug) {
+          console.warn('[ReviewEngine] Failed to parse JSON response:', parseError)
+        }
+        // 继续使用 Markdown 解析
+      }
+    }
+
+    // 回退：使用 Markdown 格式解析
+    return this.parseMarkdownResponse(response)
+  }
+
+  /**
+   * 解析 Markdown 格式的 AI 响应（兼容旧格式）
+   */
+  private parseMarkdownResponse(response: string): {
+    decision: ReviewDecision
+    summary: string
+    comments: LineCommentRequest[]
   } {
     // 解析决策
     let decision: ReviewDecision = 'COMMENT'
-    if (response.includes('APPROVED') || response.includes('approved')) {
+    const decisionMatch = response.match(/\*{0,2}决策\*{0,2}[：:]\s*(APPROVED|REQUEST_CHANGES|COMMENT)/i)
+    if (decisionMatch) {
+      const d = decisionMatch[1].toUpperCase()
+      if (d === 'APPROVED') decision = 'APPROVED'
+      else if (d === 'REQUEST_CHANGES') decision = 'REQUEST_CHANGES'
+    } else if (response.toLowerCase().includes('approved')) {
       decision = 'APPROVED'
-    } else if (response.includes('REQUEST_CHANGES') || response.includes('request changes')) {
+    } else if (response.toLowerCase().includes('request_changes') || response.toLowerCase().includes('request changes')) {
       decision = 'REQUEST_CHANGES'
     }
 
     // 提取总结
-    const summaryMatch = response.match(/### 总结\n([\s\S]*?)(?=\n###|$)/)
-    const summary = summaryMatch ? summaryMatch[1].trim() : response
+    const summaryMatch = response.match(/#{1,3}\s*总结\s*\n([\s\S]*?)(?=\n#{1,3}|$)/)
+    const summary = summaryMatch ? summaryMatch[1].trim() : response.substring(0, 500)
 
-    // TODO: 解析行级评论
+    // 尝试提取行级评论（格式：文件:行号 - 内容）
+    const comments: LineCommentRequest[] = []
+    const commentPattern = /[-*]\s*`?([^`\n:]+):(\d+)`?\s*[-–:]\s*(.+?)(?=\n[-*]|\n\n|$)/g
+    let match
+    while ((match = commentPattern.exec(response)) !== null) {
+      comments.push({
+        path: match[1].trim(),
+        line: parseInt(match[2], 10),
+        body: match[3].trim(),
+        side: 'RIGHT',
+      })
+    }
 
     return {
       decision,
-      summary,
-      comments: [],
+      summary: summary || '代码审查完成。',
+      comments,
     }
   }
 }
