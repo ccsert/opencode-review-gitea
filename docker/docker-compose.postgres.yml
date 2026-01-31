@@ -1,0 +1,66 @@
+# OpenCode Review Platform - PostgreSQL 配置
+# 用于需要 PostgreSQL 的场景
+
+services:
+  opencode-review:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: opencode-review-platform:latest
+    container_name: opencode-review
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      
+      # PostgreSQL 连接
+      - DATABASE_URL=postgresql://opencode:${POSTGRES_PASSWORD:-opencode123}@postgres:5432/opencode_review
+      
+      # JWT 密钥
+      - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-in-production}
+      
+      # 管理员初始密码
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      
+      # AI 配置
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-gpt-4o-mini}
+      
+      # CORS 配置
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/system/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: opencode-postgres
+    environment:
+      - POSTGRES_USER=opencode
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-opencode123}
+      - POSTGRES_DB=opencode_review
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opencode -d opencode_review"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+
+networks:
+  default:
+    name: opencode-network

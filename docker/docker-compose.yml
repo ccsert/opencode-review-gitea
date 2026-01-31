@@ -1,0 +1,75 @@
+# OpenCode Review Platform - Docker Compose
+# 快速部署配置
+
+services:
+  # OpenCode Review 服务
+  opencode-review:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: opencode-review-platform:latest
+    container_name: opencode-review
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # 服务配置
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      
+      # 数据库配置（默认 SQLite）
+      - DATABASE_URL=${DATABASE_URL:-file:/app/data/review.db}
+      
+      # JWT 密钥（必须修改！）
+      - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-in-production}
+      
+      # 管理员初始密码
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      
+      # AI 配置
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-gpt-4o-mini}
+      
+      # CORS 配置
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      
+      # 可选功能
+      - ENABLE_REGISTRATION=${ENABLE_REGISTRATION:-true}
+      - MULTI_USER=${MULTI_USER:-true}
+      - MAX_REPOS_PER_USER=${MAX_REPOS_PER_USER:-50}
+    volumes:
+      # 持久化数据
+      - opencode-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/system/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # 可选: PostgreSQL 数据库
+  # 取消注释以使用 PostgreSQL 代替 SQLite
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: opencode-postgres
+  #   environment:
+  #     - POSTGRES_USER=opencode
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-opencode123}
+  #     - POSTGRES_DB=opencode_review
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U opencode -d opencode_review"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  opencode-data:
+  # postgres-data:
+
+networks:
+  default:
+    name: opencode-network

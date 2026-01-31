@@ -1,0 +1,39 @@
+{
+  "name": "@opencode-review/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun run dist/index.js",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "clean": "rm -rf dist",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@opencode-review/core": "workspace:*",
+    "hono": "^4.0.0",
+    "@hono/zod-validator": "^0.4.0",
+    "drizzle-orm": "^0.30.0",
+    "better-sqlite3": "^11.0.0",
+    "postgres": "^3.4.0",
+    "zod": "^3.22.0",
+    "jose": "^5.2.0",
+    "ulid": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^20.0.0",
+    "bun-types": "^1.1.0",
+    "drizzle-kit": "^0.21.0",
+    "typescript": "^5.4.0"
+  }
+}
