@@ -1,41 +1,97 @@
 Submit a code review on a Gitea/Forgejo pull request.
 
-This tool allows you to:
-- Post a summary review comment
-- Add line-level comments on specific code changes (both new and deleted lines)
-- Approve, request changes, or just comment
+This tool submits a review with:
+1. A summary/report (AI-generated, displayed as the main review body)
+2. Line-level comments attached to specific code lines
+3. An approval decision (approve/comment/request_changes)
 
-Use this tool after analyzing a PR's code changes to provide structured feedback.
+**IMPORTANT**: The `summary` parameter should contain a complete, well-formatted review report. 
+The tool does NOT auto-generate content - you control the entire output.
 
-## Line Comment Types
+## Summary Format (Recommended)
 
-Comments support two targeting modes based on the diff output format:
+Generate a summary organized by severity level:
 
-1. **New/Context lines** (marked `[NEW:X]` in diff): use `line: X`
-2. **Deleted lines** (marked `[OLD:X]` in diff): use `old_line: X`
+\`\`\`markdown
+## Code Review Report
+
+### 📋 Overview
+[Brief summary of PR changes and overall code quality assessment]
+
+### 🔴 Critical Issues (CRITICAL)
+> Must fix before merge
+
+| Issue | File | Description |
+|:------|:-----|:------------|
+| Plaintext password logging | `login.post.ts:12` | Password printed to logs in plaintext, severe security violation |
+| Hardcoded JWT secret | `auth.ts:4`, `token.ts:4` | Secret key hardcoded, attackers can forge any token |
+
+### 🟠 High Priority (HIGH)
+> Should fix before merge
+
+| Issue | File | Description |
+|:------|:-----|:------------|
+| Privilege escalation | `user/index.put.ts:27` | Users can set their own `isAdmin` status |
+
+### 🟡 Medium Priority (MEDIUM)
+> Recommended to fix
+
+| Issue | File | Description |
+|:------|:-----|:------------|
+| Password bypass | `login.post.ts:39` | Plaintext password comparison used |
+
+### 🟢 Low Priority (LOW)
+> Optional improvements
+
+| Issue | File | Description |
+|:------|:-----|:------------|
+| Code style | `utils.ts:15` | Use const instead of let |
+
+### 💡 Suggestions
+[Overall recommendations and improvement directions]
+\`\`\`
+
+**Notes**:
+- Only include severity sections that have issues (omit empty sections)
+- File column should include path and line number
+- Description should briefly explain the issue and its impact
+
+## Line Comments
+
+Use structured tags for categorization:
+- `**[BUG:HIGH]**` - Bug with severity
+- `**[SECURITY:CRITICAL]**` - Security issue
+- `**[PERFORMANCE:MEDIUM]**` - Performance concern
+- `**[STYLE:LOW]**` - Style suggestion
+
+Categories: BUG, SECURITY, PERFORMANCE, STYLE, DOCS, TEST
+Severities: CRITICAL, HIGH, MEDIUM, LOW
 
 ## Example Usage
 
-```json
+\`\`\`json
 {
   "owner": "org",
   "repo": "project", 
   "pull_number": 42,
-  "summary": "Good changes overall, one security concern.",
+  "summary": "## Code Review Report\n\n### 📋 Overview\nThis PR adds user authentication. Overall implementation is clean, but has 1 critical security issue and 1 medium performance issue.\n\n### 🔴 Critical Issues (CRITICAL)\n> Must fix before merge\n\n| Issue | File | Description |\n|:------|:-----|:------------|\n| Plaintext password storage | `src/auth.ts:25` | Password stored without hashing, severe security risk |\n\n### 🟡 Medium Priority (MEDIUM)\n> Recommended to fix\n\n| Issue | File | Description |\n|:------|:-----|:------------|\n| Database connection leak | `src/db.ts:58` | Connection not closed, may exhaust connection pool |\n\n### 💡 Suggestions\nFix all security issues before merge, especially password storage.",
   "comments": [
     {
       "path": "src/auth.ts",
       "line": 25,
-      "body": "Consider using bcrypt for password hashing"
-    },
-    {
-      "path": "src/legacy.ts",
-      "old_line": 18,
-      "body": "This validation logic was important, ensure it's preserved elsewhere"
+      "body": "**[SECURITY:CRITICAL]** Password should be hashed using bcrypt.",
+      "suggestion": "const hash = await bcrypt.hash(password, 10);"
     }
   ],
   "approval": "request_changes"
 }
-```
+\`\`\`
 
-The comments will appear in the PR's "Files Changed" tab at the specified line numbers.
+## Parameters
+
+- owner: Repository owner (required)
+- repo: Repository name (required)
+- pull_number: PR number (required)
+- summary: Complete review report content (required) - AI generates this
+- comments: Array of line-level comments (optional)
+- approval: "comment" (default), "approve", or "request_changes"
