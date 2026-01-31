@@ -7,17 +7,18 @@ Features:
 - Two output formats: parsed (with line numbers) or raw (unified diff)
 
 Output formats:
-- "parsed" (default): Shows each line with [LINE_NUM] prefix for easy reference when creating review comments
+- "parsed" (default): Shows each line with line number prefix for easy reference when creating review comments
 - "raw": Returns the raw unified diff format
 
 The parsed format shows:
-- [42] +new line  - Added line at line 42
-- [DEL] -old line - Deleted line
-- [42]  context   - Unchanged context line
+- [NEW:42] +new line  - Added line at line 42 in new file (use `line: 42` in comments)
+- [OLD:38] -old line  - Deleted line at line 38 in old file (use `old_line: 38` in comments)
+- [NEW:42]  context   - Unchanged context line (use `line: 42` in comments)
 
 File filtering examples:
 - ["*.ts", "*.tsx"] - Only TypeScript files
 - ["src/**"] - Only files in src directory
-- ["!*.test.ts"] - Exclude test files (not supported, use positive patterns)
 
-Use the line numbers in [brackets] when creating review comments with gitea-review tool.
+When creating review comments with gitea-review tool:
+- For [NEW:X] lines → use `line: X`
+- For [OLD:X] lines → use `old_line: X`
