@@ -1,3 +1,4 @@
+/// <reference path="../types/shims.d.ts" />
 /**
  * 认证中间件
  */
@@ -55,12 +56,17 @@ export async function generateToken(user: AuthUser, expiresIn: string = '24h'): 
 export async function verifyToken(token: string): Promise<AuthUser | null> {
   try {
     const { payload } = await jose.jwtVerify(token, JWT_SECRET)
+
+    // 支持两种 token 格式：
+    // 1. 完整用户信息（来自 generateToken）
+    // 2. 简化格式（来自 auth.ts login，只有 sub 和 type）
+    const userId = payload.sub as string
     
     return {
-      id: payload.sub as string,
-      username: payload.username as string,
-      email: payload.email as string,
-      role: payload.role as 'admin' | 'user',
+      id: userId,
+      username: (payload.username as string) || userId,
+      email: (payload.email as string) || `${userId}@local`,
+      role: (payload.role as 'admin' | 'user') || (userId === 'admin' ? 'admin' : 'user'),
     }
   } catch {
     return null
@@ -156,7 +162,7 @@ function extractAuthCredentials(c: Context): { type: 'jwt' | 'apikey', token: st
  * 认证中间件
  * 支持 JWT 和 API Key 两种认证方式
  */
-export const authMiddleware: MiddlewareHandler = async (c, next) => {
+export const authMiddleware: MiddlewareHandler = async (c: any, next: any) => {
   const credentials = extractAuthCredentials(c)
 
   if (!credentials) {
@@ -198,7 +204,7 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
  * 可选认证中间件
  * 如果提供了认证信息则验证，否则继续处理
  */
-export const optionalAuthMiddleware: MiddlewareHandler = async (c, next) => {
+export const optionalAuthMiddleware: MiddlewareHandler = async (c: any, next: any) => {
   const credentials = extractAuthCredentials(c)
 
   if (credentials) {
@@ -222,7 +228,7 @@ export const optionalAuthMiddleware: MiddlewareHandler = async (c, next) => {
 /**
  * 管理员认证中间件
  */
-export const adminMiddleware: MiddlewareHandler = async (c, next) => {
+export const adminMiddleware: MiddlewareHandler = async (c: any, next: any) => {
   const user = c.get('user')
 
   if (!user) {
@@ -253,7 +259,7 @@ export const adminMiddleware: MiddlewareHandler = async (c, next) => {
  * 用于 Webhook 端点
  */
 export const apiKeyAuthMiddleware = (requiredScope: string): MiddlewareHandler => {
-  return async (c, next) => {
+  return async (c: any, next: any) => {
     const credentials = extractAuthCredentials(c)
 
     if (!credentials) {

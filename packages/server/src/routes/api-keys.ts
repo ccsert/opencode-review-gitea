@@ -61,21 +61,24 @@ apiKeyRoutes.get('/', async (c) => {
   })
 })
 
+const createApiKeySchema = z.object({
+  name: z.string().min(1).max(100),
+  scopes: z.array(z.enum(['webhook', 'read', 'write', 'admin'])).default(['webhook']),
+  expiresInDays: z.number().min(1).max(365).optional(),
+})
+type CreateApiKeyInput = z.infer<typeof createApiKeySchema>
+
 /**
  * POST /api-keys
  * 创建新 API Key
  */
 apiKeyRoutes.post(
   '/',
-  zValidator('json', z.object({
-    name: z.string().min(1).max(100),
-    scopes: z.array(z.enum(['webhook', 'read', 'write', 'admin'])).default(['webhook']),
-    expiresInDays: z.number().min(1).max(365).optional(),
-  })),
+  zValidator('json', createApiKeySchema),
   async (c) => {
     const db = getDatabase()
     const user = c.get('user')
-    const body = c.req.valid('json')
+    const body = c.req.valid<CreateApiKeyInput>('json')
 
     // 生成 API Key
     const plainKey = generateApiKey()
@@ -122,7 +125,7 @@ apiKeyRoutes.post(
  */
 apiKeyRoutes.get('/:id', async (c) => {
   const db = getDatabase()
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   const user = c.get('user')
 
   const key = await db.select({
@@ -154,21 +157,24 @@ apiKeyRoutes.get('/:id', async (c) => {
   })
 })
 
+const updateApiKeySchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  scopes: z.array(z.enum(['webhook', 'read', 'write', 'admin'])).optional(),
+})
+type UpdateApiKeyInput = z.infer<typeof updateApiKeySchema>
+
 /**
  * PATCH /api-keys/:id
  * 更新 API Key（只能更新名称和作用域）
  */
 apiKeyRoutes.patch(
   '/:id',
-  zValidator('json', z.object({
-    name: z.string().min(1).max(100).optional(),
-    scopes: z.array(z.enum(['webhook', 'read', 'write', 'admin'])).optional(),
-  })),
+  zValidator('json', updateApiKeySchema),
   async (c) => {
     const db = getDatabase()
-    const { id } = c.req.param()
+    const id = c.req.param('id')
     const user = c.get('user')
-    const body = c.req.valid('json')
+    const body = c.req.valid<UpdateApiKeyInput>('json')
 
     const existing = await db.select()
       .from(apiKeys)
@@ -222,7 +228,7 @@ apiKeyRoutes.patch(
  */
 apiKeyRoutes.delete('/:id', async (c) => {
   const db = getDatabase()
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   const user = c.get('user')
 
   const existing = await db.select()
@@ -254,7 +260,7 @@ apiKeyRoutes.delete('/:id', async (c) => {
  */
 apiKeyRoutes.post('/:id/regenerate', async (c) => {
   const db = getDatabase()
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   const user = c.get('user')
 
   const existing = await db.select()

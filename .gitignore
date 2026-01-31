@@ -12,6 +12,13 @@ dist/
 *.d.ts
 !*.config.js
 
+# Local data
+packages/server/data/
+data/
+*.db
+*.db-wal
+*.db-shm
+
 # Logs
 *.log
 .opencode-review/.opencode/

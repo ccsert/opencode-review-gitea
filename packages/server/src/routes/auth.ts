@@ -1,3 +1,4 @@
+/// <reference path="../types/shims.d.ts" />
 /**
  * 认证路由
  */
@@ -5,10 +6,13 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
-import { sign, verify } from 'hono/jwt'
+import * as jose from 'jose'
 import { createHash } from 'crypto'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production'
+// 使用与 middleware/auth.ts 相同的密钥
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'opencode-review-secret-change-in-production'
+)
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin'
 const ACCESS_TOKEN_EXPIRES = 15 * 60 // 15 分钟
 const REFRESH_TOKEN_EXPIRES = 7 * 24 * 60 * 60 // 7 天
@@ -29,7 +33,7 @@ export const authRoutes = new Hono()
  * POST /auth/login
  * 用户登录（密钥认证）
  */
-authRoutes.post('/login', zValidator('json', loginSchema), async (c) => {
+authRoutes.post('/login', zValidator('json', loginSchema), async (c: any) => {
   const { secret } = c.req.valid('json')
   
   // 验证管理员密钥
@@ -43,24 +47,27 @@ authRoutes.post('/login', zValidator('json', loginSchema), async (c) => {
     }, 401)
   }
 
-  const now = Math.floor(Date.now() / 1000)
   const userId = 'admin' // 单用户模式
 
-  // 生成 Access Token
-  const accessToken = await sign({
+  // 生成 Access Token（使用 jose）
+  const accessToken = await new jose.SignJWT({
     sub: userId,
-    iat: now,
-    exp: now + ACCESS_TOKEN_EXPIRES,
     type: 'access',
-  }, JWT_SECRET)
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime(`${ACCESS_TOKEN_EXPIRES}s`)
+    .sign(JWT_SECRET)
 
   // 生成 Refresh Token
-  const refreshToken = await sign({
+  const refreshToken = await new jose.SignJWT({
     sub: userId,
-    iat: now,
-    exp: now + REFRESH_TOKEN_EXPIRES,
     type: 'refresh',
-  }, JWT_SECRET)
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime(`${REFRESH_TOKEN_EXPIRES}s`)
+    .sign(JWT_SECRET)
 
   return c.json({
     success: true,
@@ -76,26 +83,27 @@ authRoutes.post('/login', zValidator('json', loginSchema), async (c) => {
  * POST /auth/refresh
  * 刷新访问令牌
  */
-authRoutes.post('/refresh', zValidator('json', refreshSchema), async (c) => {
+authRoutes.post('/refresh', zValidator('json', refreshSchema), async (c: any) => {
   const { refreshToken } = c.req.valid('json')
   
   try {
-    const payload = await verify(refreshToken, JWT_SECRET, 'HS256')
+    const { payload } = await jose.jwtVerify(refreshToken, JWT_SECRET)
     
     if (payload.type !== 'refresh') {
       throw new Error('Invalid token type')
     }
 
-    const now = Math.floor(Date.now() / 1000)
     const userId = payload.sub as string
 
     // 生成新的 Access Token
-    const accessToken = await sign({
+    const accessToken = await new jose.SignJWT({
       sub: userId,
-      iat: now,
-      exp: now + ACCESS_TOKEN_EXPIRES,
       type: 'access',
-    }, JWT_SECRET)
+    })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setExpirationTime(`${ACCESS_TOKEN_EXPIRES}s`)
+      .sign(JWT_SECRET)
 
     return c.json({
       success: true,
@@ -119,7 +127,7 @@ authRoutes.post('/refresh', zValidator('json', refreshSchema), async (c) => {
  * POST /auth/logout
  * 登出（客户端删除 token 即可）
  */
-authRoutes.post('/logout', async (c) => {
+authRoutes.post('/logout', async (c: any) => {
   // JWT 无状态，登出由客户端删除 token
   // 后续可以添加 token 黑名单机制
   return c.json({
@@ -134,7 +142,7 @@ authRoutes.post('/logout', async (c) => {
  * GET /auth/me
  * 获取当前用户信息
  */
-authRoutes.get('/me', async (c) => {
+authRoutes.get('/me', async (c: any) => {
   const authHeader = c.req.header('Authorization')
   
   if (!authHeader?.startsWith('Bearer ')) {
@@ -150,7 +158,7 @@ authRoutes.get('/me', async (c) => {
   const token = authHeader.slice(7)
   
   try {
-    const payload = await verify(token, JWT_SECRET, 'HS256')
+    const { payload } = await jose.jwtVerify(token, JWT_SECRET)
     
     if (payload.type !== 'access') {
       throw new Error('Invalid token type')

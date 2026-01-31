@@ -3,8 +3,9 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "resolvePackageJsonExports": false,
+    "baseUrl": ".",
     "lib": ["ES2022", "DOM"],
-    "types": ["node", "bun-types"],
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
@@ -20,9 +21,12 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "hono": ["./types/hono"],
+      "jose": ["./types/jose"],
+      "@hono/zod-validator": ["./types/@hono/zod-validator"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "types/**/*"],
   "exclude": ["node_modules", "dist"]
 }

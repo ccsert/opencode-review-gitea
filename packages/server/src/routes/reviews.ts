@@ -16,25 +16,29 @@ export const reviewRoutes = new Hono()
 // 所有路由需要认证
 reviewRoutes.use('/*', authMiddleware)
 
+// 查询参数 Schema
+const listReviewsQuerySchema = z.object({
+  repositoryId: z.string().optional(),
+  status: z.enum(['pending', 'processing', 'completed', 'failed']).optional(),
+  decision: z.enum(['APPROVED', 'REQUEST_CHANGES', 'COMMENT']).optional(),
+  prAuthor: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(100).default(20),
+})
+type ListReviewsQuery = z.infer<typeof listReviewsQuerySchema>
+
 /**
  * GET /reviews
  * 获取 Review 列表
  */
 reviewRoutes.get(
   '/',
-  zValidator('query', z.object({
-    repositoryId: z.string().optional(),
-    status: z.enum(['pending', 'processing', 'completed', 'failed']).optional(),
-    decision: z.enum(['APPROVED', 'REQUEST_CHANGES', 'COMMENT']).optional(),
-    prAuthor: z.string().optional(),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
-    page: z.coerce.number().min(1).default(1),
-    limit: z.coerce.number().min(1).max(100).default(20),
-  })),
+  zValidator('query', listReviewsQuerySchema),
   async (c) => {
     const db = getDatabase()
-    const query = c.req.valid('query')
+    const query = c.req.valid<ListReviewsQuery>('query')
     const user = c.get('user')
 
     // 构建查询条件
@@ -233,7 +237,7 @@ reviewRoutes.get('/stats', async (c) => {
  */
 reviewRoutes.get('/:id', async (c) => {
   const db = getDatabase()
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   const user = c.get('user')
 
   const review = await db.select()
@@ -279,7 +283,7 @@ reviewRoutes.get('/:id', async (c) => {
  */
 reviewRoutes.post('/:id/retry', async (c) => {
   const db = getDatabase()
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   const user = c.get('user')
 
   const review = await db.select()
@@ -354,7 +358,7 @@ reviewRoutes.post('/:id/retry', async (c) => {
  */
 reviewRoutes.delete('/:id', async (c) => {
   const db = getDatabase()
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   const user = c.get('user')
 
   const review = await db.select()

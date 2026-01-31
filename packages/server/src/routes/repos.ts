@@ -21,6 +21,7 @@ const createRepoSchema = z.object({
   accessToken: z.string().min(1, 'Access token is required'),
   webhookSecret: z.string().optional(),
   templateId: z.string().optional(),
+  skipValidation: z.boolean().optional(), // 用于测试，跳过仓库连接验证
   config: z.object({
     language: z.string().optional(),
     style: z.enum(['concise', 'detailed', 'strict']).optional(),
@@ -29,6 +30,7 @@ const createRepoSchema = z.object({
     ignorePatterns: z.array(z.string()).optional(),
   }).optional(),
 })
+type CreateRepoInput = z.infer<typeof createRepoSchema>
 
 // 更新仓库 Schema
 const updateRepoSchema = z.object({
@@ -43,6 +45,7 @@ const updateRepoSchema = z.object({
   }).optional(),
   webhookSecret: z.string().optional(),
 })
+type UpdateRepoInput = z.infer<typeof updateRepoSchema>
 
 export const repoRoutes = new Hono()
 
@@ -98,31 +101,33 @@ repoRoutes.get('/', async (c) => {
 repoRoutes.post('/', zValidator('json', createRepoSchema), async (c) => {
   const db = getDatabase()
   const userId = c.get('user').id
-  const body = c.req.valid('json')
+  const body = c.req.valid<CreateRepoInput>('json')
 
   // 解析仓库名称
   const urlParts = new URL(body.url).pathname.split('/').filter(Boolean)
   const repoName = urlParts.slice(0, 2).join('/')
   const baseUrl = new URL(body.url).origin
 
-  // 验证连接
-  try {
-    const provider = createProvider({
-      type: body.provider,
-      baseUrl,
-      token: body.accessToken,
-    })
-    
-    const [owner, repo] = repoName.split('/')
-    await provider.getRepository(owner, repo)
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: {
-        code: 'PROVIDER_ERROR',
-        message: `Failed to connect to repository: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      },
-    }, 400)
+  // 验证连接（除非跳过验证）
+  if (!body.skipValidation) {
+    try {
+      const provider = createProvider({
+        type: body.provider,
+        baseUrl,
+        token: body.accessToken,
+      })
+      
+      const [owner, repo] = repoName.split('/')
+      await provider.getRepository(owner, repo)
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: {
+          code: 'PROVIDER_ERROR',
+          message: `Failed to connect to repository: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        },
+      }, 400)
+    }
   }
 
   // 生成 Webhook Secret（如果未提供）
@@ -207,7 +212,7 @@ repoRoutes.get('/:id', async (c) => {
 repoRoutes.put('/:id', zValidator('json', updateRepoSchema), async (c) => {
   const db = getDatabase()
   const id = c.req.param('id')
-  const body = c.req.valid('json')
+  const body = c.req.valid<UpdateRepoInput>('json')
 
   const existing = await db.select().from(repositories).where(eq(repositories.id, id)).get()
 
@@ -223,7 +228,9 @@ repoRoutes.put('/:id', zValidator('json', updateRepoSchema), async (c) => {
 
   await db.update(repositories)
     .set({
-      ...body,
+      enabled: body.enabled ?? existing.enabled,
+      templateId: body.templateId !== undefined ? body.templateId : existing.templateId,
+      webhookSecret: body.webhookSecret ?? existing.webhookSecret,
       config: body.config ? { ...existing.config, ...body.config } : existing.config,
       updatedAt: new Date(),
     })

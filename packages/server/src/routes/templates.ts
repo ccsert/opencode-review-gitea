@@ -1,3 +1,4 @@
+/// <reference path="../types/shims.d.ts" />
 /**
  * 模板管理路由
  */
@@ -31,6 +32,8 @@ const updateTemplateSchema = z.object({
   severities: z.array(z.string()).optional(),
   isDefault: z.boolean().optional(),
 })
+type CreateTemplateInput = z.infer<typeof createTemplateSchema>
+type UpdateTemplateInput = z.infer<typeof updateTemplateSchema>
 
 export const templateRoutes = new Hono()
 
@@ -41,7 +44,7 @@ templateRoutes.use('/*', authMiddleware)
  * GET /templates
  * 获取模板列表
  */
-templateRoutes.get('/', async (c) => {
+templateRoutes.get('/', async (c: any) => {
   const db = getDatabase()
   const userId = c.get('user').id as string
   const includeSystem = c.req.query('includeSystem') !== 'false'
@@ -84,10 +87,10 @@ templateRoutes.get('/', async (c) => {
  * POST /templates
  * 创建新模板
  */
-templateRoutes.post('/', zValidator('json', createTemplateSchema), async (c) => {
+templateRoutes.post('/', zValidator('json', createTemplateSchema), async (c: any) => {
   const db = getDatabase()
   const userId = c.get('user').id
-  const body = c.req.valid('json')
+  const body = c.req.valid('json') as CreateTemplateInput
 
   const id = ulid()
   
@@ -116,7 +119,7 @@ templateRoutes.post('/', zValidator('json', createTemplateSchema), async (c) => 
  * GET /templates/:id
  * 获取模板详情
  */
-templateRoutes.get('/:id', async (c) => {
+templateRoutes.get('/:id', async (c: any) => {
   const db = getDatabase()
   const id = c.req.param('id')
 
@@ -157,10 +160,10 @@ templateRoutes.get('/:id', async (c) => {
  * PUT /templates/:id
  * 更新模板
  */
-templateRoutes.put('/:id', zValidator('json', updateTemplateSchema), async (c) => {
+templateRoutes.put('/:id', zValidator('json', updateTemplateSchema), async (c: any) => {
   const db = getDatabase()
   const id = c.req.param('id')
-  const body = c.req.valid('json')
+  const body = c.req.valid('json') as UpdateTemplateInput
 
   // 检查是否是系统模板
   const systemTemplates = getAllSystemTemplates()
@@ -209,7 +212,7 @@ templateRoutes.put('/:id', zValidator('json', updateTemplateSchema), async (c) =
  * DELETE /templates/:id
  * 删除模板
  */
-templateRoutes.delete('/:id', async (c) => {
+templateRoutes.delete('/:id', async (c: any) => {
   const db = getDatabase()
   const id = c.req.param('id')
 
@@ -255,7 +258,7 @@ templateRoutes.delete('/:id', async (c) => {
  * POST /templates/:id/duplicate
  * 复制模板
  */
-templateRoutes.post('/:id/duplicate', async (c) => {
+templateRoutes.post('/:id/duplicate', async (c: any) => {
   const db = getDatabase()
   const userId = c.get('user').id
   const id = c.req.param('id')

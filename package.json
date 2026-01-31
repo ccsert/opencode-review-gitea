@@ -16,10 +16,16 @@
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },
   "devDependencies": {
+    "@hono/zod-validator": "^0.4.0",
     "@types/bun": "^1.1.0",
+    "@types/node": "^20.0.0",
+    "bun-types": "^1.1.0",
+    "hono": "^4.0.0",
+    "jose": "^5.2.0",
     "prettier": "^3.2.0",
     "turbo": "^2.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "zod": "^3.22.0"
   },
   "packageManager": "bun@1.1.0",
   "engines": {

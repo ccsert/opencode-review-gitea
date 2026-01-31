@@ -1,11 +1,12 @@
 /**
- * 数据库客户端 - SQLite (开发优先)
+ * 数据库客户端 - SQLite (Bun 原生支持)
  * 
+ * 使用 bun:sqlite 替代 better-sqlite3
  * 注意：PostgreSQL 支持将在后续版本中通过独立模块添加
  */
 
-import { drizzle, BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
-import Database from 'better-sqlite3'
+import { drizzle } from 'drizzle-orm/bun-sqlite'
+import { Database } from 'bun:sqlite'
 import { existsSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
 
@@ -13,12 +14,12 @@ import * as schema from './schema/index'
 
 export type DatabaseType = 'sqlite'
 
-// 使用具体类型而非联合类型
-export type DatabaseInstance = BetterSQLite3Database<typeof schema>
+// 使用 Bun SQLite 的 Drizzle 类型
+export type DatabaseInstance = ReturnType<typeof drizzle<typeof schema>>
 
 // 全局数据库状态
 let _db: DatabaseInstance | null = null
-let _sqlite: Database.Database | null = null
+let _sqlite: Database | null = null
 
 /**
  * 初始化数据库
@@ -33,7 +34,7 @@ export async function initDatabase(url: string): Promise<void> {
   }
   
   _sqlite = new Database(dbPath)
-  _sqlite.pragma('journal_mode = WAL')
+  _sqlite.exec('PRAGMA journal_mode = WAL')
   
   _db = drizzle(_sqlite, { schema })
   
@@ -114,18 +115,19 @@ export async function runMigrations(): Promise<void> {
     CREATE TABLE IF NOT EXISTS repositories (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id),
-      name TEXT NOT NULL,
-      url TEXT NOT NULL,
       provider TEXT NOT NULL DEFAULT 'gitea',
-      access_token TEXT,
+      provider_repo_id TEXT,
+      url TEXT NOT NULL,
+      name TEXT NOT NULL,
       webhook_secret TEXT,
+      access_token TEXT,
       template_id TEXT REFERENCES review_templates(id),
+      config TEXT DEFAULT '{}',
       enabled INTEGER DEFAULT 1,
+      last_review_at INTEGER,
       review_count INTEGER DEFAULT 0,
-      last_review_at TEXT,
-      settings TEXT DEFAULT '{}',
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      created_at INTEGER DEFAULT (unixepoch()),
+      updated_at INTEGER
     );
 
     -- Reviews table
@@ -141,6 +143,7 @@ export async function runMigrations(): Promise<void> {
       summary TEXT,
       comments_count INTEGER DEFAULT 0,
       model TEXT,
+      tokens_used INTEGER,
       error TEXT,
       duration_ms INTEGER,
       triggered_by TEXT,

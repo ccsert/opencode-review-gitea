@@ -12,8 +12,31 @@ import {
   createProvider, 
   shouldTriggerReview, 
   getEventDescription,
+  ReviewEngine,
+  getDefaultTemplate,
   type WebhookEvent 
 } from '@opencode-review/core'
+
+// 全局 ReviewEngine 实例（懒加载）
+let reviewEngine: ReviewEngine | null = null
+
+function getReviewEngine(): ReviewEngine {
+  if (!reviewEngine) {
+    reviewEngine = new ReviewEngine({
+      opencode: {
+        port: process.env.OPENCODE_PORT ? parseInt(process.env.OPENCODE_PORT) : undefined,
+        hostname: process.env.OPENCODE_HOSTNAME,
+        serverUrl: process.env.OPENCODE_SERVER_URL,
+      },
+      model: {
+        providerID: process.env.OPENCODE_PROVIDER_ID || 'opencode',
+        modelID: process.env.OPENCODE_MODEL_ID || 'deepseek/deepseek-chat',
+      },
+      debug: process.env.NODE_ENV !== 'production',
+    })
+  }
+  return reviewEngine
+}
 
 export const webhookRoutes = new Hono()
 
@@ -23,12 +46,13 @@ export const webhookRoutes = new Hono()
  */
 webhookRoutes.post('/:provider/:repositoryId', async (c) => {
   const db = getDatabase()
-  const { provider, repositoryId } = c.req.param()
+  const provider = c.req.param('provider')
+  const repositoryId = c.req.param('repositoryId')
   
   // 获取原始请求体（用于签名验证）
   const rawBody = await c.req.text()
   const headers: Record<string, string> = {}
-  c.req.raw.headers.forEach((value, key) => {
+  c.req.raw.headers.forEach((value: string, key: string) => {
     headers[key.toLowerCase()] = value
   })
   
@@ -194,7 +218,7 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
  */
 webhookRoutes.post('/:provider', async (c) => {
   const db = getDatabase()
-  const { provider } = c.req.param()
+  const provider = c.req.param('provider')
   
   const rawBody = await c.req.text()
   let payload: any
@@ -272,56 +296,50 @@ async function executeReviewAsync(
     const [owner, repoName] = repo.name.split('/')
     const prNumber = event.pullRequest.number
 
-    // 获取 Diff
-    const diff = await provider.getPullRequestDiff(owner, repoName, prNumber)
-    const files = await provider.getPullRequestFiles(owner, repoName, prNumber)
+    console.log(`[Review] Starting AI review for PR #${prNumber} in ${repo.name}`)
 
-    if (!diff || diff.trim().length === 0) {
-      await db.update(reviews)
-        .set({
-          status: 'completed',
-          decision: 'COMMENT',
-          summary: '没有发现代码变更，跳过审查。',
-          commentsCount: 0,
-          durationMs: Date.now() - startTime,
-          completedAt: new Date(),
-        })
-        .where(eq(reviews.id, reviewId))
-      return
-    }
+    // 获取审查模板（未来可以从数据库获取用户自定义模板）
+    const template = getDefaultTemplate()
 
-    // TODO: 使用 ReviewEngine 执行审查
-    // 暂时使用模拟实现
-    console.log(`[Review] Executing review for PR #${prNumber} in ${repo.name}`)
-    console.log(`[Review] Files changed: ${files.length}`)
-    console.log(`[Review] Diff length: ${diff.length} chars`)
+    // 获取 ReviewEngine 实例
+    const engine = getReviewEngine()
 
-    // 模拟审查结果
-    const summary = `## 代码审查完成
-
-已审查 PR #${prNumber} 的 ${files.length} 个文件变更。
-
-**审查结果**: 代码看起来不错，无明显问题。
-
----
-*由 OpenCode Review Platform 自动生成*`
-
-    // 提交 Review
-    await provider.createReview(owner, repoName, prNumber, {
-      body: summary,
-      decision: 'COMMENT',
-      comments: [],
+    // 执行 AI 审查
+    const result = await engine.executeReview({
+      provider,
+      repository: {
+        owner,
+        repo: repoName,
+        fullName: repo.name,
+      },
+      pullRequest: {
+        number: prNumber,
+        title: event.pullRequest.title,
+        author: event.pullRequest.author.login,
+        baseBranch: event.pullRequest.base?.ref || 'main',
+        headBranch: event.pullRequest.head?.ref || 'unknown',
+      },
+      template,
+      config: {
+        language: 'zh-CN',
+        style: 'detailed',
+      },
     })
+
+    if (!result.success) {
+      throw new Error(result.error || 'Review execution failed')
+    }
 
     // 更新 Review 记录
     await db.update(reviews)
       .set({
         status: 'completed',
-        decision: 'COMMENT',
-        summary,
-        commentsCount: 0,
-        model: 'mock', // TODO: 实际模型名称
-        durationMs: Date.now() - startTime,
+        decision: result.decision || 'COMMENT',
+        summary: result.summary,
+        commentsCount: result.commentsCount || 0,
+        model: process.env.OPENCODE_MODEL_ID || 'deepseek/deepseek-chat',
+        tokensUsed: result.tokensUsed,
+        durationMs: result.durationMs || (Date.now() - startTime),
         completedAt: new Date(),
       })
       .where(eq(reviews.id, reviewId))
@@ -334,7 +352,7 @@ async function executeReviewAsync(
       })
       .where(eq(repositories.id, repo.id))
 
-    console.log(`[Review] Completed review ${reviewId} in ${Date.now() - startTime}ms`)
+    console.log(`[Review] Completed review ${reviewId} in ${result.durationMs || (Date.now() - startTime)}ms`)
   } catch (error) {
     console.error(`[Review] Failed:`, error)
     

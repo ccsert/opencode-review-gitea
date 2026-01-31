@@ -142,6 +142,14 @@ systemRoutes.post(
   }
 )
 
+// 日志查询 Schema
+const logsQuerySchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(100).default(50),
+  level: z.enum(['error', 'warn', 'info', 'debug']).optional(),
+})
+type LogsQuery = z.infer<typeof logsQuerySchema>
+
 /**
  * GET /system/logs
  * 获取系统日志（仅管理员）
@@ -149,14 +157,10 @@ systemRoutes.post(
 systemRoutes.get(
   '/logs',
   authMiddleware,
-  zValidator('query', z.object({
-    page: z.coerce.number().min(1).default(1),
-    limit: z.coerce.number().min(1).max(100).default(50),
-    level: z.enum(['error', 'warn', 'info', 'debug']).optional(),
-  })),
+  zValidator('query', logsQuerySchema),
   async (c) => {
     const user = c.get('user')
-    const query = c.req.valid('query')
+    const query = c.req.valid<LogsQuery>('query')
 
     if (user.role !== 'admin') {
       return c.json({
@@ -186,6 +190,13 @@ systemRoutes.get(
   }
 )
 
+// 清理 Schema
+const cleanupSchema = z.object({
+  olderThanDays: z.number().min(7).max(365).default(30),
+  types: z.array(z.enum(['webhookLogs', 'reviews'])).default(['webhookLogs']),
+})
+type CleanupInput = z.infer<typeof cleanupSchema>
+
 /**
  * POST /system/cleanup
  * 清理旧数据（仅管理员）
@@ -193,14 +204,11 @@ systemRoutes.get(
 systemRoutes.post(
   '/cleanup',
   authMiddleware,
-  zValidator('json', z.object({
-    olderThanDays: z.number().min(7).max(365).default(30),
-    types: z.array(z.enum(['webhookLogs', 'reviews'])).default(['webhookLogs']),
-  })),
+  zValidator('json', cleanupSchema),
   async (c) => {
     const db = getDatabase()
     const user = c.get('user')
-    const body = c.req.valid('json')
+    const body = c.req.valid<CleanupInput>('json')
 
     if (user.role !== 'admin') {
       return c.json({
@@ -218,15 +226,26 @@ systemRoutes.post(
     const results: Record<string, number> = {}
 
     if (body.types.includes('webhookLogs')) {
-      const deleted = await db.delete(webhookLogs)
+      // 先计数再删除（SQLite 不支持 DELETE ... RETURNING COUNT）
+      const countResult = await db.select({ count: sql<number>`count(*)` })
+        .from(webhookLogs)
         .where(sql`${webhookLogs.createdAt} < ${cutoffDate}`)
-      results.webhookLogs = deleted.changes || 0
+        .get()
+      
+      await db.delete(webhookLogs)
+        .where(sql`${webhookLogs.createdAt} < ${cutoffDate}`)
+      results.webhookLogs = countResult?.count ?? 0
     }
 
     if (body.types.includes('reviews')) {
-      const deleted = await db.delete(reviews)
+      const countResult = await db.select({ count: sql<number>`count(*)` })
+        .from(reviews)
         .where(sql`${reviews.createdAt} < ${cutoffDate}`)
-      results.reviews = deleted.changes || 0
+        .get()
+      
+      await db.delete(reviews)
+        .where(sql`${reviews.createdAt} < ${cutoffDate}`)
+      results.reviews = countResult?.count ?? 0
     }
 
     return c.json({

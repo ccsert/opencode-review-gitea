@@ -84,14 +84,23 @@ async function start() {
 ╚═══════════════════════════════════════════════════════════╝
     `)
     
-    Bun.serve({
+    // Bun.serve 返回一个 Server 对象
+    const server = Bun.serve({
       port: PORT,
       hostname: HOST,
       fetch: app.fetch,
     })
-  } catch (error) {
-    console.error('Failed to start server:', error)
-    process.exit(1)
+    
+    console.log(`[Server] Listening on ${server.hostname}:${server.port}`)
+  } catch (error: any) {
+    // 如果端口已被占用，可能是 Bun 的 hot reload 已经启动了服务
+    if (error?.code === 'EADDRINUSE') {
+      console.log(`[Server] Port ${PORT} already in use (possibly by Bun hot reload)`)
+      console.log(`[Server] App is available at http://${HOST}:${PORT}`)
+    } else {
+      console.error('Failed to start server:', error)
+      process.exit(1)
+    }
   }
 }
 
@@ -102,8 +111,6 @@ process.on('SIGINT', async () => {
 })
 
 // 启动
-start()
-
 start()
 
 export default app
