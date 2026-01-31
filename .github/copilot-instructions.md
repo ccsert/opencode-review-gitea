@@ -80,11 +80,21 @@ System prompt content...
 
 ## Code Review Workflow
 
-1. `gitea-pr-diff` → Fetch diff with line numbers (`[LINE_NUM] +/-/space` format)
-2. Analyze code changes
-3. `gitea-review` → Submit review (summary + line comments + approval)
+1. `gitea-pr-diff` → Fetch full diff with line numbers (`[NEW:行号] +/-/space` format)
+2. `gitea-incremental-diff` → (Optional) Fetch only new changes since last review
+3. Analyze code changes and categorize issues with structured tags
+4. `gitea-review` → Submit review (summary + line comments + approval)
 
-**Line number format**: Review comments must reference code lines using `[line_number]` from diff output.
+**Available Tools**:
+- `gitea-pr-diff` - Full PR diff
+- `gitea-incremental-diff` - Incremental diff (new changes only)
+- `gitea-pr-files` - List changed files
+- `gitea-review` - Submit structured review
+- `gitea-comment` - Post general comments (used by gitea-assistant agent)
+
+**Structured Tags**: Use `**[CATEGORY:SEVERITY]**` format in comments:
+- Categories: BUG, SECURITY, PERFORMANCE, STYLE, DOCS, TEST
+- Severities: CRITICAL, HIGH, MEDIUM, LOW
 
 ## Development Commands
 

@@ -1,0 +1,29 @@
+Fetch incremental diff for a pull request, only showing changes since the last review.
+
+This tool is useful for reviewing updated PRs where you only want to see new changes, avoiding re-reviewing already reviewed code.
+
+## How it works
+
+1. Fetches all commits in the PR
+2. Finds the last review submitted by this bot (via commit_id in reviews)
+3. Returns only the diff for commits added after the last review
+
+## When to use
+
+- When a PR has been updated with new commits
+- When you want to avoid duplicate review comments
+- For large PRs that are incrementally reviewed
+
+## Output
+
+Returns:
+- If no previous review: full PR diff
+- If PR was rebased/force-pushed: full PR diff with warning
+- Otherwise: incremental diff since last reviewed commit
+
+## Parameters
+
+- owner: Repository owner
+- repo: Repository name
+- pull_number: Pull request number
+- format: "parsed" (default) for line-numbered format, "raw" for unified diff

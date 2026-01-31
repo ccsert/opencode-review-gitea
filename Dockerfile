@@ -33,8 +33,7 @@ WORKDIR /workspace
 ENV OPENCODE_CONFIG_DIR=/app/.opencode-review \
     MODEL=deepseek/deepseek-chat \
     REVIEW_LANGUAGE=auto \
-    REVIEW_STYLE=balanced \
-    AUTO_APPROVE=false
+    REVIEW_STYLE=balanced
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh

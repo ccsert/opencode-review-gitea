@@ -14,7 +14,9 @@ An AI-powered **automatic code review tool for Gitea/Forgejo PRs**, built on the
 - 📝 **Line-Level Comments** - Provides precise feedback on specific code lines
 - ✅ **Review Decisions** - Supports approve, request_changes, and comment states
 - 🔄 **Auto-Trigger** - Triggered by `/oc` or `/opencode` comments
-- 🐳 **Docker Support** - Zero-config installation with pre-built image
+- � **Incremental Review** - Only reviews new changes since last review (for updated PRs)
+- 🏷️ **Structured Tags** - Categorizes issues by type (BUG, SECURITY, PERFORMANCE) and severity
+- �🐳 **Docker Support** - Zero-config installation with pre-built image
 - 🛡️ **Isolated Configuration** - Uses `.opencode-review/` directory, won't conflict with your existing `.opencode/` setup
 
 ## 📦 Installation
@@ -206,16 +208,22 @@ export default tool({
 │   └── workflow-source.yaml        # Source workflow template
 ├── .github/workflows/
 │   └── docker-publish.yaml         # Auto-build Docker image
-├── .gitea/workflows/
-│   └── opencode-review.yaml        # Gitea Actions workflow
 └── .opencode-review/               # Isolated config directory
     ├── agents/
-    │   └── code-review.md          # Code review agent
+    │   ├── code-review.md          # Code review agent (main)
+    │   └── gitea-assistant.md      # General assistant agent
     ├── tools/
-    │   ├── gitea-pr-diff.ts        # Get PR diff
-    │   └── gitea-review.ts         # Submit review
+    │   ├── gitea-pr-diff.ts        # Get full PR diff
+    │   ├── gitea-pr-files.ts       # List changed files
+    │   ├── gitea-incremental-diff.ts # Get incremental diff (new changes only)
+    │   ├── gitea-review.ts         # Submit review with comments
+    │   └── gitea-comment.ts        # Post comments on issues/PRs
+    ├── skills/
+    │   └── pr-review/SKILL.md      # Reusable review skill
     └── package.json                # Dependencies
 ```
+
+> **Note**: After installation, `.gitea/workflows/opencode-review.yaml` will be created in your project.
 
 ## 🔗 Related Links
 
