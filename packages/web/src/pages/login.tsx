@@ -47,14 +47,17 @@ export function LoginPage() {
 
     try {
       const response = await apiClient.post<{
-        accessToken: string
-        refreshToken: string
+        success: boolean
+        data: {
+          accessToken: string
+          refreshToken: string
+        }
       }>(
         '/auth/login',
-        { adminSecret: data.adminSecret },
+        { secret: data.adminSecret },
         { skipAuth: true }
       )
-      setTokens(response.accessToken, response.refreshToken)
+      setTokens(response.data.accessToken, response.data.refreshToken)
       navigate('/')
     } catch {
       setError(t('auth.invalidCredentials'))

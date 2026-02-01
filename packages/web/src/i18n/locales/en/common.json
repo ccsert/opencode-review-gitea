@@ -98,5 +98,31 @@
     "unauthorized": "Unauthorized access",
     "notFound": "Resource not found",
     "serverError": "Server error, please try again later"
+  },
+  "apiKeys": {
+    "title": "API Keys",
+    "create": "Create API Key",
+    "name": "Name",
+    "prefix": "Prefix",
+    "scopes": "Scopes",
+    "expiresAt": "Expires At",
+    "lastUsedAt": "Last Used",
+    "createdAt": "Created At",
+    "never": "Never",
+    "neverExpires": "Never expires",
+    "expired": "Expired",
+    "neverUsed": "Never used",
+    "deleteConfirm": "Are you sure you want to delete this API key?",
+    "createdSuccess": "API key created successfully",
+    "createdWarning": "This is the only time you will see this key. Please save it securely.",
+    "copiedToClipboard": "Copied to clipboard"
+  },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page",
+    "of": "of",
+    "total": "Total",
+    "items": "items"
   }
 }

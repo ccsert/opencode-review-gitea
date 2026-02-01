@@ -98,5 +98,31 @@
     "unauthorized": "未授权访问",
     "notFound": "资源未找到",
     "serverError": "服务器错误，请稍后重试"
+  },
+  "apiKeys": {
+    "title": "API 密钥",
+    "create": "创建 API 密钥",
+    "name": "名称",
+    "prefix": "前缀",
+    "scopes": "权限范围",
+    "expiresAt": "过期时间",
+    "lastUsedAt": "最后使用",
+    "createdAt": "创建时间",
+    "never": "从不",
+    "neverExpires": "永不过期",
+    "expired": "已过期",
+    "neverUsed": "从未使用",
+    "deleteConfirm": "确定要删除此 API 密钥吗？",
+    "createdSuccess": "API 密钥创建成功",
+    "createdWarning": "这是您唯一一次能看到此密钥的机会，请立即安全保存！",
+    "copiedToClipboard": "已复制到剪贴板"
+  },
+  "pagination": {
+    "previous": "上一页",
+    "next": "下一页",
+    "page": "第",
+    "of": "/",
+    "total": "共",
+    "items": "条"
   }
 }
