@@ -95,29 +95,45 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
                    headers['x-hub-signature-256'] || 
                    headers['x-gitlab-token'] || ''
   
+  // 如果配置了 webhook secret，验证签名
   if (repo.webhookSecret) {
     const isValid = gitProvider.verifyWebhookSignature(rawBody, signature, repo.webhookSecret)
+    
     if (!isValid) {
-      // 记录无效签名
-      await db.insert(webhookLogs).values({
-        id: ulid(),
-        repositoryId,
-        eventType: 'signature_invalid',
-        deliveryId: headers['x-gitea-delivery'] || headers['x-github-delivery'],
-        payload: JSON.parse(rawBody),
-        headers,
-        processed: false,
-        error: 'Invalid webhook signature',
-      })
+      // 开发环境允许绕过签名验证（通过环境变量）
+      const skipVerification = process.env.SKIP_WEBHOOK_VERIFICATION === 'true'
+      
+      if (!skipVerification) {
+        // 记录无效签名
+        await db.insert(webhookLogs).values({
+          id: ulid(),
+          repositoryId,
+          eventType: 'signature_invalid',
+          deliveryId: headers['x-gitea-delivery'] || headers['x-github-delivery'],
+          payload: JSON.parse(rawBody),
+          headers,
+          processed: false,
+          error: `Invalid webhook signature. Expected header: x-gitea-signature (format: sha256=...), Received: ${signature || 'none'}`,
+        })
 
-      return c.json({
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Invalid webhook signature',
-        },
-      }, 401)
+        return c.json({
+          success: false,
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Invalid webhook signature',
+            details: {
+              expectedHeader: 'x-gitea-signature',
+              expectedFormat: 'sha256=<hmac>',
+              receivedSignature: signature ? 'present but invalid' : 'missing',
+            },
+          },
+        }, 401)
+      }
+      
+      console.warn('[Webhook] Signature verification failed but SKIP_WEBHOOK_VERIFICATION is enabled')
     }
+  } else {
+    console.warn('[Webhook] No webhook secret configured for repository, skipping verification')
   }
 
   // 解析事件
@@ -364,3 +380,66 @@ async function executeReviewAsync(
       .where(eq(reviews.id, reviewId))
   }
 }
+
+/**
+ * GET /webhooks/:provider/:repositoryId/test
+ * 测试 Webhook 配置（用于调试）
+ */
+webhookRoutes.get('/:provider/:repositoryId/test', async (c) => {
+  const db = getDatabase()
+  const repositoryId = c.req.param('repositoryId')
+  
+  const [repo] = await db.select()
+    .from(repositories)
+    .where(eq(repositories.id, repositoryId))
+
+  if (!repo) {
+    return c.json({
+      success: false,
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Repository not found',
+      },
+    }, 404)
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      repository: {
+        id: repo.id,
+        name: repo.name,
+        provider: repo.provider,
+      },
+      webhook: {
+        url: `${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/v1/webhooks/${repo.provider}/${repo.id}`,
+        secretConfigured: !!repo.webhookSecret,
+        enabled: repo.enabled,
+      },
+      instructions: {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Gitea-Event': 'pull_request',
+          'X-Gitea-Signature': repo.webhookSecret 
+            ? 'sha256=<hmac-sha256-of-payload>' 
+            : 'not required (no secret configured)',
+        },
+        examplePayload: {
+          action: 'opened',
+          number: 1,
+          pull_request: {
+            number: 1,
+            title: 'Test PR',
+            body: 'Test description',
+            user: { login: 'testuser' },
+            html_url: `${new URL(repo.url).origin}/pulls/1`,
+          },
+          repository: {
+            full_name: repo.name,
+            html_url: repo.url,
+          },
+        },
+      },
+    },
+  })
+})

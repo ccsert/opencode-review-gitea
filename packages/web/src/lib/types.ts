@@ -42,6 +42,8 @@ export interface Repository {
   reviewCount: number
   lastReviewAt: string | null
   createdAt: string
+  webhookUrl?: string
+  webhookSecret?: string
 }
 
 export interface RepositoryConfig {

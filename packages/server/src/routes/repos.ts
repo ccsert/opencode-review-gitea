@@ -74,17 +74,22 @@ repoRoutes.get('/', async (c) => {
 
   return c.json({
     success: true,
-    data: repos.map(repo => ({
-      id: repo.id,
-      provider: repo.provider,
-      name: repo.name,
-      url: repo.url,
-      enabled: repo.enabled,
-      templateId: repo.templateId,
-      reviewCount: repo.reviewCount,
-      lastReviewAt: repo.lastReviewAt,
-      createdAt: repo.createdAt,
-    })),
+    data: repos.map(repo => {
+      const webhookUrl = `${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/v1/webhooks/${repo.provider}/${repo.id}`
+      return {
+        id: repo.id,
+        provider: repo.provider,
+        name: repo.name,
+        url: repo.url,
+        enabled: repo.enabled,
+        templateId: repo.templateId,
+        reviewCount: repo.reviewCount,
+        lastReviewAt: repo.lastReviewAt,
+        createdAt: repo.createdAt,
+        webhookUrl,
+        webhookSecret: repo.webhookSecret,
+      }
+    }),
     pagination: {
       page,
       pageSize,
@@ -187,6 +192,9 @@ repoRoutes.get('/:id', async (c) => {
     }, 404)
   }
 
+  // 生成 Webhook URL
+  const webhookUrl = `${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/v1/webhooks/${repo.provider}/${repo.id}`
+
   return c.json({
     success: true,
     data: {
@@ -201,6 +209,8 @@ repoRoutes.get('/:id', async (c) => {
       lastReviewAt: repo.lastReviewAt,
       createdAt: repo.createdAt,
       updatedAt: repo.updatedAt,
+      webhookUrl,
+      webhookSecret: repo.webhookSecret,
     },
   })
 })
