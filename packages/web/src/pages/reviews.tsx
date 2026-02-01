@@ -56,21 +56,25 @@ import { useReviews, useReview, useRepositories } from '@/lib/hooks'
 import type { ReviewStatus, ReviewDecision } from '@/lib/types'
 
 // 状态配置
-const statusConfig: Record<ReviewStatus, { label: string; icon: typeof CheckCircle2; className: string }> = {
-  pending: { label: '待处理', icon: Clock, className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' },
-  processing: { label: '处理中', icon: Loader2, className: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
-  completed: { label: '已完成', icon: CheckCircle2, className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
-  failed: { label: '失败', icon: XCircle, className: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' },
+const statusConfigBase: Record<ReviewStatus, { icon: typeof CheckCircle2; className: string }> = {
+  pending: { icon: Clock, className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' },
+  processing: { icon: Loader2, className: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
+  completed: { icon: CheckCircle2, className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
+  failed: { icon: XCircle, className: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' },
 }
 
-const decisionConfig: Record<ReviewDecision, { label: string; className: string }> = {
-  APPROVED: { label: '批准', className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
-  REQUEST_CHANGES: { label: '需要修改', className: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' },
-  COMMENT: { label: '评论', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
+const decisionConfigBase: Record<ReviewDecision, { className: string }> = {
+  APPROVED: { className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
+  REQUEST_CHANGES: { className: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' },
+  COMMENT: { className: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
 }
 
 export function ReviewsPage() {
   const { t } = useTranslation()
+  
+  // Get localized labels
+  const getStatusLabel = (status: ReviewStatus) => t(`reviews.statuses.${status}`)
+  const getDecisionLabel = (decision: ReviewDecision) => t(`reviews.decisions.${decision}`)
   const allFilterValue = '__all__'
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<{
@@ -127,7 +131,7 @@ export function ReviewsPage() {
         <div>
           <h1 className="text-3xl font-bold">{t('reviews.title')}</h1>
           <p className="text-muted-foreground">
-            查看和管理所有 AI 代码审查记录
+            {t('reviews.description')}
           </p>
         </div>
       </div>
@@ -139,7 +143,7 @@ export function ReviewsPage() {
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="搜索 PR 作者..."
+                placeholder={t('reviews.searchPlaceholder')}
                 value={filters.prAuthor || ''}
                 onChange={(e) => setFilters(f => ({ ...f, prAuthor: e.target.value || undefined }))}
                 className="pl-9"
@@ -156,10 +160,10 @@ export function ReviewsPage() {
               }
             >
               <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="所有仓库" />
+                <SelectValue placeholder={t('reviews.allRepositories')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={allFilterValue}>所有仓库</SelectItem>
+                <SelectItem value={allFilterValue}>{t('reviews.allRepositories')}</SelectItem>
                 {reposData?.data?.map((repo) => (
                   <SelectItem key={repo.id} value={repo.id}>
                     {repo.name}
@@ -178,14 +182,14 @@ export function ReviewsPage() {
               }
             >
               <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="所有状态" />
+                <SelectValue placeholder={t('reviews.allStatuses')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={allFilterValue}>所有状态</SelectItem>
-                <SelectItem value="pending">待处理</SelectItem>
-                <SelectItem value="processing">处理中</SelectItem>
-                <SelectItem value="completed">已完成</SelectItem>
-                <SelectItem value="failed">失败</SelectItem>
+                <SelectItem value={allFilterValue}>{t('reviews.allStatuses')}</SelectItem>
+                <SelectItem value="pending">{t('reviews.statuses.pending')}</SelectItem>
+                <SelectItem value="processing">{t('reviews.statuses.processing')}</SelectItem>
+                <SelectItem value="completed">{t('reviews.statuses.completed')}</SelectItem>
+                <SelectItem value="failed">{t('reviews.statuses.failed')}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -199,13 +203,13 @@ export function ReviewsPage() {
               }
             >
               <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="所有决策" />
+                <SelectValue placeholder={t('reviews.allDecisions')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={allFilterValue}>所有决策</SelectItem>
-                <SelectItem value="APPROVED">批准</SelectItem>
-                <SelectItem value="REQUEST_CHANGES">需要修改</SelectItem>
-                <SelectItem value="COMMENT">评论</SelectItem>
+                <SelectItem value={allFilterValue}>{t('reviews.allDecisions')}</SelectItem>
+                <SelectItem value="APPROVED">{t('reviews.decisions.APPROVED')}</SelectItem>
+                <SelectItem value="REQUEST_CHANGES">{t('reviews.decisions.REQUEST_CHANGES')}</SelectItem>
+                <SelectItem value="COMMENT">{t('reviews.decisions.COMMENT')}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -217,10 +221,10 @@ export function ReviewsPage() {
               </PopoverTrigger>
               <PopoverContent className="w-80" align="end">
                 <div className="space-y-4">
-                  <h4 className="font-medium">日期范围</h4>
+                  <h4 className="font-medium">{t('reviews.dateRange')}</h4>
                   <div className="grid gap-2">
                     <div className="space-y-1">
-                      <Label>开始日期</Label>
+                      <Label>{t('reviews.startDate')}</Label>
                       <Input
                         type="date"
                         value={filters.startDate || ''}
@@ -228,7 +232,7 @@ export function ReviewsPage() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label>结束日期</Label>
+                      <Label>{t('reviews.endDate')}</Label>
                       <Input
                         type="date"
                         value={filters.endDate || ''}
@@ -244,7 +248,7 @@ export function ReviewsPage() {
                       setFilterOpen(false)
                     }}
                   >
-                    清除日期
+                    {t('reviews.clearDate')}
                   </Button>
                 </div>
               </PopoverContent>
@@ -253,7 +257,7 @@ export function ReviewsPage() {
             {hasActiveFilters && (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 <X className="mr-1 h-4 w-4" />
-                清除筛选
+                {t('reviews.clearFilters')}
               </Button>
             )}
           </div>
@@ -279,12 +283,12 @@ export function ReviewsPage() {
           ) : reviews.length === 0 ? (
             <EmptyState
               icon={FileSearch}
-              title="暂无审查记录"
-              description={hasActiveFilters ? '没有符合筛选条件的审查记录' : '当仓库收到 PR 时，审查记录将显示在这里'}
+              title={t('reviews.emptyTitle')}
+              description={hasActiveFilters ? t('reviews.emptyFilterDescription') : t('reviews.emptyDescription')}
               action={
                 hasActiveFilters ? (
                   <Button variant="outline" onClick={clearFilters}>
-                    清除筛选条件
+                    {t('reviews.clearFilters')}
                   </Button>
                 ) : undefined
               }
@@ -295,11 +299,11 @@ export function ReviewsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Pull Request</TableHead>
-                    <TableHead>作者</TableHead>
+                    <TableHead>{t('reviews.author')}</TableHead>
                     <TableHead>{t('reviews.status')}</TableHead>
-                    <TableHead>决策</TableHead>
-                    <TableHead>评论数</TableHead>
-                    <TableHead>耗时</TableHead>
+                    <TableHead>{t('reviews.decision')}</TableHead>
+                    <TableHead>{t('reviews.commentCount')}</TableHead>
+                    <TableHead>{t('reviews.duration')}</TableHead>
                     <TableHead>{t('reviews.createdAt')}</TableHead>
                     <TableHead className="text-right">{t('common.actions')}</TableHead>
                   </TableRow>
@@ -331,15 +335,15 @@ export function ReviewsPage() {
                           <span className="text-sm">{review.prAuthor}</span>
                         </TableCell>
                         <TableCell>
-                          <Badge className={statusConfig[review.status].className}>
+                          <Badge className={statusConfigBase[review.status].className}>
                             <StatusIcon className={`mr-1 h-3 w-3 ${review.status === 'processing' ? 'animate-spin' : ''}`} />
-                            {statusConfig[review.status].label}
+                            {getStatusLabel(review.status)}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           {review.decision ? (
-                            <Badge className={decisionConfig[review.decision].className}>
-                              {decisionConfig[review.decision].label}
+                            <Badge className={decisionConfigBase[review.decision].className}>
+                              {getDecisionLabel(review.decision)}
                             </Badge>
                           ) : (
                             <span className="text-muted-foreground">-</span>
@@ -382,7 +386,11 @@ export function ReviewsPage() {
               {pagination && pagination.totalPages > 1 && (
                 <div className="flex items-center justify-between border-t px-4 py-3">
                   <p className="text-sm text-muted-foreground">
-                    共 {pagination.total} 条记录，第 {page} / {pagination.totalPages} 页
+                    {t('reviews.pagination.total', { 
+                      count: pagination.total, 
+                      page, 
+                      totalPages: pagination.totalPages 
+                    })}
                   </p>
                   <div className="flex gap-2">
                     <Button
@@ -391,7 +399,7 @@ export function ReviewsPage() {
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
                       disabled={page === 1}
                     >
-                      上一页
+                      {t('reviews.pagination.previous')}
                     </Button>
                     <Button
                       variant="outline"
@@ -399,7 +407,7 @@ export function ReviewsPage() {
                       onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
                       disabled={page === pagination.totalPages}
                     >
-                      下一页
+                      {t('reviews.pagination.next')}
                     </Button>
                   </div>
                 </div>
@@ -429,8 +437,13 @@ function ReviewDetailDialog({
   onOpenChange: (open: boolean) => void
   reviewId: string | null
 }) {
+  const { t } = useTranslation()
   const { data, isLoading } = useReview(reviewId || '')
   const review = data?.data
+
+  // Get localized labels
+  const getStatusLabel = (status: ReviewStatus) => t(`reviews.statuses.${status}`)
+  const getDecisionLabel = (decision: ReviewDecision) => t(`reviews.decisions.${decision}`)
 
   if (!reviewId) return null
 
@@ -446,7 +459,7 @@ function ReviewDetailDialog({
       <DialogContent className="sm:max-w-[700px] max-h-[80vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            审查详情
+            {t('reviews.detailTitle')}
             {review && (
               <a
                 href={review.prUrl}
@@ -474,35 +487,35 @@ function ReviewDetailDialog({
               {/* Meta Info */}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <Label className="text-muted-foreground">PR 编号</Label>
+                  <Label className="text-muted-foreground">{t('reviews.prNumber')}</Label>
                   <p className="font-medium">#{review.prNumber}</p>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">作者</Label>
+                  <Label className="text-muted-foreground">{t('reviews.author')}</Label>
                   <p className="font-medium">{review.prAuthor}</p>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">状态</Label>
-                  <Badge className={statusConfig[review.status].className + ' mt-1'}>
-                    {statusConfig[review.status].label}
+                  <Label className="text-muted-foreground">{t('reviews.status')}</Label>
+                  <Badge className={statusConfigBase[review.status].className + ' mt-1'}>
+                    {getStatusLabel(review.status)}
                   </Badge>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">决策</Label>
+                  <Label className="text-muted-foreground">{t('reviews.decision')}</Label>
                   {review.decision ? (
-                    <Badge className={decisionConfig[review.decision].className + ' mt-1'}>
-                      {decisionConfig[review.decision].label}
+                    <Badge className={decisionConfigBase[review.decision].className + ' mt-1'}>
+                      {getDecisionLabel(review.decision)}
                     </Badge>
                   ) : (
                     <p className="text-muted-foreground">-</p>
                   )}
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">耗时</Label>
+                  <Label className="text-muted-foreground">{t('reviews.duration')}</Label>
                   <p className="font-medium">{formatDuration(review.durationMs)}</p>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">模型</Label>
+                  <Label className="text-muted-foreground">{t('reviews.model')}</Label>
                   <p className="font-medium">{review.model || '-'}</p>
                 </div>
               </div>
@@ -512,7 +525,7 @@ function ReviewDetailDialog({
               {/* Summary */}
               {review.summary && (
                 <div>
-                  <Label className="text-muted-foreground mb-2 block">审查摘要</Label>
+                  <Label className="text-muted-foreground mb-2 block">{t('reviews.reviewSummary')}</Label>
                   <div className="rounded-lg border bg-muted/50 p-4 text-sm whitespace-pre-wrap">
                     {review.summary}
                   </div>
@@ -524,7 +537,7 @@ function ReviewDetailDialog({
                 <div>
                   <Label className="text-muted-foreground mb-2 block flex items-center gap-1">
                     <AlertCircle className="h-4 w-4 text-destructive" />
-                    错误信息
+                    {t('reviews.errorMessage')}
                   </Label>
                   <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
                     {review.error}
@@ -536,7 +549,7 @@ function ReviewDetailDialog({
               {review.comments && review.comments.length > 0 && (
                 <div>
                   <Label className="text-muted-foreground mb-2 block">
-                    代码评论 ({review.comments.length})
+                    {t('reviews.codeComments', { count: review.comments.length })}
                   </Label>
                   <div className="space-y-3">
                     {review.comments.map((comment, index) => (

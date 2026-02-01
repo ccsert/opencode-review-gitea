@@ -54,15 +54,15 @@ import {
 import type { Template } from '@/lib/types'
 
 // 创建模板表单 Schema
-const createTemplateSchema = z.object({
-  name: z.string().min(1, '请输入模板名称').max(255),
+const createTemplateSchema = (t: (key: string) => string) => z.object({
+  name: z.string().min(1, t('templates.nameRequired')).max(255),
   description: z.string().optional(),
-  systemPrompt: z.string().min(1, '请输入系统提示词'),
+  systemPrompt: z.string().min(1, t('templates.systemPromptRequired')),
   categories: z.string().optional(),
   severities: z.string().optional(),
 })
 
-type CreateTemplateFormData = z.infer<typeof createTemplateSchema>
+type CreateTemplateFormData = z.infer<ReturnType<typeof createTemplateSchema>>
 
 export function TemplatesPage() {
   const { t } = useTranslation()
@@ -91,7 +91,7 @@ export function TemplatesPage() {
 
   // Form
   const form = useForm<CreateTemplateFormData>({
-    resolver: zodResolver(createTemplateSchema),
+    resolver: zodResolver(createTemplateSchema(t)),
     defaultValues: {
       name: '',
       description: '',
@@ -110,12 +110,12 @@ export function TemplatesPage() {
         categories: data.categories?.split(',').map((s) => s.trim()).filter(Boolean),
         severities: data.severities?.split(',').map((s) => s.trim()).filter(Boolean),
       })
-      toast.success('模板创建成功')
+      toast.success(t('templates.createSuccess'))
       setCreateDialogOpen(false)
       form.reset()
     } catch (err) {
-      toast.error('创建模板失败', {
-        description: err instanceof Error ? err.message : '未知错误',
+      toast.error(t('templates.createFailed'), {
+        description: err instanceof Error ? err.message : t('templates.unknownError'),
       })
     }
   }
@@ -125,11 +125,11 @@ export function TemplatesPage() {
 
     try {
       await deleteMutation.mutateAsync(selectedTemplate.id)
-      toast.success('模板已删除')
+      toast.success(t('templates.deleteSuccess'))
       setDeleteDialogOpen(false)
       setSelectedTemplate(null)
     } catch {
-      toast.error('删除失败')
+      toast.error(t('templates.deleteFailed'))
     }
   }
 
@@ -140,7 +140,7 @@ export function TemplatesPage() {
         <div>
           <h1 className="text-3xl font-bold">{t('templates.title')}</h1>
           <p className="text-muted-foreground">
-            管理代码审查模板，自定义 AI 审查行为
+            {t('templates.description')}
           </p>
         </div>
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
@@ -154,14 +154,14 @@ export function TemplatesPage() {
             <DialogHeader>
               <DialogTitle>{t('templates.createTemplate')}</DialogTitle>
               <DialogDescription>
-                创建自定义模板来控制 AI 代码审查的行为
+                {t('templates.createCustomTemplate')}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={form.handleSubmit(handleCreate)} className="space-y-4">
               <div className="space-y-2">
                 <Label>{t('templates.name')}</Label>
                 <Input
-                  placeholder="例如: 安全审查模板"
+                  placeholder={t('templates.namePlaceholder')}
                   {...form.register('name')}
                 />
                 {form.formState.errors.name && (
@@ -174,15 +174,15 @@ export function TemplatesPage() {
               <div className="space-y-2">
                 <Label>{t('templates.description')}</Label>
                 <Input
-                  placeholder="模板用途描述"
+                  placeholder={t('templates.descriptionPlaceholder')}
                   {...form.register('description')}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>系统提示词 (System Prompt)</Label>
+                <Label>{t('templates.systemPrompt')}</Label>
                 <Textarea
-                  placeholder="定义 AI 的审查行为..."
+                  placeholder={t('templates.systemPromptPlaceholder')}
                   className="min-h-[200px] font-mono text-sm"
                   {...form.register('systemPrompt')}
                 />
@@ -195,16 +195,16 @@ export function TemplatesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>问题类别 (逗号分隔)</Label>
+                  <Label>{t('templates.categories')}</Label>
                   <Input
-                    placeholder="BUG,SECURITY,PERFORMANCE,STYLE"
+                    placeholder={t('templates.categoriesPlaceholder')}
                     {...form.register('categories')}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>严重程度 (逗号分隔)</Label>
+                  <Label>{t('templates.severities')}</Label>
                   <Input
-                    placeholder="CRITICAL,HIGH,MEDIUM,LOW"
+                    placeholder={t('templates.severitiesPlaceholder')}
                     {...form.register('severities')}
                   />
                 </div>
@@ -233,12 +233,12 @@ export function TemplatesPage() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="all">全部 ({templates.length})</TabsTrigger>
+          <TabsTrigger value="all">{t('templates.all', { count: templates.length })}</TabsTrigger>
           <TabsTrigger value="system">
-            系统模板 ({systemTemplates.length})
+            {t('templates.system', { count: systemTemplates.length })}
           </TabsTrigger>
           <TabsTrigger value="user">
-            我的模板 ({userTemplates.length})
+            {t('templates.user', { count: userTemplates.length })}
           </TabsTrigger>
         </TabsList>
 
@@ -260,16 +260,16 @@ export function TemplatesPage() {
           ) : displayedTemplates.length === 0 ? (
             <EmptyState
               icon={FileText}
-              title={activeTab === 'user' ? '暂无自定义模板' : '暂无模板'}
+              title={activeTab === 'user' ? t('templates.emptyUserTitle') : t('templates.emptyTitle')}
               description={
                 activeTab === 'user'
-                  ? '创建自定义模板来定制 AI 审查行为'
-                  : '模板用于控制 AI 代码审查的行为'
+                  ? t('templates.emptyUserDescription')
+                  : t('templates.emptyDescription')
               }
               action={
                 <Button onClick={() => setCreateDialogOpen(true)}>
                   <Plus className="mr-2 h-4 w-4" />
-                  创建模板
+                  {t('templates.createTemplate')}
                 </Button>
               }
             />
@@ -297,7 +297,7 @@ export function TemplatesPage() {
                             }}
                           >
                             <Eye className="mr-2 h-4 w-4" />
-                            预览
+                            {t('templates.viewTemplate')}
                           </DropdownMenuItem>
                           {!template.isSystem && (
                             <>
@@ -308,7 +308,7 @@ export function TemplatesPage() {
                                 }}
                               >
                                 <Edit className="mr-2 h-4 w-4" />
-                                编辑
+                                {t('common.edit')}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
@@ -319,7 +319,7 @@ export function TemplatesPage() {
                                 }}
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                删除
+                                {t('common.delete')}
                               </DropdownMenuItem>
                             </>
                           )}
@@ -327,7 +327,7 @@ export function TemplatesPage() {
                       </DropdownMenu>
                     </div>
                     <CardDescription className="line-clamp-2">
-                      {template.description || '暂无描述'}
+                      {template.description || t('templates.emptyDescription')}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-0">
@@ -335,13 +335,13 @@ export function TemplatesPage() {
                       {template.isSystem && (
                         <Badge variant="secondary" className="gap-1">
                           <Lock className="h-3 w-3" />
-                          系统模板
+                          {t('templates.systemTemplate')}
                         </Badge>
                       )}
                       {template.isDefault && (
                         <Badge className="gap-1">
                           <Star className="h-3 w-3" />
-                          默认
+                          {t('templates.isDefault')}
                         </Badge>
                       )}
                       {template.categories?.slice(0, 3).map((cat) => (
@@ -381,8 +381,8 @@ export function TemplatesPage() {
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="删除模板"
-        description={`确定要删除模板 "${selectedTemplate?.name}" 吗？此操作不可撤销。`}
+        title={t('templates.deleteTemplate')}
+        description={t('templates.deleteTemplateDescription', { name: selectedTemplate?.name || '' })}
         confirmText={t('common.delete')}
         cancelText={t('common.cancel')}
         variant="destructive"
@@ -403,6 +403,7 @@ function TemplatePreviewDialog({
   onOpenChange: (open: boolean) => void
   templateId?: string
 }) {
+  const { t } = useTranslation()
   const { data, isLoading } = useTemplate(templateId || '')
   const template = data?.data
 
@@ -417,7 +418,7 @@ function TemplatePreviewDialog({
             {template?.isSystem && (
               <Badge variant="secondary" className="gap-1">
                 <Lock className="h-3 w-3" />
-                系统模板
+                {t('templates.systemTemplate')}
               </Badge>
             )}
           </DialogTitle>
@@ -431,17 +432,17 @@ function TemplatePreviewDialog({
             <div className="space-y-4 pr-4">
               <div>
                 <Label className="text-muted-foreground mb-2 block">
-                  系统提示词
+                  {t('templates.systemPrompt')}
                 </Label>
                 <div className="rounded-lg border bg-muted/50 p-4 font-mono text-sm whitespace-pre-wrap">
-                  {template.systemPrompt || '无'}
+                  {template.systemPrompt || t('common.no')}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-muted-foreground mb-2 block">
-                    问题类别
+                    {t('templates.categories')}
                   </Label>
                   <div className="flex flex-wrap gap-1">
                     {template.categories?.map((cat) => (
@@ -453,7 +454,7 @@ function TemplatePreviewDialog({
                 </div>
                 <div>
                   <Label className="text-muted-foreground mb-2 block">
-                    严重程度
+                    {t('templates.severities')}
                   </Label>
                   <div className="flex flex-wrap gap-1">
                     {template.severities?.map((sev) => (
@@ -469,7 +470,7 @@ function TemplatePreviewDialog({
         ) : null}
 
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)}>关闭</Button>
+          <Button onClick={() => onOpenChange(false)}>{t('common.close')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -491,7 +492,7 @@ function EditTemplateDialog({
   const updateMutation = useUpdateTemplate()
 
   const form = useForm<CreateTemplateFormData>({
-    resolver: zodResolver(createTemplateSchema),
+    resolver: zodResolver(createTemplateSchema(t)),
   })
 
   // 当模板详情加载后填充表单
@@ -522,10 +523,10 @@ function EditTemplateDialog({
           severities: data.severities?.split(',').map((s) => s.trim()).filter(Boolean),
         },
       })
-      toast.success('模板已更新')
+      toast.success(t('templates.updateSuccess'))
       onOpenChange(false)
     } catch {
-      toast.error('更新失败')
+      toast.error(t('templates.updateFailed'))
     }
   }
 
@@ -535,8 +536,8 @@ function EditTemplateDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>编辑模板</DialogTitle>
-          <DialogDescription>修改模板的配置</DialogDescription>
+          <DialogTitle>{t('templates.editTemplate')}</DialogTitle>
+          <DialogDescription>{t('templates.editTemplateDescription')}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(handleSave)} className="space-y-4">
@@ -556,7 +557,7 @@ function EditTemplateDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>系统提示词</Label>
+            <Label>{t('templates.systemPrompt')}</Label>
             <Textarea
               className="min-h-[200px] font-mono text-sm"
               {...form.register('systemPrompt')}
@@ -570,11 +571,11 @@ function EditTemplateDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>问题类别</Label>
+              <Label>{t('templates.categories')}</Label>
               <Input {...form.register('categories')} />
             </div>
             <div className="space-y-2">
-              <Label>严重程度</Label>
+              <Label>{t('templates.severities')}</Label>
               <Input {...form.register('severities')} />
             </div>
           </div>

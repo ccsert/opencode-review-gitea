@@ -60,21 +60,13 @@ import { useApiKeys, useCreateApiKey, useDeleteApiKey } from '@/lib/hooks'
 import type { ApiKey, ApiKeyScope, CreatedApiKey } from '@/lib/types'
 
 // 创建 API Key 表单 Schema
-const createApiKeySchema = z.object({
-  name: z.string().min(1, '请输入密钥名称').max(100),
-  scopes: z.array(z.enum(['webhook', 'read', 'write', 'admin'])).min(1, '请至少选择一个权限'),
+const createApiKeySchema = (t: (key: string) => string) => z.object({
+  name: z.string().min(1, t('apiKeys.nameRequired')).max(100),
+  scopes: z.array(z.enum(['webhook', 'read', 'write', 'admin'])).min(1, t('apiKeys.scopesRequired')),
   expiresInDays: z.number().min(0).max(365).optional(),
 })
 
-type CreateApiKeyFormData = z.infer<typeof createApiKeySchema>
-
-// 权限描述
-const scopeDescriptions: Record<ApiKeyScope, { label: string; description: string }> = {
-  webhook: { label: 'Webhook', description: '接收 Webhook 事件' },
-  read: { label: '读取', description: '读取仓库和审查数据' },
-  write: { label: '写入', description: '创建和修改资源' },
-  admin: { label: '管理', description: '完全访问权限' },
-}
+type CreateApiKeyFormData = z.infer<ReturnType<typeof createApiKeySchema>>
 
 export function ApiKeysPage() {
   const { t } = useTranslation()
@@ -91,9 +83,13 @@ export function ApiKeysPage() {
 
   const keys = keysData?.data || []
 
+  // Scope descriptions
+  const getScopeLabel = (scope: ApiKeyScope) => t(`apiKeys.scopes.${scope}.label`)
+  const getScopeDescription = (scope: ApiKeyScope) => t(`apiKeys.scopes.${scope}.description`)
+
   // Form
   const form = useForm<CreateApiKeyFormData>({
-    resolver: zodResolver(createApiKeySchema),
+    resolver: zodResolver(createApiKeySchema(t)),
     defaultValues: {
       name: '',
       scopes: ['webhook'],
@@ -124,8 +120,8 @@ export function ApiKeysPage() {
         setExpiresOption('never')
       }
     } catch (err) {
-      toast.error('创建失败', {
-        description: err instanceof Error ? err.message : '未知错误',
+      toast.error(t('apiKeys.createFailed'), {
+        description: err instanceof Error ? err.message : t('apiKeys.unknownError'),
       })
     }
   }
@@ -135,17 +131,17 @@ export function ApiKeysPage() {
 
     try {
       await deleteMutation.mutateAsync(selectedKey.id)
-      toast.success('API 密钥已删除')
+      toast.success(t('apiKeys.deleteSuccess'))
       setDeleteDialogOpen(false)
       setSelectedKey(null)
     } catch {
-      toast.error('删除失败')
+      toast.error(t('apiKeys.deleteFailed'))
     }
   }
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
-    toast.success('已复制到剪贴板')
+    toast.success(t('apiKeys.copiedToClipboard'))
   }
 
   const formatDate = (date: string | null) => {
@@ -175,30 +171,30 @@ export function ApiKeysPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">{t('nav.apiKeys')}</h1>
+          <h1 className="text-3xl font-bold">{t('apiKeys.title')}</h1>
           <p className="text-muted-foreground">
-            管理 API 密钥用于程序化访问
+            {t('apiKeys.description')}
           </p>
         </div>
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
-              创建 API Key
+              {t('apiKeys.create')}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
-              <DialogTitle>创建 API Key</DialogTitle>
+              <DialogTitle>{t('apiKeys.createTitle')}</DialogTitle>
               <DialogDescription>
-                创建新的 API 密钥用于外部集成
+                {t('apiKeys.createDescription')}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={form.handleSubmit(handleCreate)} className="space-y-4">
               <div className="space-y-2">
-                <Label>密钥名称</Label>
+                <Label>{t('apiKeys.keyName')}</Label>
                 <Input
-                  placeholder="例如: CI/CD Integration"
+                  placeholder={t('apiKeys.namePlaceholder')}
                   {...form.register('name')}
                 />
                 {form.formState.errors.name && (
@@ -209,19 +205,19 @@ export function ApiKeysPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>权限范围</Label>
+                <Label>{t('apiKeys.scopes')}</Label>
                 <div className="space-y-2">
-                  {(Object.keys(scopeDescriptions) as ApiKeyScope[]).map((scope) => (
+                  {(['webhook', 'read', 'write', 'admin'] as ApiKeyScope[]).map((scope) => (
                     <div
                       key={scope}
                       className="flex items-center justify-between rounded-lg border p-3"
                     >
                       <div className="space-y-0.5">
                         <Label className="text-sm font-medium">
-                          {scopeDescriptions[scope].label}
+                          {getScopeLabel(scope)}
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          {scopeDescriptions[scope].description}
+                          {getScopeDescription(scope)}
                         </p>
                       </div>
                       <Switch
@@ -232,22 +228,22 @@ export function ApiKeysPage() {
                   ))}
                 </div>
                 {selectedScopes.length === 0 && (
-                  <p className="text-sm text-destructive">请至少选择一个权限</p>
+                  <p className="text-sm text-destructive">{t('apiKeys.scopesRequired')}</p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label>过期时间</Label>
+                <Label>{t('apiKeys.expiresIn')}</Label>
                 <Select value={expiresOption} onValueChange={setExpiresOption}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="never">永不过期</SelectItem>
-                    <SelectItem value="7">7 天</SelectItem>
-                    <SelectItem value="30">30 天</SelectItem>
-                    <SelectItem value="90">90 天</SelectItem>
-                    <SelectItem value="365">1 年</SelectItem>
+                    <SelectItem value="never">{t('apiKeys.neverExpires')}</SelectItem>
+                    <SelectItem value="7">{t('apiKeys.expires7Days')}</SelectItem>
+                    <SelectItem value="30">{t('apiKeys.expires30Days')}</SelectItem>
+                    <SelectItem value="90">{t('apiKeys.expires90Days')}</SelectItem>
+                    <SelectItem value="365">{t('apiKeys.expires1Year')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -281,10 +277,10 @@ export function ApiKeysPage() {
           <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
           <div className="text-sm">
             <p className="font-medium text-amber-800 dark:text-amber-200">
-              安全提示
+              {t('apiKeys.securityTitle')}
             </p>
             <p className="text-amber-700 dark:text-amber-300">
-              API 密钥只会在创建时显示一次，请立即保存。密钥一旦丢失无法恢复，需要重新创建。
+              {t('apiKeys.securityWarning')}
             </p>
           </div>
         </CardContent>
@@ -309,12 +305,12 @@ export function ApiKeysPage() {
           ) : keys.length === 0 ? (
             <EmptyState
               icon={Key}
-              title="暂无 API 密钥"
-              description="创建 API 密钥以启用程序化访问"
+              title={t('apiKeys.emptyTitle')}
+              description={t('apiKeys.emptyDescription')}
               action={
                 <Button onClick={() => setCreateDialogOpen(true)}>
                   <Plus className="mr-2 h-4 w-4" />
-                  创建 API Key
+                  {t('apiKeys.create')}
                 </Button>
               }
             />
@@ -322,12 +318,12 @@ export function ApiKeysPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>名称</TableHead>
-                  <TableHead>密钥前缀</TableHead>
-                  <TableHead>权限</TableHead>
-                  <TableHead>过期时间</TableHead>
-                  <TableHead>最后使用</TableHead>
-                  <TableHead>创建时间</TableHead>
+                  <TableHead>{t('apiKeys.name')}</TableHead>
+                  <TableHead>{t('apiKeys.prefix')}</TableHead>
+                  <TableHead>{t('apiKeys.scopes')}</TableHead>
+                  <TableHead>{t('apiKeys.expiresAt')}</TableHead>
+                  <TableHead>{t('apiKeys.lastUsedAt')}</TableHead>
+                  <TableHead>{t('apiKeys.createdAt')}</TableHead>
                   <TableHead className="text-right">{t('common.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -349,7 +345,7 @@ export function ApiKeysPage() {
                       <div className="flex flex-wrap gap-1">
                         {key.scopes.map((scope) => (
                           <Badge key={scope} variant="secondary" className="text-xs">
-                            {scopeDescriptions[scope].label}
+                            {getScopeLabel(scope)}
                           </Badge>
                         ))}
                       </div>
@@ -359,19 +355,19 @@ export function ApiKeysPage() {
                         <div className="flex items-center gap-1">
                           {isExpired(key.expiresAt) ? (
                             <Badge variant="destructive" className="text-xs">
-                              已过期
+                              {t('apiKeys.expired')}
                             </Badge>
                           ) : (
                             <span className="text-sm">{formatDate(key.expiresAt)}</span>
                           )}
                         </div>
                       ) : (
-                        <span className="text-muted-foreground">永不过期</span>
+                        <span className="text-muted-foreground">{t('apiKeys.neverExpires')}</span>
                       )}
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">
-                        {key.lastUsedAt ? formatDate(key.lastUsedAt) : '从未使用'}
+                        {key.lastUsedAt ? formatDate(key.lastUsedAt) : t('apiKeys.neverUsed')}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -395,7 +391,7 @@ export function ApiKeysPage() {
                             }}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
-                            删除
+                            {t('common.delete')}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -414,10 +410,10 @@ export function ApiKeysPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-green-500" />
-              API 密钥已创建
+              {t('apiKeys.createdTitle')}
             </DialogTitle>
             <DialogDescription>
-              请立即保存此密钥，关闭对话框后将无法再次查看
+              {t('apiKeys.createdDescription')}
             </DialogDescription>
           </DialogHeader>
 
@@ -425,9 +421,9 @@ export function ApiKeysPage() {
             <div className="space-y-4">
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>重要提示</AlertTitle>
+                <AlertTitle>{t('apiKeys.createdWarningTitle')}</AlertTitle>
                 <AlertDescription>
-                  这是您唯一一次能看到完整密钥的机会，请立即复制并安全保存！
+                  {t('apiKeys.createdWarning')}
                 </AlertDescription>
               </Alert>
 
@@ -451,25 +447,25 @@ export function ApiKeysPage() {
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <Label className="text-muted-foreground">名称</Label>
+                  <Label className="text-muted-foreground">{t('apiKeys.name')}</Label>
                   <p>{createdKey.name}</p>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">过期时间</Label>
+                  <Label className="text-muted-foreground">{t('apiKeys.expiresAt')}</Label>
                   <p>
                     {createdKey.expiresAt
                       ? formatDate(createdKey.expiresAt)
-                      : '永不过期'}
+                      : t('apiKeys.neverExpires')}
                   </p>
                 </div>
               </div>
 
               <div>
-                <Label className="text-muted-foreground">权限</Label>
+                <Label className="text-muted-foreground">{t('apiKeys.scopes')}</Label>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {createdKey.scopes.map((scope) => (
                     <Badge key={scope} variant="secondary">
-                      {scopeDescriptions[scope].label}
+                      {getScopeLabel(scope)}
                     </Badge>
                   ))}
                 </div>
@@ -479,7 +475,7 @@ export function ApiKeysPage() {
 
           <DialogFooter>
             <Button onClick={() => setCreatedKeyDialogOpen(false)}>
-              我已保存密钥
+              {t('apiKeys.savedConfirm')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -489,8 +485,8 @@ export function ApiKeysPage() {
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="删除 API 密钥"
-        description={`确定要删除密钥 "${selectedKey?.name}" 吗？此操作不可撤销，使用此密钥的所有集成将立即失效。`}
+        title={t('apiKeys.deleteTitle')}
+        description={t('apiKeys.deleteDescription', { name: selectedKey?.name || '' })}
         confirmText={t('common.delete')}
         cancelText={t('common.cancel')}
         variant="destructive"

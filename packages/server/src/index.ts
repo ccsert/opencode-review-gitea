@@ -24,7 +24,7 @@ import {
   requestIdMiddleware,
   corsConfig 
 } from './middleware/error'
-import { initDatabase, runMigrations } from './db/client'
+import { initDatabase, runMigrations, seedDatabase } from './db/client'
 
 // 环境变量
 const PORT = parseInt(process.env.PORT || '3000', 10)
@@ -99,6 +99,9 @@ async function start() {
     
     // 运行迁移
     await runMigrations()
+    
+    // 初始化默认数据
+    await seedDatabase()
     
     const staticEnabled = SERVE_STATIC && existsSync(STATIC_DIR)
     

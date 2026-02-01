@@ -32,14 +32,18 @@ const statusConfig: Record<ReviewStatus, { icon: typeof CheckCircle2; className:
   failed: { icon: XCircle, className: 'text-red-500' },
 }
 
-const decisionLabels: Record<ReviewDecision, string> = {
-  APPROVED: '批准',
-  REQUEST_CHANGES: '需要修改',
-  COMMENT: '评论',
-}
-
 export function DashboardPage() {
   const { t } = useTranslation()
+
+  // Get localized decision labels
+  const getDecisionLabel = (decision: ReviewDecision) => {
+    const labelMap: Record<ReviewDecision, string> = {
+      APPROVED: t('dashboard.approved'),
+      REQUEST_CHANGES: t('dashboard.requestChanges'),
+      COMMENT: t('dashboard.comment'),
+    }
+    return labelMap[decision]
+  }
 
   // API Queries
   const { data: statsData, isLoading: statsLoading } = useReviewStats()
@@ -87,7 +91,7 @@ export function DashboardPage() {
               <>
                 <div className="text-2xl font-bold">{stats?.total || 0}</div>
                 <p className="text-xs text-muted-foreground">
-                  {stats?.pending || 0} 待处理
+                  {stats?.pending || 0} {t('dashboard.pending')}
                 </p>
               </>
             )}
@@ -108,7 +112,7 @@ export function DashboardPage() {
               <>
                 <div className="text-2xl font-bold">{repos.length}</div>
                 <p className="text-xs text-muted-foreground">
-                  {repos.filter((r) => r.enabled).length} 已启用
+                  {repos.filter((r) => r.enabled).length} {t('dashboard.enabled')}
                 </p>
               </>
             )}
@@ -117,7 +121,7 @@ export function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">成功率</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.successRate')}</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -127,7 +131,7 @@ export function DashboardPage() {
               <>
                 <div className="text-2xl font-bold">{successRate}%</div>
                 <p className="text-xs text-muted-foreground">
-                  {stats?.completed || 0} 成功 / {stats?.failed || 0} 失败
+                  {stats?.completed || 0} {t('dashboard.success')} / {stats?.failed || 0} {t('dashboard.failed')}
                 </p>
               </>
             )}
@@ -136,7 +140,7 @@ export function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">平均耗时</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.avgDuration')}</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -147,7 +151,7 @@ export function DashboardPage() {
                 <div className="text-2xl font-bold">
                   {formatDuration(stats?.avgDuration)}
                 </div>
-                <p className="text-xs text-muted-foreground">每次审查</p>
+                <p className="text-xs text-muted-foreground">{t('dashboard.perReview')}</p>
               </>
             )}
           </CardContent>
@@ -158,21 +162,21 @@ export function DashboardPage() {
       {stats && stats.total > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">决策分布</CardTitle>
+            <CardTitle className="text-base">{t('dashboard.decisionDistribution')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex gap-6">
               <div className="flex items-center gap-2">
                 <div className="h-3 w-3 rounded-full bg-green-500" />
-                <span className="text-sm">批准: {stats.byDecision.APPROVE || 0}</span>
+                <span className="text-sm">{t('dashboard.approved')}: {stats.byDecision.APPROVE || 0}</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="h-3 w-3 rounded-full bg-orange-500" />
-                <span className="text-sm">需要修改: {stats.byDecision.REQUEST_CHANGES || 0}</span>
+                <span className="text-sm">{t('dashboard.requestChanges')}: {stats.byDecision.REQUEST_CHANGES || 0}</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="h-3 w-3 rounded-full bg-blue-500" />
-                <span className="text-sm">评论: {stats.byDecision.COMMENT || 0}</span>
+                <span className="text-sm">{t('dashboard.comment')}: {stats.byDecision.COMMENT || 0}</span>
               </div>
             </div>
           </CardContent>
@@ -185,11 +189,11 @@ export function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>{t('dashboard.recentReviews')}</CardTitle>
-              <CardDescription>最近的 AI 代码审查记录</CardDescription>
+              <CardDescription>{t('dashboard.recentReviewsDescription')}</CardDescription>
             </div>
             <Button variant="ghost" size="sm" asChild>
               <Link to="/reviews">
-                查看全部
+                {t('dashboard.viewAll')}
                 <ArrowRight className="ml-1 h-4 w-4" />
               </Link>
             </Button>
@@ -209,7 +213,7 @@ export function DashboardPage() {
               </div>
             ) : recentReviews.length === 0 ? (
               <div className="flex h-32 items-center justify-center text-muted-foreground">
-                暂无审查记录
+                {t('dashboard.noReviews')}
               </div>
             ) : (
               <div className="space-y-4">
@@ -228,7 +232,7 @@ export function DashboardPage() {
                           <span className="font-medium">#{review.prNumber}</span>
                           {review.decision && (
                             <Badge variant="secondary" className="text-xs">
-                              {decisionLabels[review.decision]}
+                              {getDecisionLabel(review.decision)}
                             </Badge>
                           )}
                         </div>
@@ -256,12 +260,12 @@ export function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>仓库概览</CardTitle>
-              <CardDescription>已连接的代码仓库状态</CardDescription>
+              <CardTitle>{t('dashboard.repositoryOverview')}</CardTitle>
+              <CardDescription>{t('dashboard.repositoryStatus')}</CardDescription>
             </div>
             <Button variant="ghost" size="sm" asChild>
               <Link to="/repositories">
-                管理仓库
+                {t('dashboard.manageRepositories')}
                 <ArrowRight className="ml-1 h-4 w-4" />
               </Link>
             </Button>
@@ -282,9 +286,9 @@ export function DashboardPage() {
             ) : repos.length === 0 ? (
               <div className="flex h-32 flex-col items-center justify-center gap-2 text-muted-foreground">
                 <GitBranch className="h-8 w-8" />
-                <p>暂无仓库</p>
+                <p>{t('dashboard.noRepositories')}</p>
                 <Button variant="outline" size="sm" asChild>
-                  <Link to="/repositories">添加仓库</Link>
+                  <Link to="/repositories">{t('dashboard.addRepository')}</Link>
                 </Button>
               </div>
             ) : (
@@ -300,11 +304,11 @@ export function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{repo.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {repo.reviewCount} 次审查
+                        {t('dashboard.reviewsCount', { count: repo.reviewCount })}
                       </p>
                     </div>
                     <Badge variant={repo.enabled ? 'default' : 'secondary'}>
-                      {repo.enabled ? '已启用' : '已禁用'}
+                      {repo.enabled ? t('dashboard.statusEnabled') : t('dashboard.statusDisabled')}
                     </Badge>
                   </div>
                 ))}

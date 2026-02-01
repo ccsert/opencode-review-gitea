@@ -71,16 +71,16 @@ import {
 import type { Repository, ProviderType } from '@/lib/types'
 
 // 创建仓库表单 Schema
-const createRepoSchema = z.object({
+const createRepoSchema = (t: (key: string) => string) => z.object({
   provider: z.enum(['gitea', 'github', 'gitlab']),
-  url: z.string().url('请输入有效的仓库 URL'),
-  accessToken: z.string().min(1, '请输入访问令牌'),
+  url: z.string().url(t('repositories.urlRequired')),
+  accessToken: z.string().min(1, t('repositories.accessTokenRequired')),
   webhookSecret: z.string().optional(),
   templateId: z.string().optional(),
   autoReview: z.boolean(),
 })
 
-type CreateRepoFormData = z.input<typeof createRepoSchema>
+type CreateRepoFormData = z.input<ReturnType<typeof createRepoSchema>>
 
 // Provider 图标和颜色
 const providerConfig: Record<ProviderType, { label: string; color: string }> = {
@@ -119,7 +119,7 @@ export function RepositoriesPage() {
 
   // Form
   const form = useForm<CreateRepoFormData>({
-    resolver: zodResolver(createRepoSchema),
+    resolver: zodResolver(createRepoSchema(t)),
     defaultValues: {
       provider: 'gitea',
       url: '',
@@ -144,8 +144,8 @@ export function RepositoriesPage() {
       })
 
       if (result.success) {
-        toast.success('仓库添加成功', {
-          description: `Webhook URL 已复制到剪贴板`,
+        toast.success(t('repositories.createSuccess'), {
+          description: t('repositories.copiedToClipboard'),
         })
         // 复制 Webhook URL
         if (result.data.webhookUrl) {
@@ -155,8 +155,8 @@ export function RepositoriesPage() {
         form.reset()
       }
     } catch (err) {
-      toast.error('添加仓库失败', {
-        description: err instanceof Error ? err.message : '未知错误',
+      toast.error(t('repositories.createFailed'), {
+        description: err instanceof Error ? err.message : t('repositories.unknownError'),
       })
     }
   }
@@ -167,9 +167,9 @@ export function RepositoriesPage() {
         id: repo.id,
         data: { enabled: !repo.enabled },
       })
-      toast.success(repo.enabled ? '已禁用仓库' : '已启用仓库')
+      toast.success(repo.enabled ? t('repositories.inactive') : t('repositories.active'))
     } catch {
-      toast.error('操作失败')
+      toast.error(t('repositories.updateFailed'))
     }
   }
 
@@ -178,21 +178,21 @@ export function RepositoriesPage() {
 
     try {
       await deleteMutation.mutateAsync(selectedRepo.id)
-      toast.success('仓库已删除')
+      toast.success(t('repositories.deleteSuccess'))
       setDeleteDialogOpen(false)
       setSelectedRepo(null)
     } catch {
-      toast.error('删除失败')
+      toast.error(t('repositories.deleteFailed'))
     }
   }
 
   const handleTestConnection = async (id: string) => {
     try {
       await testConnectionMutation.mutateAsync(id)
-      toast.success('连接测试成功')
+      toast.success(t('repositories.connectionSuccess'))
     } catch (err) {
-      toast.error('连接测试失败', {
-        description: err instanceof Error ? err.message : '无法连接到仓库',
+      toast.error(t('repositories.connectionFailed'), {
+        description: err instanceof Error ? err.message : t('repositories.connectionFailed'),
       })
     }
   }
@@ -207,7 +207,7 @@ export function RepositoriesPage() {
         <div>
           <h1 className="text-3xl font-bold">{t('repositories.title')}</h1>
           <p className="text-muted-foreground">
-            管理您连接的代码仓库，配置自动审查选项
+            {t('repositories.description')}
           </p>
         </div>
         <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
@@ -221,7 +221,7 @@ export function RepositoriesPage() {
             <DialogHeader>
               <DialogTitle>{t('repositories.addRepository')}</DialogTitle>
               <DialogDescription>
-                连接一个新的仓库以启用 AI 代码审查功能
+                {t('repositories.addRepositoryDescription')}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={form.handleSubmit(handleCreate)} className="space-y-4">
@@ -256,10 +256,10 @@ export function RepositoriesPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>访问令牌 (Access Token)</Label>
+                <Label>{t('repositories.accessToken')}</Label>
                 <Input
                   type="password"
-                  placeholder="ghp_xxxx 或 glpat-xxxx"
+                  placeholder={t('repositories.accessTokenPlaceholder')}
                   {...form.register('accessToken')}
                 />
                 {form.formState.errors.accessToken && (
@@ -268,12 +268,12 @@ export function RepositoriesPage() {
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  需要 repo 或 api 权限
+                  {t('repositories.tokenPermission')}
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label>审查模板 (可选)</Label>
+                <Label>{t('repositories.templateOptional')}</Label>
                 <Select
                   value={form.watch('templateId') || DEFAULT_TEMPLATE_VALUE}
                   onValueChange={(v) =>
@@ -281,14 +281,14 @@ export function RepositoriesPage() {
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="使用默认模板" />
+                    <SelectValue placeholder={t('repositories.useDefaultTemplate')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={DEFAULT_TEMPLATE_VALUE}>使用默认模板</SelectItem>
+                    <SelectItem value={DEFAULT_TEMPLATE_VALUE}>{t('repositories.useDefaultTemplate')}</SelectItem>
                     {templatesData?.data?.map((template) => (
                       <SelectItem key={template.id} value={template.id}>
                         {template.name}
-                        {template.isSystem && ' (系统)'}
+                        {template.isSystem && t('repositories.systemTemplateSuffix')}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -297,9 +297,9 @@ export function RepositoriesPage() {
 
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div className="space-y-0.5">
-                  <Label>自动审查</Label>
+                  <Label>{t('repositories.autoReview')}</Label>
                   <p className="text-xs text-muted-foreground">
-                    接收到 Webhook 时自动开始代码审查
+                    {t('repositories.autoReviewWebhook')}
                   </p>
                 </div>
                 <Switch
@@ -335,7 +335,7 @@ export function RepositoriesPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="搜索仓库..."
+                placeholder={t('repositories.searchPlaceholder')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -343,10 +343,10 @@ export function RepositoriesPage() {
             </div>
             <Select value={providerFilter} onValueChange={setProviderFilter}>
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="所有平台" />
+                <SelectValue placeholder={t('repositories.allProviders')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_PROVIDER_VALUE}>所有平台</SelectItem>
+                <SelectItem value={ALL_PROVIDER_VALUE}>{t('repositories.allProviders')}</SelectItem>
                 <SelectItem value="gitea">Gitea</SelectItem>
                 <SelectItem value="github">GitHub</SelectItem>
                 <SelectItem value="gitlab">GitLab</SelectItem>
@@ -375,12 +375,12 @@ export function RepositoriesPage() {
           ) : repos.length === 0 ? (
             <EmptyState
               icon={GitBranch}
-              title="暂无仓库"
-              description="添加您的第一个代码仓库以开始使用 AI 代码审查"
+              title={t('repositories.emptyRepoTitle')}
+              description={t('repositories.emptyRepoDescription')}
               action={
                 <Button onClick={() => setAddDialogOpen(true)}>
                   <Plus className="mr-2 h-4 w-4" />
-                  添加仓库
+                  {t('repositories.addRepo')}
                 </Button>
               }
             />
@@ -389,11 +389,11 @@ export function RepositoriesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>仓库</TableHead>
-                    <TableHead>平台</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>审查次数</TableHead>
-                    <TableHead>最后审查</TableHead>
+                    <TableHead>{t('repositories.repository')}</TableHead>
+                    <TableHead>{t('repositories.platform')}</TableHead>
+                    <TableHead>{t('repositories.status')}</TableHead>
+                    <TableHead>{t('repositories.reviewCount')}</TableHead>
+                    <TableHead>{t('repositories.lastReview')}</TableHead>
                     <TableHead className="text-right">{t('common.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -429,7 +429,7 @@ export function RepositoriesPage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant={repo.enabled ? 'default' : 'secondary'}>
-                          {repo.enabled ? t('repositories.active') : t('repositories.inactive')}
+                          {repo.enabled ? t('repositories.statusActive') : t('repositories.statusInactive')}
                         </Badge>
                       </TableCell>
                       <TableCell>{repo.reviewCount}</TableCell>
@@ -453,13 +453,13 @@ export function RepositoriesPage() {
                               }}
                             >
                               <Copy className="mr-2 h-4 w-4" />
-                              Webhook 配置
+                              {t('repositories.webhookConfig')}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => handleTestConnection(repo.id)}
                             >
                               <RefreshCw className="mr-2 h-4 w-4" />
-                              测试连接
+                              {t('repositories.testConnection')}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => handleToggleEnabled(repo)}
@@ -467,12 +467,12 @@ export function RepositoriesPage() {
                               {repo.enabled ? (
                                 <>
                                   <Check className="mr-2 h-4 w-4" />
-                                  禁用
+                                  {t('repositories.disable')}
                                 </>
                               ) : (
                                 <>
                                   <Check className="mr-2 h-4 w-4" />
-                                  启用
+                                  {t('repositories.enable')}
                                 </>
                               )}
                             </DropdownMenuItem>
@@ -483,7 +483,7 @@ export function RepositoriesPage() {
                               }}
                             >
                               <Settings className="mr-2 h-4 w-4" />
-                              设置
+                              {t('repositories.repoSettings')}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -508,7 +508,7 @@ export function RepositoriesPage() {
               {pagination && pagination.totalPages > 1 && (
                 <div className="flex items-center justify-between border-t px-4 py-3">
                   <p className="text-sm text-muted-foreground">
-                    共 {pagination.total} 个仓库，第 {page} / {pagination.totalPages} 页
+                    {t('repositories.paginationTotal', { total: pagination.total, page, totalPages: pagination.totalPages })}
                   </p>
                   <div className="flex gap-2">
                     <Button
@@ -517,7 +517,7 @@ export function RepositoriesPage() {
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
                       disabled={page === 1}
                     >
-                      上一页
+                      {t('pagination.previous')}
                     </Button>
                     <Button
                       variant="outline"
@@ -525,7 +525,7 @@ export function RepositoriesPage() {
                       onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
                       disabled={page === pagination.totalPages}
                     >
-                      下一页
+                      {t('pagination.next')}
                     </Button>
                   </div>
                 </div>
@@ -553,8 +553,8 @@ export function RepositoriesPage() {
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="删除仓库"
-        description={`确定要删除仓库 "${selectedRepo?.name}" 吗？此操作不可撤销，所有相关的审查记录将被保留。`}
+        title={t('repositories.deleteTitle')}
+        description={t('repositories.deleteRepoDescription', { name: selectedRepo?.name || '' })}
         confirmText={t('common.delete')}
         cancelText={t('common.cancel')}
         variant="destructive"
@@ -575,13 +575,14 @@ function WebhookDialog({
   onOpenChange: (open: boolean) => void
   repoId?: string
 }) {
+  const { t } = useTranslation()
   const { data, isLoading } = useRepository(repoId || '')
 
   const repo = data?.data
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text)
-    toast.success(`${label} 已复制到剪贴板`)
+    toast.success(t('repositories.webhookCopiedMessage', { label }))
   }
 
   if (!repoId) return null
@@ -590,9 +591,9 @@ function WebhookDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Webhook 配置</DialogTitle>
+          <DialogTitle>{t('repositories.webhookSetup')}</DialogTitle>
           <DialogDescription>
-            在您的仓库中配置 Webhook 以启用自动代码审查
+            {t('repositories.webhookInstructionsDescription')}
           </DialogDescription>
         </DialogHeader>
         
@@ -622,7 +623,7 @@ function WebhookDialog({
             </div>
 
             <div className="space-y-2">
-              <Label>Webhook Secret</Label>
+              <Label>{t('repositories.webhookSecret')}</Label>
               <div className="flex gap-2">
                 <Input
                   readOnly
@@ -641,20 +642,20 @@ function WebhookDialog({
             </div>
 
             <div className="rounded-lg border bg-muted/50 p-4 text-sm">
-              <p className="font-medium mb-2">配置说明:</p>
+              <p className="font-medium mb-2">{t('repositories.webhookSetupInstructions')}</p>
               <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                <li>进入仓库设置 → Webhooks</li>
-                <li>添加新的 Webhook</li>
-                <li>粘贴上述 URL 和 Secret</li>
-                <li>选择触发事件: Pull Request</li>
-                <li>Content Type: application/json</li>
+                <li>{t('repositories.webhookStep1')}</li>
+                <li>{t('repositories.webhookStep2')}</li>
+                <li>{t('repositories.webhookStep3')}</li>
+                <li>{t('repositories.webhookStep4')}</li>
+                <li>{t('repositories.webhookStep5')}</li>
               </ol>
             </div>
           </div>
         ) : null}
 
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)}>关闭</Button>
+          <Button onClick={() => onOpenChange(false)}>{t('common.close')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -691,10 +692,10 @@ function EditRepoDialog({
           },
         },
       })
-      toast.success('设置已保存')
+      toast.success(t('repositories.settingsSaved'))
       onOpenChange(false)
     } catch {
-      toast.error('保存失败')
+      toast.error(t('repositories.saveFailedMessage'))
     }
   }
 
@@ -704,28 +705,28 @@ function EditRepoDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>仓库设置</DialogTitle>
+          <DialogTitle>{t('repositories.repoSettings')}</DialogTitle>
           <DialogDescription>
-            配置 {repo.name} 的审查选项
+            {t('repositories.repoSettingsDescription', { name: repo.name })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>审查模板</Label>
+            <Label>{t('repositories.templateOptional')}</Label>
             <Select
               value={templateId || DEFAULT_TEMPLATE_VALUE}
               onValueChange={(v) => setTemplateId(v === DEFAULT_TEMPLATE_VALUE ? '' : v)}
             >
               <SelectTrigger>
-                <SelectValue placeholder="使用默认模板" />
+                <SelectValue placeholder={t('repositories.useDefaultTemplate')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={DEFAULT_TEMPLATE_VALUE}>使用默认模板</SelectItem>
+                <SelectItem value={DEFAULT_TEMPLATE_VALUE}>{t('repositories.useDefaultTemplate')}</SelectItem>
                 {templatesData?.data?.map((template) => (
                   <SelectItem key={template.id} value={template.id}>
                     {template.name}
-                    {template.isSystem && ' (系统)'}
+                    {template.isSystem && t('repositories.systemTemplateSuffix')}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -734,9 +735,9 @@ function EditRepoDialog({
 
           <div className="flex items-center justify-between rounded-lg border p-4">
             <div className="space-y-0.5">
-              <Label>自动审查</Label>
+              <Label>{t('repositories.autoReview')}</Label>
               <p className="text-xs text-muted-foreground">
-                接收到 Webhook 时自动开始代码审查
+                {t('repositories.autoReviewWebhook')}
               </p>
             </div>
             <Switch checked={autoReview} onCheckedChange={setAutoReview} />

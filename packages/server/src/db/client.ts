@@ -212,6 +212,43 @@ export async function runMigrations(): Promise<void> {
 }
 
 /**
+ * 初始化默认数据（admin 用户等）
+ */
+export async function seedDatabase(): Promise<void> {
+  if (!_db || !_pglite) {
+    throw new Error('Database not initialized')
+  }
+
+  console.log(`[Database] Checking default data...`)
+
+  // 检查 admin 用户是否存在
+  const result = await _pglite.query(`SELECT id FROM users WHERE id = 'admin'`)
+  
+  if (result.rows.length === 0) {
+    // 创建默认 admin 用户
+    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123'
+    const crypto = await import('crypto')
+    const passwordHash = crypto.createHash('sha256').update(adminPassword).digest('hex')
+    
+    await _pglite.exec(`
+      INSERT INTO users (id, username, email, password_hash, role, created_at)
+      VALUES (
+        'admin',
+        'admin',
+        'admin@opencode-review.local',
+        '${passwordHash}',
+        'admin',
+        NOW()
+      )
+    `)
+    
+    console.log(`[Database] Created default admin user (password: ${adminPassword})`)
+  } else {
+    console.log(`[Database] Admin user already exists`)
+  }
+}
+
+/**
  * 关闭数据库连接
  */
 export async function closeDatabase(): Promise<void> {

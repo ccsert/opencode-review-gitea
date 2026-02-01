@@ -51,6 +51,22 @@ reviewRoutes.get(
 
     const repoIds = userRepos.map(r => r.id)
     
+    // 如果用户没有任何仓库,直接返回空结果
+    if (repoIds.length === 0) {
+      return c.json({
+        success: true,
+        data: {
+          items: [],
+          pagination: {
+            page: query.page,
+            limit: query.limit,
+            total: 0,
+            totalPages: 0,
+          },
+        },
+      })
+    }
+    
     if (query.repositoryId) {
       if (!repoIds.includes(query.repositoryId)) {
         return c.json({
