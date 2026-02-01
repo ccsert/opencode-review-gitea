@@ -56,7 +56,6 @@ templateRoutes.get('/', async (c: any) => {
   const userTemplates = await db.select()
     .from(reviewTemplates)
     .where(eq(reviewTemplates.userId, userId))
-    .all()
 
   const allTemplates = [
     ...systemTemplates.map((t: any) => ({
@@ -135,10 +134,9 @@ templateRoutes.get('/:id', async (c: any) => {
   }
 
   // 查询用户模板
-  const template = await db.select()
+  const [template] = await db.select()
     .from(reviewTemplates)
     .where(eq(reviewTemplates.id, id))
-    .get()
 
   if (!template) {
     return c.json({
@@ -177,10 +175,9 @@ templateRoutes.put('/:id', zValidator('json', updateTemplateSchema), async (c: a
     }, 403)
   }
 
-  const existing = await db.select()
+  const [existing] = await db.select()
     .from(reviewTemplates)
     .where(eq(reviewTemplates.id, id))
-    .get()
 
   if (!existing) {
     return c.json({
@@ -228,10 +225,9 @@ templateRoutes.delete('/:id', async (c: any) => {
     }, 403)
   }
 
-  const existing = await db.select()
+  const [existing] = await db.select()
     .from(reviewTemplates)
     .where(eq(reviewTemplates.id, id))
-    .get()
 
   if (!existing) {
     return c.json({
@@ -268,10 +264,9 @@ templateRoutes.post('/:id/duplicate', async (c: any) => {
   let sourceTemplate: any = systemTemplates.find(t => t.id === id)
   
   if (!sourceTemplate) {
-    const userTemplate = await db.select()
+    const [userTemplate] = await db.select()
       .from(reviewTemplates)
       .where(eq(reviewTemplates.id, id))
-      .get()
     
     if (userTemplate) {
       sourceTemplate = {

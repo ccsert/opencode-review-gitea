@@ -1,28 +1,34 @@
 /**
  * 数据库 Schema 定义
- * 使用 Drizzle ORM，同时支持 SQLite 和 PostgreSQL
+ * 使用 Drizzle ORM + PGlite (PostgreSQL 兼容)
+ * 
+ * PGlite 是一个在浏览器和 Node.js 中运行的轻量级 PostgreSQL
+ * 完全兼容 PostgreSQL 语法，方便后续迁移到完整 PostgreSQL
  */
 
 import { sql } from 'drizzle-orm'
 import { 
-  sqliteTable, 
+  pgTable, 
   text, 
   integer,
+  boolean,
+  timestamp,
+  jsonb,
   index,
-} from 'drizzle-orm/sqlite-core'
+} from 'drizzle-orm/pg-core'
 
 // ============ Users 表 ============
 
-export const users = sqliteTable('users', {
+export const users = pgTable('users', {
   id: text('id').primaryKey(),
   username: text('username').notNull().unique(),
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   role: text('role').notNull().default('user'),
-  createdAt: integer('created_at', { mode: 'timestamp' })
+  createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }),
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
 })
 
 export type User = typeof users.$inferSelect
@@ -30,7 +36,7 @@ export type NewUser = typeof users.$inferInsert
 
 // ============ API Keys 表 ============
 
-export const apiKeys = sqliteTable('api_keys', {
+export const apiKeys = pgTable('api_keys', {
   id: text('id').primaryKey(),
   userId: text('user_id')
     .notNull()
@@ -38,12 +44,12 @@ export const apiKeys = sqliteTable('api_keys', {
   name: text('name').notNull(),
   keyHash: text('key_hash').notNull(),
   keyPrefix: text('key_prefix').notNull(),
-  scopes: text('scopes', { mode: 'json' }).$type<string[]>().default([]),
-  lastUsedAt: integer('last_used_at', { mode: 'timestamp' }),
-  expiresAt: integer('expires_at', { mode: 'timestamp' }),
-  createdAt: integer('created_at', { mode: 'timestamp' })
+  scopes: jsonb('scopes').$type<string[]>().default([]),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
+    .defaultNow(),
 })
 
 export type ApiKey = typeof apiKeys.$inferSelect
@@ -51,25 +57,25 @@ export type NewApiKey = typeof apiKeys.$inferInsert
 
 // ============ Review Templates 表 ============
 
-export const reviewTemplates = sqliteTable('review_templates', {
+export const reviewTemplates = pgTable('review_templates', {
   id: text('id').primaryKey(),
   userId: text('user_id')
     .references(() => users.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   description: text('description'),
   systemPrompt: text('system_prompt').notNull(),
-  categories: text('categories', { mode: 'json' })
+  categories: jsonb('categories')
     .$type<string[]>()
     .default(['BUG', 'SECURITY', 'PERFORMANCE', 'STYLE']),
-  severities: text('severities', { mode: 'json' })
+  severities: jsonb('severities')
     .$type<string[]>()
     .default(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
-  isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
-  isSystem: integer('is_system', { mode: 'boolean' }).notNull().default(false),
-  createdAt: integer('created_at', { mode: 'timestamp' })
+  isDefault: boolean('is_default').notNull().default(false),
+  isSystem: boolean('is_system').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }),
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
 })
 
 export type ReviewTemplate = typeof reviewTemplates.$inferSelect
@@ -86,7 +92,7 @@ export interface RepositoryConfig {
   triggerKeywords?: string[]
 }
 
-export const repositories = sqliteTable('repositories', {
+export const repositories = pgTable('repositories', {
   id: text('id').primaryKey(),
   userId: text('user_id')
     .notNull()
@@ -99,14 +105,14 @@ export const repositories = sqliteTable('repositories', {
   accessToken: text('access_token'),
   templateId: text('template_id')
     .references(() => reviewTemplates.id, { onDelete: 'set null' }),
-  config: text('config', { mode: 'json' }).$type<RepositoryConfig>().default({}),
-  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-  lastReviewAt: integer('last_review_at', { mode: 'timestamp' }),
+  config: jsonb('config').$type<RepositoryConfig>().default({}),
+  enabled: boolean('enabled').notNull().default(true),
+  lastReviewAt: timestamp('last_review_at', { withTimezone: true }),
   reviewCount: integer('review_count').notNull().default(0),
-  createdAt: integer('created_at', { mode: 'timestamp' })
+  createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }),
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
 }, (table) => ({
   userIdx: index('idx_repos_user').on(table.userId),
   providerIdx: index('idx_repos_provider').on(table.provider, table.providerRepoId),
@@ -121,7 +127,7 @@ export type NewRepository = typeof repositories.$inferInsert
 export type ReviewStatus = 'pending' | 'processing' | 'completed' | 'failed'
 export type ReviewDecision = 'APPROVED' | 'REQUEST_CHANGES' | 'COMMENT'
 
-export const reviews = sqliteTable('reviews', {
+export const reviews = pgTable('reviews', {
   id: text('id').primaryKey(),
   repositoryId: text('repository_id')
     .notNull()
@@ -140,10 +146,10 @@ export const reviews = sqliteTable('reviews', {
   error: text('error'),
   triggeredBy: text('triggered_by'),
   webhookEventId: text('webhook_event_id'),
-  createdAt: integer('created_at', { mode: 'timestamp' })
+  createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
-  completedAt: integer('completed_at', { mode: 'timestamp' }),
+    .defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
 }, (table) => ({
   repoIdx: index('idx_reviews_repo').on(table.repositoryId, table.createdAt),
   statusIdx: index('idx_reviews_status').on(table.status),
@@ -154,20 +160,20 @@ export type NewReview = typeof reviews.$inferInsert
 
 // ============ Webhook Logs 表 ============
 
-export const webhookLogs = sqliteTable('webhook_logs', {
+export const webhookLogs = pgTable('webhook_logs', {
   id: text('id').primaryKey(),
   repositoryId: text('repository_id')
     .references(() => repositories.id, { onDelete: 'cascade' }),
   eventType: text('event_type').notNull(),
   deliveryId: text('delivery_id'),
-  payload: text('payload', { mode: 'json' }),
-  headers: text('headers', { mode: 'json' }),
-  processed: integer('processed', { mode: 'boolean' }).notNull().default(false),
+  payload: jsonb('payload'),
+  headers: jsonb('headers'),
+  processed: boolean('processed').notNull().default(false),
   reviewId: text('review_id'),
   error: text('error'),
-  createdAt: integer('created_at', { mode: 'timestamp' })
+  createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
+    .defaultNow(),
 }, (table) => ({
   repoIdx: index('idx_webhook_logs_repo').on(table.repositoryId),
   deliveryIdx: index('idx_webhook_logs_delivery').on(table.deliveryId),

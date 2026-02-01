@@ -34,12 +34,12 @@
       "name": "@opencode-review/server",
       "version": "0.1.0",
       "dependencies": {
+        "@electric-sql/pglite": "^0.2.0",
         "@hono/zod-validator": "^0.4.0",
         "@opencode-review/core": "workspace:*",
         "drizzle-orm": "^0.30.0",
         "hono": "^4.0.0",
         "jose": "^5.2.0",
-        "postgres": "^3.4.0",
         "ulid": "^2.3.0",
         "zod": "^3.22.0",
       },
@@ -53,6 +53,8 @@
     },
   },
   "packages": {
+    "@electric-sql/pglite": ["@electric-sql/pglite@0.2.17", "https://registry.npmmirror.com/@electric-sql/pglite/-/pglite-0.2.17.tgz", {}, "sha512-qEpKRT2oUaWDH6tjRxLHjdzMqRUGYDnGZlKrnL4dJ77JVMcP2Hpo3NYnOSPKdZdeec57B6QPprCUFg0picx5Pw=="],
+
     "@esbuild-kit/core-utils": ["@esbuild-kit/core-utils@3.3.2", "", { "dependencies": { "esbuild": "~0.18.20", "source-map-support": "^0.5.21" } }, "sha512-sPRAnw9CdSsRmEtnsl2WXWdyquogVpB3yZ3dgwJfe8zrOzTsV7cJvmwrKVa+0ma5BoiGJ+BoqkMvawbayKUsqQ=="],
 
     "@esbuild-kit/esm-loader": ["@esbuild-kit/esm-loader@2.6.5", "", { "dependencies": { "@esbuild-kit/core-utils": "^3.3.2", "get-tsconfig": "^4.7.0" } }, "sha512-FxEMIkJKnodyA1OaCUoEvbYRkoZlLZ4d/eXFu9Fh8CbBBgP5EmZxrfTRyN0qpXZ4vOvqnE5YdRdcrmUUXuU+dA=="],

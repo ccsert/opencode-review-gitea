@@ -83,10 +83,9 @@ async function verifyApiKey(key: string, requiredScope?: string): Promise<AuthUs
   const keyHash = createHash('sha256').update(key).digest('hex')
 
   // 查找 API Key
-  const apiKey = await db.select()
+  const [apiKey] = await db.select()
     .from(apiKeys)
     .where(eq(apiKeys.keyHash, keyHash))
-    .get()
 
   if (!apiKey) {
     return null
@@ -108,10 +107,9 @@ async function verifyApiKey(key: string, requiredScope?: string): Promise<AuthUs
     .where(eq(apiKeys.id, apiKey.id))
 
   // 获取用户信息
-  const user = await db.select()
+  const [user] = await db.select()
     .from(users)
     .where(eq(users.id, apiKey.userId))
-    .get()
 
   if (!user) {
     return null

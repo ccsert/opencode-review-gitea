@@ -22,7 +22,7 @@ systemRoutes.get('/health', async (c) => {
   
   try {
     // 简单的数据库连接检查
-    db.run(sql`SELECT 1`)
+    await db.execute(sql`SELECT 1`)
 
     return c.json({
       status: 'healthy',
@@ -56,11 +56,11 @@ systemRoutes.get('/info', authMiddleware, async (c) => {
   }
 
   // 获取统计信息
-  const [userCount, repoCount, reviewCount, webhookLogCount] = await Promise.all([
-    db.select({ count: sql<number>`count(*)` }).from(users).get(),
-    db.select({ count: sql<number>`count(*)` }).from(repositories).get(),
-    db.select({ count: sql<number>`count(*)` }).from(reviews).get(),
-    db.select({ count: sql<number>`count(*)` }).from(webhookLogs).get(),
+  const [[userCount], [repoCount], [reviewCount], [webhookLogCount]] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` }).from(users),
+    db.select({ count: sql<number>`count(*)` }).from(repositories),
+    db.select({ count: sql<number>`count(*)` }).from(reviews),
+    db.select({ count: sql<number>`count(*)` }).from(webhookLogs),
   ])
 
   return c.json({
@@ -226,11 +226,10 @@ systemRoutes.post(
     const results: Record<string, number> = {}
 
     if (body.types.includes('webhookLogs')) {
-      // 先计数再删除（SQLite 不支持 DELETE ... RETURNING COUNT）
-      const countResult = await db.select({ count: sql<number>`count(*)` })
+      // 先计数再删除
+      const [countResult] = await db.select({ count: sql<number>`count(*)` })
         .from(webhookLogs)
         .where(sql`${webhookLogs.createdAt} < ${cutoffDate}`)
-        .get()
       
       await db.delete(webhookLogs)
         .where(sql`${webhookLogs.createdAt} < ${cutoffDate}`)
@@ -238,10 +237,9 @@ systemRoutes.post(
     }
 
     if (body.types.includes('reviews')) {
-      const countResult = await db.select({ count: sql<number>`count(*)` })
+      const [countResult] = await db.select({ count: sql<number>`count(*)` })
         .from(reviews)
         .where(sql`${reviews.createdAt} < ${cutoffDate}`)
-        .get()
       
       await db.delete(reviews)
         .where(sql`${reviews.createdAt} < ${cutoffDate}`)

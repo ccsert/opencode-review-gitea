@@ -128,7 +128,7 @@ apiKeyRoutes.get('/:id', async (c) => {
   const id = c.req.param('id')
   const user = c.get('user')
 
-  const key = await db.select({
+  const [key] = await db.select({
     id: apiKeys.id,
     name: apiKeys.name,
     prefix: apiKeys.keyPrefix,
@@ -139,7 +139,6 @@ apiKeyRoutes.get('/:id', async (c) => {
   })
     .from(apiKeys)
     .where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id)))
-    .get()
 
   if (!key) {
     return c.json({
@@ -176,10 +175,9 @@ apiKeyRoutes.patch(
     const user = c.get('user')
     const body = c.req.valid<UpdateApiKeyInput>('json')
 
-    const existing = await db.select()
+    const [existing] = await db.select()
       .from(apiKeys)
       .where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id)))
-      .get()
 
     if (!existing) {
       return c.json({
@@ -231,10 +229,9 @@ apiKeyRoutes.delete('/:id', async (c) => {
   const id = c.req.param('id')
   const user = c.get('user')
 
-  const existing = await db.select()
+  const [existing] = await db.select()
     .from(apiKeys)
     .where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id)))
-    .get()
 
   if (!existing) {
     return c.json({
@@ -263,10 +260,9 @@ apiKeyRoutes.post('/:id/regenerate', async (c) => {
   const id = c.req.param('id')
   const user = c.get('user')
 
-  const existing = await db.select()
+  const [existing] = await db.select()
     .from(apiKeys)
     .where(and(eq(apiKeys.id, id), eq(apiKeys.userId, user.id)))
-    .get()
 
   if (!existing) {
     return c.json({

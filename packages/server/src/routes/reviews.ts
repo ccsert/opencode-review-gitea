@@ -90,10 +90,9 @@ reviewRoutes.get(
     const offset = (query.page - 1) * query.limit
 
     // 获取总数
-    const countResult = await db.select({ count: sql<number>`count(*)` })
+    const [countResult] = await db.select({ count: sql<number>`count(*)` })
       .from(reviews)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .get()
 
     const total = countResult?.count || 0
 
@@ -172,7 +171,7 @@ reviewRoutes.get('/stats', async (c) => {
   const repoCondition = sql`${reviews.repositoryId} IN (${sql.join(repoIds.map(id => sql`${id}`), sql`, `)})`
 
   // 总数统计
-  const totalStats = await db.select({
+  const [totalStats] = await db.select({
     total: sql<number>`count(*)`,
     completed: sql<number>`sum(case when ${reviews.status} = 'completed' then 1 else 0 end)`,
     failed: sql<number>`sum(case when ${reviews.status} = 'failed' then 1 else 0 end)`,
@@ -181,7 +180,6 @@ reviewRoutes.get('/stats', async (c) => {
   })
     .from(reviews)
     .where(repoCondition)
-    .get()
 
   // 决策分布
   const decisionStats = await db.select({
@@ -240,10 +238,9 @@ reviewRoutes.get('/:id', async (c) => {
   const id = c.req.param('id')
   const user = c.get('user')
 
-  const review = await db.select()
+  const [review] = await db.select()
     .from(reviews)
     .where(eq(reviews.id, id))
-    .get()
 
   if (!review) {
     return c.json({
@@ -256,10 +253,9 @@ reviewRoutes.get('/:id', async (c) => {
   }
 
   // 检查权限
-  const repo = await db.select()
+  const [repo] = await db.select()
     .from(repositories)
     .where(eq(repositories.id, review.repositoryId))
-    .get()
 
   if (!repo || repo.userId !== user.id) {
     return c.json({
@@ -286,10 +282,9 @@ reviewRoutes.post('/:id/retry', async (c) => {
   const id = c.req.param('id')
   const user = c.get('user')
 
-  const review = await db.select()
+  const [review] = await db.select()
     .from(reviews)
     .where(eq(reviews.id, id))
-    .get()
 
   if (!review) {
     return c.json({
@@ -302,10 +297,9 @@ reviewRoutes.post('/:id/retry', async (c) => {
   }
 
   // 检查权限
-  const repo = await db.select()
+  const [repo] = await db.select()
     .from(repositories)
     .where(eq(repositories.id, review.repositoryId))
-    .get()
 
   if (!repo || repo.userId !== user.id) {
     return c.json({
@@ -361,10 +355,9 @@ reviewRoutes.delete('/:id', async (c) => {
   const id = c.req.param('id')
   const user = c.get('user')
 
-  const review = await db.select()
+  const [review] = await db.select()
     .from(reviews)
     .where(eq(reviews.id, id))
-    .get()
 
   if (!review) {
     return c.json({
@@ -377,10 +370,9 @@ reviewRoutes.delete('/:id', async (c) => {
   }
 
   // 检查权限
-  const repo = await db.select()
+  const [repo] = await db.select()
     .from(repositories)
     .where(eq(repositories.id, review.repositoryId))
-    .get()
 
   if (!repo || repo.userId !== user.id) {
     return c.json({

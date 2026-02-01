@@ -27,7 +27,7 @@ import { initDatabase, runMigrations } from './db/client'
 // 环境变量
 const PORT = parseInt(process.env.PORT || '3000', 10)
 const HOST = process.env.HOST || '0.0.0.0'
-const DATABASE_URL = process.env.DATABASE_URL || 'file:./data/review.db'
+const DATABASE_URL = process.env.DATABASE_URL || 'pglite:./data/review'
 
 // 创建应用
 const app = new Hono()

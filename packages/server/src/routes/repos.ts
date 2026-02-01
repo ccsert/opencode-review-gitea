@@ -70,7 +70,7 @@ repoRoutes.get('/', async (c) => {
   let query = db.select().from(repositories).$dynamic()
   
   // TODO: 添加过滤条件和分页
-  const repos = await db.select().from(repositories).all()
+  const repos = await db.select().from(repositories)
 
   return c.json({
     success: true,
@@ -175,7 +175,7 @@ repoRoutes.get('/:id', async (c) => {
   const db = getDatabase()
   const id = c.req.param('id')
 
-  const repo = await db.select().from(repositories).where(eq(repositories.id, id)).get()
+  const [repo] = await db.select().from(repositories).where(eq(repositories.id, id))
 
   if (!repo) {
     return c.json({
@@ -214,7 +214,7 @@ repoRoutes.put('/:id', zValidator('json', updateRepoSchema), async (c) => {
   const id = c.req.param('id')
   const body = c.req.valid<UpdateRepoInput>('json')
 
-  const existing = await db.select().from(repositories).where(eq(repositories.id, id)).get()
+  const [existing] = await db.select().from(repositories).where(eq(repositories.id, id))
 
   if (!existing) {
     return c.json({
@@ -253,7 +253,7 @@ repoRoutes.delete('/:id', async (c) => {
   const db = getDatabase()
   const id = c.req.param('id')
 
-  const existing = await db.select().from(repositories).where(eq(repositories.id, id)).get()
+  const [existing] = await db.select().from(repositories).where(eq(repositories.id, id))
 
   if (!existing) {
     return c.json({
@@ -284,7 +284,7 @@ repoRoutes.post('/:id/test', async (c) => {
   const db = getDatabase()
   const id = c.req.param('id')
 
-  const repo = await db.select().from(repositories).where(eq(repositories.id, id)).get()
+  const [repo] = await db.select().from(repositories).where(eq(repositories.id, id))
 
   if (!repo) {
     return c.json({
@@ -337,7 +337,7 @@ repoRoutes.get('/:id/webhook-url', async (c) => {
   const db = getDatabase()
   const id = c.req.param('id')
 
-  const repo = await db.select().from(repositories).where(eq(repositories.id, id)).get()
+  const [repo] = await db.select().from(repositories).where(eq(repositories.id, id))
 
   if (!repo) {
     return c.json({

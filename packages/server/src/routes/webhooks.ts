@@ -57,10 +57,9 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
   })
   
   // 获取仓库配置
-  const repo = await db.select()
+  const [repo] = await db.select()
     .from(repositories)
     .where(eq(repositories.id, repositoryId))
-    .get()
 
   if (!repo) {
     return c.json({
@@ -248,10 +247,9 @@ webhookRoutes.post('/:provider', async (c) => {
   }
 
   // 查找对应的仓库配置
-  const repo = await db.select()
+  const [repo] = await db.select()
     .from(repositories)
     .where(eq(repositories.name, repoFullName))
-    .get()
 
   if (!repo) {
     return c.json({
