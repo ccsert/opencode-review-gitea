@@ -8,6 +8,7 @@ import {
   Settings,
   Key,
   LogOut,
+  Server,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const navItems = [
   { key: 'dashboard', icon: LayoutDashboard, href: '/' },
+  { key: 'platforms', icon: Server, href: '/platforms' },
   { key: 'repositories', icon: GitBranch, href: '/repositories' },
   { key: 'reviews', icon: FileSearch, href: '/reviews' },
   { key: 'templates', icon: FileText, href: '/templates' },
@@ -88,7 +90,7 @@ export function DashboardLayout() {
       {/* Main content */}
       <div className="flex-1 pl-64">
         {/* Header */}
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-end gap-2 border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-end gap-2 border-b bg-background/95 px-6 backdrop-blur supports-backdrop-filter:bg-background/60">
           <LanguageSwitcher />
           <ThemeSwitcher />
         </header>

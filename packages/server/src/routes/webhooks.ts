@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm'
 import { ulid } from 'ulid'
 
 import { getDatabase } from '../db/client'
-import { repositories, webhookLogs, reviews } from '../db/schema/index'
+import { repositories, webhookLogs, reviews, platformCredentials } from '../db/schema/index'
 import { 
   createProvider, 
   shouldTriggerReview, 
@@ -82,12 +82,33 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
     })
   }
 
+  // 获取 Access Token（优先从平台凭证获取，向后兼容直接存储的 Token）
+  let accessToken = repo.accessToken
+  if (repo.platformCredentialId) {
+    const [platform] = await db.select()
+      .from(platformCredentials)
+      .where(eq(platformCredentials.id, repo.platformCredentialId))
+    if (platform) {
+      accessToken = platform.accessToken
+    }
+  }
+
+  if (!accessToken) {
+    return c.json({
+      success: false,
+      error: {
+        code: 'NO_ACCESS_TOKEN',
+        message: 'Repository has no access token configured',
+      },
+    }, 400)
+  }
+
   // 创建 Provider 实例
   const baseUrl = new URL(repo.url).origin
   const gitProvider = createProvider({
     type: repo.provider as 'gitea' | 'github' | 'gitlab',
     baseUrl,
-    token: repo.accessToken!,
+    token: accessToken,
   })
 
   // 验证签名

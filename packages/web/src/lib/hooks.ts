@@ -238,3 +238,125 @@ export function useDeleteApiKey() {
     },
   })
 }
+
+// ============ Platform Hooks ============
+
+import type {
+  Platform,
+  CreatePlatformInput,
+  UpdatePlatformInput,
+  Organization,
+  RemoteRepository,
+  ImportRepositoriesInput,
+  ImportResult,
+} from './types'
+
+interface PlatformsResponse {
+  success: boolean
+  data: Platform[]
+}
+
+interface PlatformRepositoriesResponse {
+  success: boolean
+  data: {
+    repositories: RemoteRepository[]
+    hasMore: boolean
+    page: number
+    perPage: number
+  }
+}
+
+interface PlatformOrganizationsResponse {
+  success: boolean
+  data: Organization[]
+}
+
+export function usePlatforms() {
+  return useQuery<PlatformsResponse>({
+    queryKey: ['platforms'],
+    queryFn: () => apiClient.get('/platforms'),
+  })
+}
+
+export function usePlatform(id: string) {
+  return useQuery<ApiResponse<Platform>>({
+    queryKey: ['platform', id],
+    queryFn: () => apiClient.get(`/platforms/${id}`),
+    enabled: !!id,
+  })
+}
+
+export function useCreatePlatform() {
+  const queryClient = useQueryClient()
+  
+  return useMutation<ApiResponse<Platform>, Error, CreatePlatformInput>({
+    mutationFn: (data) => apiClient.post('/platforms', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['platforms'] })
+    },
+  })
+}
+
+export function useUpdatePlatform() {
+  const queryClient = useQueryClient()
+  
+  return useMutation<ApiResponse<Platform>, Error, { id: string; data: UpdatePlatformInput }>({
+    mutationFn: ({ id, data }) => apiClient.put(`/platforms/${id}`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['platforms'] })
+      queryClient.invalidateQueries({ queryKey: ['platform', variables.id] })
+    },
+  })
+}
+
+export function useDeletePlatform() {
+  const queryClient = useQueryClient()
+  
+  return useMutation<ApiResponse<void>, Error, string>({
+    mutationFn: (id) => apiClient.delete(`/platforms/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['platforms'] })
+    },
+  })
+}
+
+interface PlatformReposParams {
+  id: string
+  page?: number
+  perPage?: number
+  org?: string
+}
+
+export function usePlatformRepositories(params: PlatformReposParams) {
+  const searchParams = new URLSearchParams()
+  if (params.page) searchParams.set('page', String(params.page))
+  if (params.perPage) searchParams.set('perPage', String(params.perPage))
+  if (params.org) searchParams.set('org', params.org)
+  
+  const query = searchParams.toString()
+  
+  return useQuery<PlatformRepositoriesResponse>({
+    queryKey: ['platformRepositories', params],
+    queryFn: () => apiClient.get(`/platforms/${params.id}/repositories${query ? `?${query}` : ''}`),
+    enabled: !!params.id,
+  })
+}
+
+export function usePlatformOrganizations(id: string) {
+  return useQuery<PlatformOrganizationsResponse>({
+    queryKey: ['platformOrganizations', id],
+    queryFn: () => apiClient.get(`/platforms/${id}/organizations`),
+    enabled: !!id,
+  })
+}
+
+export function useImportRepositories() {
+  const queryClient = useQueryClient()
+  
+  return useMutation<ApiResponse<ImportResult>, Error, ImportRepositoriesInput>({
+    mutationFn: (data) => apiClient.post('/repositories/import', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repositories'] })
+    },
+  })
+}

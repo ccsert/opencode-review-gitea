@@ -17,6 +17,37 @@ import type { WebhookEvent } from '../events/types'
 export type ProviderType = 'gitea' | 'github' | 'gitlab'
 
 /**
+ * 组织信息
+ */
+export interface Organization {
+  id: number
+  name: string
+  fullName: string
+  description?: string
+  avatarUrl?: string
+  url: string
+}
+
+/**
+ * 仓库列表查询参数
+ */
+export interface ListRepositoriesParams {
+  page?: number
+  perPage?: number
+  sort?: 'created' | 'updated' | 'pushed' | 'full_name'
+  direction?: 'asc' | 'desc'
+}
+
+/**
+ * 仓库列表响应
+ */
+export interface ListRepositoriesResponse {
+  repositories: Repository[]
+  total?: number
+  hasMore: boolean
+}
+
+/**
  * Git Provider 接口
  * 所有平台实现都需要遵循此接口
  */
@@ -26,6 +57,24 @@ export interface GitProvider {
   
   /** 平台 API 基础 URL */
   readonly baseUrl: string
+
+  // ============ 仓库列表（新增）============
+  
+  /**
+   * 获取当前用户可访问的所有仓库列表
+   * 包括用户拥有的、组织的、有权限访问的仓库
+   */
+  listUserRepositories(params?: ListRepositoriesParams): Promise<ListRepositoriesResponse>
+  
+  /**
+   * 获取当前用户所属的组织列表
+   */
+  listUserOrganizations(): Promise<Organization[]>
+  
+  /**
+   * 获取指定组织的仓库列表
+   */
+  listOrganizationRepositories(org: string, params?: ListRepositoriesParams): Promise<ListRepositoriesResponse>
 
   // ============ 仓库信息 ============
   

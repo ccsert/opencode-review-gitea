@@ -3,8 +3,8 @@
  */
 
 import { BaseProvider } from './base'
-import type { ProviderType } from './types'
-import type { 
+import type { ProviderType, ListRepositoriesParams, ListRepositoriesResponse, Organization } from './types'
+import type {
   Repository, 
   PullRequest, 
   ChangedFile, 
@@ -18,6 +18,55 @@ import type { WebhookEvent, BaseWebhookEvent } from '../events/types'
 
 export class GiteaProvider extends BaseProvider {
   readonly name: ProviderType = 'gitea'
+
+  // ============ 仓库列表相关方法 ============
+
+  async listUserRepositories(params: ListRepositoriesParams = {}): Promise<ListRepositoriesResponse> {
+    const page = params.page || 1
+    const perPage = params.perPage || 50
+    const sort = params.sort || 'updated'
+    
+    // Gitea API: GET /api/v1/user/repos
+    const data = await this.fetch<GiteaRepository[]>(
+      `/api/v1/user/repos?page=${page}&limit=${perPage}&sort=${sort}`
+    )
+    
+    return {
+      repositories: data.map(repo => this.mapRepository(repo)),
+      hasMore: data.length === perPage,
+    }
+  }
+
+  async listUserOrganizations(): Promise<Organization[]> {
+    // Gitea API: GET /api/v1/user/orgs
+    const data = await this.fetch<GiteaOrganization[]>('/api/v1/user/orgs')
+    
+    return data.map(org => ({
+      id: org.id,
+      name: org.name || org.username,
+      fullName: org.full_name || org.username,
+      description: org.description,
+      avatarUrl: org.avatar_url,
+      url: `${this.baseUrl}/${org.username}`,
+    }))
+  }
+
+  async listOrganizationRepositories(org: string, params: ListRepositoriesParams = {}): Promise<ListRepositoriesResponse> {
+    const page = params.page || 1
+    const perPage = params.perPage || 50
+    
+    // Gitea API: GET /api/v1/orgs/{org}/repos
+    const data = await this.fetch<GiteaRepository[]>(
+      `/api/v1/orgs/${org}/repos?page=${page}&limit=${perPage}`
+    )
+    
+    return {
+      repositories: data.map(repo => this.mapRepository(repo)),
+      hasMore: data.length === perPage,
+    }
+  }
+
+  // ============ 原有方法 ============
 
   async getRepository(owner: string, repo: string): Promise<Repository> {
     const data = await this.fetch<GiteaRepository>(
@@ -348,6 +397,15 @@ interface GiteaRepository {
   default_branch: string
   private: boolean
   html_url: string
+}
+
+interface GiteaOrganization {
+  id: number
+  name?: string
+  username: string
+  full_name?: string
+  description?: string
+  avatar_url?: string
 }
 
 interface GiteaPullRequest {

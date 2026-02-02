@@ -310,7 +310,7 @@ export function ReviewsPage() {
                 </TableHeader>
                 <TableBody>
                   {reviews.map((review) => {
-                    const StatusIcon = statusConfig[review.status].icon
+                    const StatusIcon = statusConfigBase[review.status].icon
                     return (
                       <TableRow key={review.id}>
                         <TableCell>

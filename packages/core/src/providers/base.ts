@@ -3,7 +3,7 @@
  */
 
 import { createHmac, timingSafeEqual } from 'crypto'
-import type { GitProvider, ProviderType, ProviderError } from './types'
+import type { GitProvider, ProviderType, ProviderError, ListRepositoriesParams, ListRepositoriesResponse, Organization } from './types'
 import type { 
   Repository, 
   PullRequest, 
@@ -97,6 +97,9 @@ export abstract class BaseProvider implements GitProvider {
   }
 
   // 抽象方法由子类实现
+  abstract listUserRepositories(params?: ListRepositoriesParams): Promise<ListRepositoriesResponse>
+  abstract listUserOrganizations(): Promise<Organization[]>
+  abstract listOrganizationRepositories(org: string, params?: ListRepositoriesParams): Promise<ListRepositoriesResponse>
   abstract getRepository(owner: string, repo: string): Promise<Repository>
   abstract getPullRequest(owner: string, repo: string, number: number): Promise<PullRequest>
   abstract getPullRequestDiff(owner: string, repo: string, number: number): Promise<string>

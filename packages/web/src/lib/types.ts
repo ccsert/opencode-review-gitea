@@ -195,3 +195,68 @@ export interface CreatedApiKey extends ApiKey {
   key: string
   warning: string
 }
+
+// ============ Platform 类型 ============
+
+export interface Platform {
+  id: string
+  provider: ProviderType
+  baseUrl: string
+  name: string
+  lastUsedAt: string | null
+  createdAt: string
+}
+
+export interface CreatePlatformInput {
+  provider: ProviderType
+  baseUrl: string
+  name: string
+  accessToken: string
+}
+
+export interface UpdatePlatformInput {
+  name?: string
+  accessToken?: string
+}
+
+export interface Organization {
+  id: number
+  name: string
+  fullName: string
+  description?: string
+  avatarUrl?: string
+  url: string
+}
+
+export interface RemoteRepository {
+  id: number
+  name: string
+  fullName: string
+  description?: string
+  defaultBranch: string
+  private: boolean
+  url: string
+}
+
+export interface ImportRepositoriesInput {
+  platformCredentialId: string
+  repositories: Array<{
+    fullName: string
+    url: string
+  }>
+  templateId?: string
+  config?: RepositoryConfig
+}
+
+export interface ImportResult {
+  imported: number
+  failed: number
+  results: Array<{
+    fullName: string
+    success: boolean
+    id?: string
+    error?: string
+    webhookUrl?: string
+    webhookSecret?: string
+  }>
+}

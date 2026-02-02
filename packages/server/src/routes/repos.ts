@@ -5,12 +5,12 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { ulid } from 'ulid'
 import { createHash, randomBytes } from 'crypto'
 
 import { getDatabase } from '../db/client'
-import { repositories } from '../db/schema/index'
+import { repositories, platformCredentials } from '../db/schema/index'
 import { authMiddleware } from '../middleware/auth'
 import { createProvider } from '@opencode-review/core'
 
@@ -370,4 +370,134 @@ repoRoutes.get('/:id/webhook-url', async (c) => {
       instructions: `在 ${repo.provider === 'gitea' ? 'Gitea' : repo.provider} 仓库设置 > Webhooks 中添加此 URL`,
     },
   })
+})
+
+// ============ 从平台凭证批量导入仓库 ============
+
+// 批量导入仓库 Schema
+const importReposSchema = z.object({
+  platformCredentialId: z.string().min(1, 'Platform credential ID is required'),
+  repositories: z.array(z.object({
+    fullName: z.string(), // owner/repo 格式
+    url: z.string().url(),
+  })).min(1, 'At least one repository is required'),
+  templateId: z.string().optional(),
+  config: z.object({
+    language: z.string().optional(),
+    style: z.enum(['concise', 'detailed', 'strict']).optional(),
+    autoReview: z.boolean().optional(),
+    filePatterns: z.array(z.string()).optional(),
+    ignorePatterns: z.array(z.string()).optional(),
+  }).optional(),
+})
+type ImportReposInput = z.infer<typeof importReposSchema>
+
+/**
+ * POST /repositories/import
+ * 从平台凭证批量导入仓库
+ * 这是核心功能：用户选择平台上的仓库后批量添加
+ */
+repoRoutes.post('/import', zValidator('json', importReposSchema), async (c) => {
+  const db = getDatabase()
+  const userId = c.get('user').id
+  const body = c.req.valid<ImportReposInput>('json')
+
+  // 验证平台凭证
+  const [platform] = await db
+    .select()
+    .from(platformCredentials)
+    .where(and(
+      eq(platformCredentials.id, body.platformCredentialId),
+      eq(platformCredentials.userId, userId)
+    ))
+
+  if (!platform) {
+    return c.json({
+      success: false,
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Platform credential not found',
+      },
+    }, 404)
+  }
+
+  const results: Array<{
+    fullName: string
+    success: boolean
+    id?: string
+    error?: string
+    webhookUrl?: string
+    webhookSecret?: string
+  }> = []
+
+  const publicUrl = process.env.PUBLIC_URL || 'http://localhost:3000'
+
+  for (const repo of body.repositories) {
+    try {
+      // 检查是否已存在
+      const [existing] = await db
+        .select()
+        .from(repositories)
+        .where(and(
+          eq(repositories.userId, userId),
+          eq(repositories.url, repo.url)
+        ))
+
+      if (existing) {
+        results.push({
+          fullName: repo.fullName,
+          success: false,
+          error: 'Repository already exists',
+        })
+        continue
+      }
+
+      // 生成 Webhook Secret
+      const webhookSecret = `wh_${randomBytes(16).toString('hex')}`
+      const id = ulid()
+
+      await db.insert(repositories).values({
+        id,
+        userId,
+        platformCredentialId: platform.id,
+        provider: platform.provider,
+        providerRepoId: repo.fullName,
+        url: repo.url,
+        name: repo.fullName,
+        webhookSecret,
+        templateId: body.templateId,
+        config: body.config || {},
+        enabled: true,
+        reviewCount: 0,
+      })
+
+      const webhookUrl = `${publicUrl}/api/v1/webhooks/${platform.provider}/${id}`
+
+      results.push({
+        fullName: repo.fullName,
+        success: true,
+        id,
+        webhookUrl,
+        webhookSecret,
+      })
+    } catch (error) {
+      results.push({
+        fullName: repo.fullName,
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  }
+
+  const successCount = results.filter(r => r.success).length
+  const failCount = results.filter(r => !r.success).length
+
+  return c.json({
+    success: true,
+    data: {
+      imported: successCount,
+      failed: failCount,
+      results,
+    },
+  }, 201)
 })

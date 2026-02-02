@@ -9,6 +9,7 @@ import {
   TemplatesPage,
   ApiKeysPage,
   SettingsPage,
+  PlatformsPage,
 } from '@/pages'
 
 export const router = createBrowserRouter([
@@ -43,6 +44,10 @@ export const router = createBrowserRouter([
       {
         path: 'api-keys',
         element: <ApiKeysPage />,
+      },
+      {
+        path: 'platforms',
+        element: <PlatformsPage />,
       },
       {
         path: 'settings',

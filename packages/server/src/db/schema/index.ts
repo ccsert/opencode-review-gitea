@@ -81,6 +81,33 @@ export const reviewTemplates = pgTable('review_templates', {
 export type ReviewTemplate = typeof reviewTemplates.$inferSelect
 export type NewReviewTemplate = typeof reviewTemplates.$inferInsert
 
+// ============ Platform Credentials 表 ============
+// 存储用户的 Git 平台凭证，支持多实例配置
+// 注意：此表必须在 repositories 表之前定义，因为 repositories 表引用它
+
+export const platformCredentials = pgTable('platform_credentials', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  provider: text('provider').notNull(), // gitea, github, gitlab
+  baseUrl: text('base_url').notNull(),  // 平台 API 地址，如 https://gitea.example.com
+  name: text('name').notNull(),         // 用户自定义名称，如 "公司 Gitea"
+  // TODO: 实现 Token 加密存储 (AES-256-GCM)，当前明文存储仅用于开发
+  accessToken: text('access_token').notNull(),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (table) => ({
+  userIdx: index('idx_platform_creds_user').on(table.userId),
+  providerIdx: index('idx_platform_creds_provider').on(table.provider),
+}))
+
+export type PlatformCredential = typeof platformCredentials.$inferSelect
+export type NewPlatformCredential = typeof platformCredentials.$inferInsert
+
 // ============ Repositories 表 ============
 
 export interface RepositoryConfig {
@@ -97,11 +124,15 @@ export const repositories = pgTable('repositories', {
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
+  // 关联平台凭证（推荐方式，Token 集中管理）
+  platformCredentialId: text('platform_credential_id')
+    .references(() => platformCredentials.id, { onDelete: 'set null' }),
   provider: text('provider').notNull(),
   providerRepoId: text('provider_repo_id'),
   url: text('url').notNull(),
   name: text('name').notNull(),
   webhookSecret: text('webhook_secret'),
+  // 向后兼容：直接存储的 Token（如果没有关联 platformCredential 则使用此字段）
   accessToken: text('access_token'),
   templateId: text('template_id')
     .references(() => reviewTemplates.id, { onDelete: 'set null' }),

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -16,6 +17,7 @@ import {
   Check,
   Search,
   Loader2,
+  Server,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -199,6 +201,7 @@ export function RepositoriesPage() {
 
   const repos = reposData?.data || []
   const pagination = reposData?.pagination
+  const navigate = useNavigate()
 
   return (
     <div className="space-y-6">
@@ -210,13 +213,18 @@ export function RepositoriesPage() {
             {t('repositories.description')}
           </p>
         </div>
-        <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              {t('repositories.addRepository')}
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => navigate('/platforms')}>
+            <Server className="mr-2 h-4 w-4" />
+            从平台导入
+          </Button>
+          <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                {t('repositories.addRepository')}
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>{t('repositories.addRepository')}</DialogTitle>
@@ -326,6 +334,7 @@ export function RepositoriesPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Filters */}

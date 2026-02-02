@@ -142,10 +142,25 @@ export async function runMigrations(): Promise<void> {
       updated_at TIMESTAMPTZ
     );
 
+    -- Platform Credentials table (存储 Git 平台凭证)
+    -- TODO: accessToken 应该加密存储
+    CREATE TABLE IF NOT EXISTS platform_credentials (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL DEFAULT 'gitea',
+      base_url TEXT NOT NULL,
+      name TEXT NOT NULL,
+      access_token TEXT NOT NULL,
+      last_used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ
+    );
+
     -- Repositories table
     CREATE TABLE IF NOT EXISTS repositories (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      platform_credential_id TEXT REFERENCES platform_credentials(id) ON DELETE SET NULL,
       provider TEXT NOT NULL DEFAULT 'gitea',
       provider_repo_id TEXT,
       url TEXT NOT NULL,
@@ -199,7 +214,9 @@ export async function runMigrations(): Promise<void> {
 
     -- Create indexes
     CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
+    CREATE INDEX IF NOT EXISTS idx_platform_credentials_user ON platform_credentials(user_id);
     CREATE INDEX IF NOT EXISTS idx_repos_user ON repositories(user_id);
+    CREATE INDEX IF NOT EXISTS idx_repos_platform_credential ON repositories(platform_credential_id);
     CREATE INDEX IF NOT EXISTS idx_repos_provider ON repositories(provider, provider_repo_id);
     CREATE INDEX IF NOT EXISTS idx_repos_name ON repositories(name);
     CREATE INDEX IF NOT EXISTS idx_reviews_repo ON reviews(repository_id, created_at);
@@ -208,7 +225,36 @@ export async function runMigrations(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_webhook_logs_delivery ON webhook_logs(delivery_id);
   `)
   
+  // 增量迁移：为已存在的表添加缺失的列
+  await runIncrementalMigrations(_pglite)
+  
   console.log(`[Database] Schema synced successfully`)
+}
+
+/**
+ * 增量迁移 - 为已存在的表添加缺失的列
+ * 每个迁移都是幂等的，可以安全地多次运行
+ */
+async function runIncrementalMigrations(pglite: PGlite): Promise<void> {
+  console.log(`[Database] Running incremental migrations...`)
+  
+  // 辅助函数：检查列是否存在
+  async function columnExists(table: string, column: string): Promise<boolean> {
+    const result = await pglite.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = $1 AND column_name = $2
+    `, [table, column])
+    return result.rows.length > 0
+  }
+  
+  // 迁移 1: repositories 添加 platform_credential_id 列
+  if (!(await columnExists('repositories', 'platform_credential_id'))) {
+    console.log(`[Migration] Adding platform_credential_id to repositories...`)
+    await pglite.exec(`
+      ALTER TABLE repositories 
+      ADD COLUMN platform_credential_id TEXT REFERENCES platform_credentials(id) ON DELETE SET NULL
+    `)
+  }
 }
 
 /**

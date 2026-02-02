@@ -17,6 +17,7 @@ import { reviewRoutes } from './routes/reviews'
 import { webhookRoutes } from './routes/webhooks'
 import { systemRoutes } from './routes/system'
 import { apiKeyRoutes } from './routes/api-keys'
+import { platformRoutes } from './routes/platforms'
 import { 
   errorMiddleware, 
   notFoundHandler, 
@@ -53,6 +54,7 @@ const api = new Hono()
   .route('/reviews', reviewRoutes)
   .route('/webhooks', webhookRoutes)
   .route('/api-keys', apiKeyRoutes)
+  .route('/platforms', platformRoutes)
   .route('/system', systemRoutes)
 
 app.route('/api/v1', api)
