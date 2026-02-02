@@ -112,9 +112,21 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
   })
 
   // 验证签名
+  // Gitea 使用 x-gitea-signature，GitHub 使用 x-hub-signature-256
   const signature = headers['x-gitea-signature'] || 
                    headers['x-hub-signature-256'] || 
                    headers['x-gitlab-token'] || ''
+  
+  // 调试日志
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[Webhook] Signature verification debug:', {
+      hasWebhookSecret: !!repo.webhookSecret,
+      secretLength: repo.webhookSecret?.length,
+      receivedSignature: signature ? `${signature.substring(0, 20)}...` : 'none',
+      signatureHeader: headers['x-gitea-signature'] ? 'x-gitea-signature' : 
+                       headers['x-hub-signature-256'] ? 'x-hub-signature-256' : 'none',
+    })
+  }
   
   // 如果配置了 webhook secret，验证签名
   if (repo.webhookSecret) {
@@ -125,6 +137,20 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
       const skipVerification = process.env.SKIP_WEBHOOK_VERIFICATION === 'true'
       
       if (!skipVerification) {
+        // 额外调试：计算期望的签名
+        if (process.env.NODE_ENV !== 'production') {
+          const crypto = await import('crypto')
+          const expectedHash = crypto.createHmac('sha256', repo.webhookSecret)
+            .update(rawBody)
+            .digest('hex')
+          console.log('[Webhook] Signature mismatch:', {
+            received: signature,
+            expected: expectedHash,
+            match: signature === expectedHash || signature === `sha256=${expectedHash}`,
+            secretPreview: `${repo.webhookSecret.substring(0, 4)}...`,
+          })
+        }
+        
         // 记录无效签名
         await db.insert(webhookLogs).values({
           id: ulid(),

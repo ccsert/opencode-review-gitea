@@ -167,11 +167,17 @@ export class GiteaProvider extends BaseProvider {
   }
 
   verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
-    // Gitea 签名格式: sha256=xxx
-    if (!signature.startsWith('sha256=')) {
-      return false
+    // Gitea 签名格式:
+    // - X-Gitea-Signature: 纯 HMAC hex 值（不带前缀）
+    // - X-Hub-Signature-256: sha256=<hmac> 格式
+    // 需要同时支持两种格式
+    let hash: string
+    if (signature.startsWith('sha256=')) {
+      hash = signature.slice(7)
+    } else {
+      // 假设是纯 hex 值（X-Gitea-Signature 格式）
+      hash = signature
     }
-    const hash = signature.slice(7)
     return this.verifyHmacSha256(payload, hash, secret)
   }
 

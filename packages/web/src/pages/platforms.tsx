@@ -15,6 +15,8 @@ import {
   Lock,
   ChevronRight,
   Import,
+  Copy,
+  Check,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -59,7 +61,10 @@ import {
   usePlatformOrganizations,
   useImportRepositories,
 } from '@/lib/hooks'
-import type { Platform, RemoteRepository, ProviderType } from '@/lib/types'
+import type { Platform, RemoteRepository, ProviderType, ImportResult } from '@/lib/types'
+
+// 导入结果项类型
+type ImportResultItem = ImportResult['results'][0]
 
 // 创建平台凭证表单 Schema
 const createPlatformSchema = z.object({
@@ -84,6 +89,9 @@ export function PlatformsPage() {
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [importResultDialogOpen, setImportResultDialogOpen] = useState(false)
+  const [importResults, setImportResults] = useState<ImportResultItem[]>([])
+  const [copiedField, setCopiedField] = useState<string | null>(null)
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(null)
   const [selectedOrg, setSelectedOrg] = useState<string>(ALL_ORG_VALUE)
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set())
@@ -102,7 +110,7 @@ export function PlatformsPage() {
     perPage: 50,
     org: selectedOrg === ALL_ORG_VALUE ? undefined : selectedOrg,
   })
-  
+
   const { data: orgsData } = usePlatformOrganizations(selectedPlatform?.id || '')
 
   // Form
@@ -196,15 +204,21 @@ export function PlatformsPage() {
       })
 
       if (result.success) {
-        const { imported, failed } = result.data
+        const { imported, failed, results } = result.data
+        
+        // 保存结果并显示配置对话框
+        const successResults = results.filter(r => r.success)
+        if (successResults.length > 0) {
+          setImportResults(successResults)
+          setImportResultDialogOpen(true)
+        }
+        
         if (failed > 0) {
           toast.warning(`导入完成：${imported} 个成功，${failed} 个失败`, {
             description: '部分仓库可能已存在',
           })
         } else {
-          toast.success(`成功导入 ${imported} 个仓库`, {
-            description: '请在仓库页面配置 Webhook',
-          })
+          toast.success(`成功导入 ${imported} 个仓库`)
         }
         setImportDialogOpen(false)
         setSelectedRepos(new Set())
@@ -214,6 +228,13 @@ export function PlatformsPage() {
         description: error instanceof Error ? error.message : '未知错误',
       })
     }
+  }
+  
+  const handleCopy = async (text: string, field: string) => {
+    await navigator.clipboard.writeText(text)
+    setCopiedField(field)
+    toast.success('已复制到剪贴板')
+    setTimeout(() => setCopiedField(null), 2000)
   }
 
   const handleOrgChange = (org: string) => {
@@ -598,6 +619,97 @@ export function PlatformsPage() {
         onConfirm={handleDelete}
         loading={deleteMutation.isPending}
       />
+
+      {/* 导入结果对话框 - 显示 Webhook 配置信息 */}
+      <Dialog open={importResultDialogOpen} onOpenChange={setImportResultDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-green-500" />
+              Webhook 配置信息
+            </DialogTitle>
+            <DialogDescription>
+              请将以下信息配置到 Gitea 仓库的 Webhook 设置中
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 pr-4">
+            <div className="space-y-4">
+              {importResults.map((result, index) => (
+                <Card key={result.id || index}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <GitBranch className="h-4 w-4" />
+                      {result.fullName}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {/* Webhook URL */}
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Webhook URL</Label>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 px-3 py-2 bg-muted rounded text-sm break-all">
+                          {result.webhookUrl}
+                        </code>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCopy(result.webhookUrl || '', `url-${index}`)}
+                        >
+                          {copiedField === `url-${index}` ? (
+                            <Check className="h-4 w-4" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {/* Webhook Secret */}
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Webhook Secret</Label>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono">
+                          {result.webhookSecret}
+                        </code>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCopy(result.webhookSecret || '', `secret-${index}`)}
+                        >
+                          {copiedField === `secret-${index}` ? (
+                            <Check className="h-4 w-4" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {/* 配置说明 */}
+                    <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                      <p className="font-medium mb-1">配置步骤：</p>
+                      <ol className="list-decimal list-inside space-y-0.5">
+                        <li>进入仓库设置 → Webhooks → 添加 Webhook</li>
+                        <li>粘贴上方 URL 到目标地址</li>
+                        <li>粘贴上方 Secret 到密钥字段</li>
+                        <li>选择事件：Pull Request、Issue Comment</li>
+                        <li>Content Type 选择 application/json</li>
+                      </ol>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </ScrollArea>
+          
+          <DialogFooter>
+            <Button onClick={() => setImportResultDialogOpen(false)}>
+              完成
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
