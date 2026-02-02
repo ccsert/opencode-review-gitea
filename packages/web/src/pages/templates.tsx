@@ -150,7 +150,7 @@ export function TemplatesPage() {
               {t('templates.createTemplate')}
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-150">
             <DialogHeader>
               <DialogTitle>{t('templates.createTemplate')}</DialogTitle>
               <DialogDescription>
@@ -183,7 +183,7 @@ export function TemplatesPage() {
                 <Label>{t('templates.systemPrompt')}</Label>
                 <Textarea
                   placeholder={t('templates.systemPromptPlaceholder')}
-                  className="min-h-[200px] font-mono text-sm"
+                  className="min-h-50 font-mono text-sm"
                   {...form.register('systemPrompt')}
                 />
                 {form.formState.errors.systemPrompt && (
@@ -411,7 +411,7 @@ function TemplatePreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[80vh]">
+      <DialogContent className="sm:max-w-175 max-h-[80vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {template?.name}
@@ -534,7 +534,7 @@ function EditTemplateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-150">
         <DialogHeader>
           <DialogTitle>{t('templates.editTemplate')}</DialogTitle>
           <DialogDescription>{t('templates.editTemplateDescription')}</DialogDescription>
@@ -559,7 +559,7 @@ function EditTemplateDialog({
           <div className="space-y-2">
             <Label>{t('templates.systemPrompt')}</Label>
             <Textarea
-              className="min-h-[200px] font-mono text-sm"
+              className="min-h-50 font-mono text-sm"
               {...form.register('systemPrompt')}
             />
             {form.formState.errors.systemPrompt && (

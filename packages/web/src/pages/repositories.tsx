@@ -225,7 +225,7 @@ export function RepositoriesPage() {
                 {t('repositories.addRepository')}
               </Button>
             </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-125">
             <DialogHeader>
               <DialogTitle>{t('repositories.addRepository')}</DialogTitle>
               <DialogDescription>
@@ -351,7 +351,7 @@ export function RepositoriesPage() {
               />
             </div>
             <Select value={providerFilter} onValueChange={setProviderFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-45">
                 <SelectValue placeholder={t('repositories.allProviders')} />
               </SelectTrigger>
               <SelectContent>
@@ -598,7 +598,7 @@ function WebhookDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-125">
         <DialogHeader>
           <DialogTitle>{t('repositories.webhookSetup')}</DialogTitle>
           <DialogDescription>
@@ -712,7 +712,7 @@ function EditRepoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-125">
         <DialogHeader>
           <DialogTitle>{t('repositories.repoSettings')}</DialogTitle>
           <DialogDescription>

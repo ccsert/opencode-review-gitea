@@ -212,6 +212,25 @@ export async function runMigrations(): Promise<void> {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    -- AI Providers table (存储用户的 AI 供应商配置)
+    -- TODO: apiKey 应该加密存储
+    CREATE TABLE IF NOT EXISTS ai_providers (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      base_url TEXT,
+      api_key TEXT,
+      models JSONB DEFAULT '[]',
+      default_model TEXT,
+      is_default BOOLEAN DEFAULT FALSE,
+      is_enabled BOOLEAN DEFAULT TRUE,
+      config JSONB DEFAULT '{}',
+      last_used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ
+    );
+
     -- Create indexes
     CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
     CREATE INDEX IF NOT EXISTS idx_platform_credentials_user ON platform_credentials(user_id);
@@ -223,6 +242,9 @@ export async function runMigrations(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_reviews_status ON reviews(status);
     CREATE INDEX IF NOT EXISTS idx_webhook_logs_repo ON webhook_logs(repository_id);
     CREATE INDEX IF NOT EXISTS idx_webhook_logs_delivery ON webhook_logs(delivery_id);
+    CREATE INDEX IF NOT EXISTS idx_ai_providers_user ON ai_providers(user_id);
+    CREATE INDEX IF NOT EXISTS idx_ai_providers_provider ON ai_providers(provider);
+    CREATE INDEX IF NOT EXISTS idx_ai_providers_default ON ai_providers(user_id, is_default);
   `)
   
   // 增量迁移：为已存在的表添加缺失的列

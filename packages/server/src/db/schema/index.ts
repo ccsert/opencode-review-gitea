@@ -212,3 +212,76 @@ export const webhookLogs = pgTable('webhook_logs', {
 
 export type WebhookLog = typeof webhookLogs.$inferSelect
 export type NewWebhookLog = typeof webhookLogs.$inferInsert
+
+// ============ AI Providers 表 ============
+// 存储用户配置的 AI 供应商和 API Key
+
+export const aiProviders = pgTable('ai_providers', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),           // 用户自定义名称，如 "我的 DeepSeek"
+  provider: text('provider').notNull(),   // openai, anthropic, deepseek, openrouter, ollama, custom
+  baseUrl: text('base_url'),              // API 基础 URL，如 https://api.deepseek.com
+  // TODO: 实现 API Key 加密存储 (AES-256-GCM)，当前明文存储仅用于开发
+  apiKey: text('api_key'),                // API 密钥（可选，ollama 可能不需要）
+  models: jsonb('models').$type<string[]>().default([]),  // 可用模型列表
+  defaultModel: text('default_model'),    // 默认使用的模型
+  isDefault: boolean('is_default').notNull().default(false),  // 是否为默认供应商
+  isEnabled: boolean('is_enabled').notNull().default(true),   // 是否启用
+  config: jsonb('config').$type<{
+    maxTokens?: number
+    temperature?: number
+    timeout?: number
+    [key: string]: unknown
+  }>().default({}),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (table) => ({
+  userIdx: index('idx_ai_providers_user').on(table.userId),
+  providerIdx: index('idx_ai_providers_provider').on(table.provider),
+  defaultIdx: index('idx_ai_providers_default').on(table.userId, table.isDefault),
+}))
+
+export type AiProvider = typeof aiProviders.$inferSelect
+export type NewAiProvider = typeof aiProviders.$inferInsert
+
+// 预定义的 AI 供应商信息
+export const PREDEFINED_PROVIDERS = {
+  openai: {
+    name: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+  },
+  anthropic: {
+    name: 'Anthropic',
+    baseUrl: 'https://api.anthropic.com',
+    models: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'],
+  },
+  deepseek: {
+    name: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com',
+    models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
+  },
+  openrouter: {
+    name: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    models: ['anthropic/claude-sonnet-4', 'openai/gpt-4o', 'google/gemini-2.0-flash-001', 'deepseek/deepseek-chat'],
+  },
+  ollama: {
+    name: 'Ollama (本地)',
+    baseUrl: 'http://localhost:11434',
+    models: ['llama3.3', 'qwen2.5-coder', 'deepseek-coder-v2', 'codellama'],
+  },
+  custom: {
+    name: '自定义',
+    baseUrl: '',
+    models: [],
+  },
+} as const
+
+export type PredefinedProviderKey = keyof typeof PREDEFINED_PROVIDERS

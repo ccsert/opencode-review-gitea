@@ -245,6 +245,7 @@ export function DashboardPage() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-muted-foreground hover:text-foreground"
+                        title={`Open PR #${review.prNumber}`}
                       >
                         <ExternalLink className="h-4 w-4" />
                       </a>

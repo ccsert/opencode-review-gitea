@@ -21,6 +21,12 @@ import type {
   CreatedApiKey,
   ApiResponse,
   PaginationMeta,
+  AiProvider,
+  AiProviderPreset,
+  CreateAiProviderInput,
+  UpdateAiProviderInput,
+  TestAiConnectionInput,
+  TestAiConnectionResult,
 } from './types'
 
 // ============ Repository Hooks ============
@@ -358,5 +364,90 @@ export function useImportRepositories() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['repositories'] })
     },
+  })
+}
+
+// ============ AI Provider Hooks ============
+
+interface AiProvidersResponse {
+  success: boolean
+  data: AiProvider[]
+}
+
+interface AiProviderPresetsResponse {
+  success: boolean
+  data: AiProviderPreset[]
+}
+
+export function useAiProviders() {
+  return useQuery<AiProvidersResponse>({
+    queryKey: ['aiProviders'],
+    queryFn: () => apiClient.get('/ai-providers'),
+  })
+}
+
+export function useAiProviderPresets() {
+  return useQuery<AiProviderPresetsResponse>({
+    queryKey: ['aiProviderPresets'],
+    queryFn: () => apiClient.get('/ai-providers/presets'),
+  })
+}
+
+export function useAiProvider(id: string) {
+  return useQuery<ApiResponse<AiProvider>>({
+    queryKey: ['aiProvider', id],
+    queryFn: () => apiClient.get(`/ai-providers/${id}`),
+    enabled: !!id,
+  })
+}
+
+export function useCreateAiProvider() {
+  const queryClient = useQueryClient()
+  
+  return useMutation<ApiResponse<AiProvider>, Error, CreateAiProviderInput>({
+    mutationFn: (data) => apiClient.post('/ai-providers', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['aiProviders'] })
+    },
+  })
+}
+
+export function useUpdateAiProvider() {
+  const queryClient = useQueryClient()
+  
+  return useMutation<ApiResponse<AiProvider>, Error, { id: string; data: UpdateAiProviderInput }>({
+    mutationFn: ({ id, data }) => apiClient.put(`/ai-providers/${id}`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['aiProviders'] })
+      queryClient.invalidateQueries({ queryKey: ['aiProvider', variables.id] })
+    },
+  })
+}
+
+export function useDeleteAiProvider() {
+  const queryClient = useQueryClient()
+  
+  return useMutation<ApiResponse<void>, Error, string>({
+    mutationFn: (id) => apiClient.delete(`/ai-providers/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['aiProviders'] })
+    },
+  })
+}
+
+export function useSetDefaultAiProvider() {
+  const queryClient = useQueryClient()
+  
+  return useMutation<ApiResponse<{ id: string; isDefault: boolean }>, Error, string>({
+    mutationFn: (id) => apiClient.post(`/ai-providers/${id}/set-default`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['aiProviders'] })
+    },
+  })
+}
+
+export function useTestAiConnection() {
+  return useMutation<ApiResponse<TestAiConnectionResult>, Error, TestAiConnectionInput>({
+    mutationFn: (data) => apiClient.post('/ai-providers/test', data),
   })
 }

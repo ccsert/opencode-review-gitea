@@ -10,6 +10,7 @@ import {
   ApiKeysPage,
   SettingsPage,
   PlatformsPage,
+  AiProvidersPage,
 } from '@/pages'
 
 export const router = createBrowserRouter([
@@ -48,6 +49,10 @@ export const router = createBrowserRouter([
       {
         path: 'platforms',
         element: <PlatformsPage />,
+      },
+      {
+        path: 'ai-providers',
+        element: <AiProvidersPage />,
       },
       {
         path: 'settings',

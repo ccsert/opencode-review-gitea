@@ -7,35 +7,117 @@ import { eq } from 'drizzle-orm'
 import { ulid } from 'ulid'
 
 import { getDatabase } from '../db/client'
-import { repositories, webhookLogs, reviews, platformCredentials } from '../db/schema/index'
+import { repositories, webhookLogs, reviews, platformCredentials, aiProviders, reviewTemplates } from '../db/schema/index'
 import { 
   createProvider, 
   shouldTriggerReview, 
   getEventDescription,
   ReviewEngine,
   getDefaultTemplate,
-  type WebhookEvent 
+  type WebhookEvent,
+  type ReviewTemplate,
+  type ReviewCategory,
+  type ReviewSeverity
 } from '@opencode-review/core'
 
-// 全局 ReviewEngine 实例（懒加载）
-let reviewEngine: ReviewEngine | null = null
+// ReviewEngine 实例缓存（按配置缓存）
+const reviewEngineCache = new Map<string, ReviewEngine>()
 
-function getReviewEngine(): ReviewEngine {
-  if (!reviewEngine) {
-    reviewEngine = new ReviewEngine({
-      opencode: {
-        port: process.env.OPENCODE_PORT ? parseInt(process.env.OPENCODE_PORT) : undefined,
-        hostname: process.env.OPENCODE_HOSTNAME,
-        serverUrl: process.env.OPENCODE_SERVER_URL,
-      },
-      model: {
-        providerID: process.env.OPENCODE_PROVIDER_ID || 'opencode',
-        modelID: process.env.OPENCODE_MODEL_ID || 'deepseek/deepseek-chat',
-      },
-      debug: process.env.NODE_ENV !== 'production',
-    })
+/**
+ * 获取或创建 ReviewEngine 实例
+ * 支持从数据库读取用户的 AI 供应商配置
+ */
+async function getReviewEngineForUser(userId: string): Promise<ReviewEngine> {
+  const db = getDatabase()
+
+  // 查找用户的默认 AI 供应商
+  let [aiProvider] = await db
+    .select()
+    .from(aiProviders)
+    .where(eq(aiProviders.userId, userId))
+    .orderBy(aiProviders.isDefault)
+    .limit(1)
+  
+  // 如果用户没有配置 AI 供应商，使用环境变量配置
+  if (!aiProvider) {
+    console.log('[ReviewEngine] No AI provider configured for user, using environment config')
+    return getDefaultReviewEngine()
   }
-  return reviewEngine
+
+  // 创建缓存键
+  const cacheKey = `${aiProvider.id}:${aiProvider.updatedAt?.toISOString() || aiProvider.createdAt.toISOString()}`
+  
+  // 检查缓存
+  if (reviewEngineCache.has(cacheKey)) {
+    return reviewEngineCache.get(cacheKey)!
+  }
+
+  console.log(`[ReviewEngine] Creating engine for AI provider: ${aiProvider.name} (${aiProvider.provider})`)
+
+  // 构建模型 ID - 直接模式不需要 provider 前缀
+  const modelID = aiProvider.defaultModel || 'deepseek-chat'
+
+  const engine = new ReviewEngine({
+    opencode: {
+      port: process.env.OPENCODE_PORT ? parseInt(process.env.OPENCODE_PORT, 10) : 4096,
+      hostname: process.env.OPENCODE_HOSTNAME || '127.0.0.1',
+      serverUrl: process.env.OPENCODE_SERVER_URL,
+    },
+    model: {
+      providerID: aiProvider.provider,
+      modelID,
+    },
+    apiKey: aiProvider.apiKey || undefined,
+    baseUrl: aiProvider.baseUrl || undefined,
+    useDirectMode: true, // 使用直接 AI 调用模式，更可靠
+    debug: process.env.NODE_ENV !== 'production',
+  })
+
+  // 更新最后使用时间
+  await db.update(aiProviders)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(aiProviders.id, aiProvider.id))
+
+  // 缓存引擎（限制缓存大小）
+  if (reviewEngineCache.size > 100) {
+    const firstKey = reviewEngineCache.keys().next().value
+    if (firstKey) {
+      reviewEngineCache.delete(firstKey)
+    }
+  }
+  reviewEngineCache.set(cacheKey, engine)
+
+  return engine
+}
+
+/**
+ * 获取默认的 ReviewEngine（使用环境变量配置）
+ */
+function getDefaultReviewEngine(): ReviewEngine {
+  const cacheKey = 'default'
+  
+  if (reviewEngineCache.has(cacheKey)) {
+    return reviewEngineCache.get(cacheKey)!
+  }
+
+  const portEnv = process.env.OPENCODE_PORT
+  const port = portEnv ? parseInt(portEnv, 10) : 4096
+  
+  const engine = new ReviewEngine({
+    opencode: {
+      port: isNaN(port) ? 4096 : port,
+      hostname: process.env.OPENCODE_HOSTNAME || '127.0.0.1',
+      serverUrl: process.env.OPENCODE_SERVER_URL,
+    },
+    model: {
+      providerID: process.env.OPENCODE_PROVIDER_ID || 'deepseek',
+      modelID: process.env.OPENCODE_MODEL_ID || 'deepseek/deepseek-chat',
+    },
+    debug: process.env.NODE_ENV !== 'production',
+  })
+
+  reviewEngineCache.set(cacheKey, engine)
+  return engine
 }
 
 export const webhookRoutes = new Hono()
@@ -55,7 +137,7 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
   c.req.raw.headers.forEach((value: string, key: string) => {
     headers[key.toLowerCase()] = value
   })
-  
+
   // 获取仓库配置
   const [repo] = await db.select()
     .from(repositories)
@@ -197,6 +279,19 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
     }, 400)
   }
 
+  // 调试：显示收到的事件类型
+  const rawEventType = headers['x-gitea-event'] || headers['x-github-event'] || 'unknown'
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[Webhook] Received event:', {
+      provider,
+      rawEventType,
+      action: (payload as any)?.action,
+      hasPullRequest: !!(payload as any)?.pull_request,
+      hasIssue: !!(payload as any)?.issue,
+      isPRComment: !!(payload as any)?.issue?.pull_request,
+    })
+  }
+
   const event = gitProvider.parseWebhookEvent(payload, headers)
 
   // 记录 Webhook 日志
@@ -212,11 +307,14 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
   })
 
   if (!event) {
+    console.log('[Webhook] Event not supported:', rawEventType)
     return c.json({
       success: true,
       data: {
         received: true,
-        eventType: 'unsupported',
+        eventType: rawEventType,
+        supported: false,
+        message: `Event type '${rawEventType}' is not supported. Supported: pull_request, issue_comment (on PR)`,
       },
     })
   }
@@ -359,11 +457,31 @@ async function executeReviewAsync(
 
     console.log(`[Review] Starting AI review for PR #${prNumber} in ${repo.name}`)
 
-    // 获取审查模板（未来可以从数据库获取用户自定义模板）
-    const template = getDefaultTemplate()
+    // 获取审查模板：优先使用仓库关联的模板，否则使用默认模板
+    let template: ReviewTemplate = getDefaultTemplate()
+    
+    if (repo.templateId) {
+      const [customTemplate] = await db.select()
+        .from(reviewTemplates)
+        .where(eq(reviewTemplates.id, repo.templateId))
+      
+      if (customTemplate) {
+        console.log(`[Review] Using custom template: ${customTemplate.name}`)
+        template = {
+          id: customTemplate.id,
+          name: customTemplate.name,
+          description: customTemplate.description || '',
+          systemPrompt: customTemplate.systemPrompt,
+          categories: (customTemplate.categories || ['BUG', 'SECURITY', 'PERFORMANCE', 'STYLE']) as ReviewCategory[],
+          severities: (customTemplate.severities || ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']) as ReviewSeverity[],
+          isSystem: customTemplate.isSystem,
+          isDefault: customTemplate.isDefault,
+        }
+      }
+    }
 
-    // 获取 ReviewEngine 实例
-    const engine = getReviewEngine()
+    // 获取 ReviewEngine 实例（使用用户配置的 AI 供应商）
+    const engine = await getReviewEngineForUser(repo.userId)
 
     // 执行 AI 审查
     const result = await engine.executeReview({

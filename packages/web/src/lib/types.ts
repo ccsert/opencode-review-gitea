@@ -260,3 +260,76 @@ export interface ImportResult {
     webhookSecret?: string
   }>
 }
+
+// AI Provider 类型
+export type AiProviderType = 'openai' | 'anthropic' | 'deepseek' | 'openrouter' | 'ollama' | 'custom'
+
+export interface AiProvider {
+  id: string
+  name: string
+  provider: AiProviderType
+  baseUrl: string | null
+  models: string[]
+  defaultModel: string | null
+  isDefault: boolean
+  isEnabled: boolean
+  config?: {
+    maxTokens?: number
+    temperature?: number
+    timeout?: number
+    [key: string]: unknown
+  }
+  lastUsedAt: string | null
+  createdAt: string
+}
+
+export interface AiProviderPreset {
+  id: AiProviderType
+  name: string
+  baseUrl: string
+  models: string[]
+}
+
+export interface CreateAiProviderInput {
+  name: string
+  provider: AiProviderType
+  baseUrl?: string
+  apiKey?: string
+  models?: string[]
+  defaultModel?: string
+  isDefault?: boolean
+  config?: {
+    maxTokens?: number
+    temperature?: number
+    timeout?: number
+  }
+}
+
+export interface UpdateAiProviderInput {
+  name?: string
+  baseUrl?: string
+  apiKey?: string
+  models?: string[]
+  defaultModel?: string
+  isDefault?: boolean
+  isEnabled?: boolean
+  config?: {
+    maxTokens?: number
+    temperature?: number
+    timeout?: number
+  }
+}
+
+export interface TestAiConnectionInput {
+  provider: AiProviderType
+  baseUrl?: string
+  apiKey?: string
+  model?: string
+}
+
+export interface TestAiConnectionResult {
+  connected: boolean
+  models: string[]
+  message: string
+}
+

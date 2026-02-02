@@ -140,7 +140,7 @@ export function ReviewsPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap gap-4">
-            <div className="relative flex-1 min-w-[200px]">
+            <div className="relative flex-1 min-w-50">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder={t('reviews.searchPlaceholder')}
@@ -159,7 +159,7 @@ export function ReviewsPage() {
                 }))
               }
             >
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-50">
                 <SelectValue placeholder={t('reviews.allRepositories')} />
               </SelectTrigger>
               <SelectContent>
@@ -181,7 +181,7 @@ export function ReviewsPage() {
                 }))
               }
             >
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-35">
                 <SelectValue placeholder={t('reviews.allStatuses')} />
               </SelectTrigger>
               <SelectContent>
@@ -202,7 +202,7 @@ export function ReviewsPage() {
                 }))
               }
             >
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-35">
                 <SelectValue placeholder={t('reviews.allDecisions')} />
               </SelectTrigger>
               <SelectContent>
@@ -322,11 +322,12 @@ export function ReviewsPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-muted-foreground hover:text-foreground"
+                                title={`Open PR #${review.prNumber}`}
                               >
                                 <ExternalLink className="h-3.5 w-3.5" />
                               </a>
                             </div>
-                            <div className="text-sm text-muted-foreground truncate max-w-[300px]">
+                            <div className="text-sm text-muted-foreground truncate max-w-75">
                               {review.prTitle}
                             </div>
                           </div>
@@ -456,7 +457,7 @@ function ReviewDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[80vh]">
+      <DialogContent className="sm:max-w-175 max-h-[80vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {t('reviews.detailTitle')}
@@ -466,6 +467,7 @@ function ReviewDetailDialog({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-foreground"
+                title={`Open PR #${review.prNumber}`}
               >
                 <ExternalLink className="h-4 w-4" />
               </a>
@@ -535,7 +537,7 @@ function ReviewDetailDialog({
               {/* Error */}
               {review.error && (
                 <div>
-                  <Label className="text-muted-foreground mb-2 block flex items-center gap-1">
+                  <Label className="text-muted-foreground mb-2 flex items-center gap-1">
                     <AlertCircle className="h-4 w-4 text-destructive" />
                     {t('reviews.errorMessage')}
                   </Label>

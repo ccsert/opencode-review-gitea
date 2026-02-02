@@ -18,6 +18,7 @@ import { webhookRoutes } from './routes/webhooks'
 import { systemRoutes } from './routes/system'
 import { apiKeyRoutes } from './routes/api-keys'
 import { platformRoutes } from './routes/platforms'
+import { aiProviderRoutes } from './routes/ai-providers'
 import { 
   errorMiddleware, 
   notFoundHandler, 
@@ -55,6 +56,7 @@ const api = new Hono()
   .route('/webhooks', webhookRoutes)
   .route('/api-keys', apiKeyRoutes)
   .route('/platforms', platformRoutes)
+  .route('/ai-providers', aiProviderRoutes)
   .route('/system', systemRoutes)
 
 app.route('/api/v1', api)

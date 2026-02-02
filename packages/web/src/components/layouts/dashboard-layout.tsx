@@ -9,6 +9,7 @@ import {
   Key,
   LogOut,
   Server,
+  Bot,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -22,6 +23,7 @@ const navItems = [
   { key: 'repositories', icon: GitBranch, href: '/repositories' },
   { key: 'reviews', icon: FileSearch, href: '/reviews' },
   { key: 'templates', icon: FileText, href: '/templates' },
+  { key: 'aiProviders', icon: Bot, href: '/ai-providers' },
   { key: 'apiKeys', icon: Key, href: '/api-keys' },
   { key: 'settings', icon: Settings, href: '/settings' },
 ]

@@ -110,12 +110,16 @@ export class GiteaProvider extends BaseProvider {
     number: number, 
     review: CreateReviewRequest
   ): Promise<Review> {
-    // Gitea 的 Review 需要分步：先提交 review comments，再提交 review
-    if (review.comments?.length) {
-      for (const comment of review.comments) {
-        await this.createLineComment(owner, repo, number, comment)
-      }
-    }
+    // 使用 Gitea 的批量 Review API，将所有评论和决策一起提交
+    // API: POST /repos/{owner}/{repo}/pulls/{index}/reviews
+    // 支持 body、comments 数组和 event 一起提交
+    
+    // 构建评论数组（Gitea 格式）
+    const comments = (review.comments || []).map(comment => ({
+      path: comment.path,
+      new_position: comment.line,
+      body: comment.body,
+    }))
 
     const data = await this.fetch<GiteaReview>(
       `/api/v1/repos/${owner}/${repo}/pulls/${number}/reviews`,
@@ -124,6 +128,7 @@ export class GiteaProvider extends BaseProvider {
         body: JSON.stringify({
           body: review.body,
           event: this.mapDecisionToEvent(review.decision),
+          comments: comments.length > 0 ? comments : undefined,
         }),
       }
     )

@@ -183,7 +183,7 @@ export function ApiKeysPage() {
               {t('apiKeys.create')}
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-125">
             <DialogHeader>
               <DialogTitle>{t('apiKeys.createTitle')}</DialogTitle>
               <DialogDescription>
@@ -406,7 +406,7 @@ export function ApiKeysPage() {
 
       {/* Created Key Dialog */}
       <Dialog open={createdKeyDialogOpen} onOpenChange={setCreatedKeyDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-125">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-green-500" />

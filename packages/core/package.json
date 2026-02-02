@@ -40,7 +40,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^2.0.26",
     "@opencode-ai/sdk": "^1.1.48",
+    "ai": "^6.0.67",
     "zod": "^3.22.0"
   },
   "devDependencies": {

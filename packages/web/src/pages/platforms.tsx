@@ -358,7 +358,7 @@ export function PlatformsPage() {
 
       {/* 添加平台对话框 */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-125">
           <DialogHeader>
             <DialogTitle>添加 Git 平台</DialogTitle>
             <DialogDescription>
@@ -454,8 +454,8 @@ export function PlatformsPage() {
 
       {/* 导入仓库对话框 */}
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="sm:max-w-[700px] max-h-[80vh]">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-175 max-h-[80vh]">
+          <DialogHeader className="flex items-center gap-2">
             <DialogTitle className="flex items-center gap-2">
               <GitBranch className="h-5 w-5" />
               选择要导入的仓库
@@ -475,7 +475,7 @@ export function PlatformsPage() {
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-muted-foreground" />
                 <Select value={selectedOrg} onValueChange={handleOrgChange}>
-                  <SelectTrigger className="w-[200px]">
+                  <SelectTrigger className="w-50">
                     <SelectValue placeholder="选择组织" />
                   </SelectTrigger>
                   <SelectContent>
@@ -499,7 +499,7 @@ export function PlatformsPage() {
             )}
 
             {/* 仓库列表 */}
-            <ScrollArea className="h-[400px] rounded-md border p-4">
+            <ScrollArea className="h-100 rounded-md border p-4">
               {isLoadingRepos ? (
                 <div className="space-y-3">
                   {[1, 2, 3, 4, 5].map((i) => (
