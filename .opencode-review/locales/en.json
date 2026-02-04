@@ -1,0 +1,56 @@
+{
+  "webhook": {
+    "list": {
+      "title": "Webhook List",
+      "empty": "No webhooks configured",
+      "loading": "Loading webhooks...",
+      "error": "Failed to load webhooks: {error}",
+      "refresh": "Refresh",
+      "status": {
+        "active": "Active",
+        "inactive": "Inactive"
+      }
+    },
+    "create": {
+      "title": "Create Webhook",
+      "success": "Webhook created successfully",
+      "error": "Failed to create webhook: {error}",
+      "url_label": "URL",
+      "url_placeholder": "https://example.com/webhook",
+      "content_type_label": "Content Type",
+      "secret_label": "Secret (optional)",
+      "secret_placeholder": "Enter webhook secret",
+      "events_label": "Events",
+      "active_label": "Active"
+    },
+    "delete": {
+      "title": "Delete Webhook",
+      "confirm": "Are you sure you want to delete this webhook?",
+      "success": "Webhook deleted successfully",
+      "error": "Failed to delete webhook: {error}",
+      "token_missing": "Repository has no access token configured. Please configure OPENCODE_GIT_TOKEN secret."
+    },
+    "update": {
+      "title": "Update Webhook",
+      "success": "Webhook updated successfully",
+      "error": "Failed to update webhook: {error}"
+    },
+    "errors": {
+      "no_token": "Repository has no access token configured",
+      "invalid_token": "Invalid or expired access token",
+      "permission_denied": "Insufficient permissions to manage webhooks",
+      "not_found": "Webhook not found",
+      "server_error": "Server error: {error}"
+    }
+  },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success"
+  }
+}

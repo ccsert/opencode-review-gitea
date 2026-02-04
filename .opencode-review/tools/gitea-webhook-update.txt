@@ -1,0 +1,25 @@
+Update an existing webhook in a Gitea/Forgejo repository.
+
+This tool allows modifying webhook configuration without deleting and recreating it. Only specified fields will be updated - others remain unchanged.
+
+**Updatable Fields:**
+- URL: Change webhook endpoint
+- Content Type: Switch between json and form
+- Secret: Update or add signature validation secret
+- Events: Modify which events trigger the webhook
+- Active: Enable or disable the webhook
+
+**Update Strategy:**
+- Partial updates supported - only changed fields need to be specified
+- Fetches current configuration and merges changes
+- Preserves unspecified settings
+
+**Use Cases:**
+- Toggle webhook on/off without deletion
+- Update URL when service moves
+- Add or change secret for security
+- Modify event subscriptions
+
+**Returns:**
+- Success message with updated webhook details
+- Error if webhook not found or permissions insufficient

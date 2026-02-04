@@ -1,0 +1,20 @@
+List all webhooks configured for a Gitea/Forgejo repository.
+
+This tool queries webhooks in real-time from the Gitea API, showing both automatically created webhooks and manually configured ones. It does NOT use database persistence - all webhook information is fetched directly from Gitea.
+
+**Real-time Query Features:**
+- Detects webhooks created by the platform
+- Detects webhooks manually configured by users
+- Shows current status (active/inactive)
+- No caching - always shows latest state
+
+**Use Cases:**
+- View all webhooks in repository management interface
+- Check if webhook was deleted in Gitea
+- Verify manually configured webhooks
+- Refresh webhook status
+
+**Returns:**
+- List of all webhooks with ID, URL, status, events, and timestamps
+- Empty message if no webhooks configured
+- Error message if token is missing or invalid

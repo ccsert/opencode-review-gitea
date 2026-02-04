@@ -1,0 +1,23 @@
+Create a new webhook for a Gitea/Forgejo repository.
+
+This tool creates webhooks that can trigger on various repository events. Requires write permissions to the repository.
+
+**Configuration Options:**
+- URL: The endpoint that will receive webhook payloads
+- Content Type: json or form
+- Secret: Optional signature validation secret
+- Events: Which events trigger the webhook (push, pull_request, issue_comment, etc.)
+- Active: Whether webhook is immediately active
+
+**Common Events:**
+- push: Code pushed to repository
+- pull_request: PR opened, closed, or updated
+- pull_request_comment: Comments on PRs
+- issue_comment: Comments on issues
+- issues: Issue opened, closed, or updated
+- create: Branch or tag created
+- delete: Branch or tag deleted
+
+**Returns:**
+- Success message with webhook details
+- Error if token is missing or lacks permissions

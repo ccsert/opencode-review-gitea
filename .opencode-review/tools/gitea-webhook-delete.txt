@@ -1,0 +1,29 @@
+Delete a webhook from a Gitea/Forgejo repository.
+
+This tool fixes the "Repository has no access token configured" error by properly validating token availability and permissions before attempting deletion.
+
+**Error Prevention:**
+- Validates OPENCODE_GIT_TOKEN is configured
+- Verifies token has required permissions
+- Checks webhook exists before deletion
+- Provides clear error messages with resolution steps
+
+**Required Permissions:**
+- Token must have 'write:repository' or 'admin:repo_hook' scope
+- Token must be configured as OPENCODE_GIT_TOKEN secret in repository settings
+- Token must not be expired
+
+**Use Cases:**
+- Remove webhooks from repository management interface
+- Clean up unused or misconfigured webhooks
+- Remove webhooks that were manually created
+
+**Common Errors & Solutions:**
+- "Repository has no access token configured" → Configure OPENCODE_GIT_TOKEN secret
+- "Invalid or expired access token" → Generate new token
+- "Insufficient permissions" → Token needs write:repository scope
+- "Webhook not found" → Webhook already deleted or ID incorrect
+
+**Returns:**
+- Success message with deleted webhook ID
+- Detailed error message if deletion fails

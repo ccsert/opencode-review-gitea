@@ -1,0 +1,56 @@
+{
+  "webhook": {
+    "list": {
+      "title": "Webhook 列表",
+      "empty": "未配置 Webhook",
+      "loading": "正在加载 Webhook...",
+      "error": "加载 Webhook 失败: {error}",
+      "refresh": "刷新",
+      "status": {
+        "active": "活跃",
+        "inactive": "未激活"
+      }
+    },
+    "create": {
+      "title": "创建 Webhook",
+      "success": "Webhook 创建成功",
+      "error": "创建 Webhook 失败: {error}",
+      "url_label": "URL",
+      "url_placeholder": "https://example.com/webhook",
+      "content_type_label": "内容类型",
+      "secret_label": "密钥（可选）",
+      "secret_placeholder": "输入 Webhook 密钥",
+      "events_label": "事件",
+      "active_label": "激活"
+    },
+    "delete": {
+      "title": "删除 Webhook",
+      "confirm": "确定要删除此 Webhook 吗？",
+      "success": "Webhook 删除成功",
+      "error": "删除 Webhook 失败: {error}",
+      "token_missing": "仓库未配置访问令牌。请配置 OPENCODE_GIT_TOKEN 密钥。"
+    },
+    "update": {
+      "title": "更新 Webhook",
+      "success": "Webhook 更新成功",
+      "error": "更新 Webhook 失败: {error}"
+    },
+    "errors": {
+      "no_token": "仓库未配置访问令牌",
+      "invalid_token": "访问令牌无效或已过期",
+      "permission_denied": "权限不足，无法管理 Webhook",
+      "not_found": "Webhook 不存在",
+      "server_error": "服务器错误: {error}"
+    }
+  },
+  "common": {
+    "confirm": "确认",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功"
+  }
+}
