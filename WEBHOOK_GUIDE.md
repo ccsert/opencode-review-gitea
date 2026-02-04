@@ -319,7 +319,7 @@ const create = await giteaWebhookCreate({
   repo: "myrepo",
   url: "https://example.com/webhook",
   content_type: "json",
-  secret: "my-secret-key",
+  secret: "wh_3c8f9a2b1e7d4c5a8b9e6f0d2a1c3b5e",  // Use strong random secret
   events: ["push", "pull_request"],
   active: true
 })
