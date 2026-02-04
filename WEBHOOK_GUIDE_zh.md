@@ -341,7 +341,7 @@ const enable = await giteaWebhookUpdate({
 })
 
 // 5. 不再需要时删除 webhook
-const deleteResult = await giteaWebhookDelete({
+const deleted = await giteaWebhookDelete({
   owner: "myorg",
   repo: "myrepo",
   webhook_id: 123

@@ -28,7 +28,8 @@
       "confirm": "确定要删除此 Webhook 吗？",
       "success": "Webhook 删除成功",
       "error": "删除 Webhook 失败: {error}",
-      "token_missing": "仓库未配置访问令牌。请配置 OPENCODE_GIT_TOKEN 密钥。"
+      "token_missing": "仓库未配置访问令牌。请配置 OPENCODE_GIT_TOKEN 密钥。",
+      "permission_denied_details": "权限不足，无法管理 Webhook。\n\n请确保：\n1. 在仓库设置中配置了 OPENCODE_GIT_TOKEN 密钥\n2. 令牌具有 'write:repository' 或 'admin:repo_hook' 权限\n3. 令牌未过期"
     },
     "update": {
       "title": "更新 Webhook",

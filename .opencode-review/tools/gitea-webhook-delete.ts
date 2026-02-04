@@ -43,13 +43,7 @@ async function giteaFetch(endpoint: string, options: RequestInit = {}) {
       throw new Error(t("webhook.errors.invalid_token"))
     }
     if (response.status === 403) {
-      throw new Error(
-        `${t("webhook.errors.permission_denied")}\n\n` +
-        `Please ensure:\n` +
-        `1. OPENCODE_GIT_TOKEN secret is configured in repository settings\n` +
-        `2. Token has 'write:repository' or 'admin:repo_hook' scope\n` +
-        `3. Token is not expired`
-      )
+      throw new Error(t("webhook.delete.permission_denied_details"))
     }
     if (response.status === 404) {
       throw new Error(t("webhook.errors.not_found"))

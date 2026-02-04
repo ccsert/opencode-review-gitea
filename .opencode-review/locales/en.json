@@ -28,7 +28,8 @@
       "confirm": "Are you sure you want to delete this webhook?",
       "success": "Webhook deleted successfully",
       "error": "Failed to delete webhook: {error}",
-      "token_missing": "Repository has no access token configured. Please configure OPENCODE_GIT_TOKEN secret."
+      "token_missing": "Repository has no access token configured. Please configure OPENCODE_GIT_TOKEN secret.",
+      "permission_denied_details": "Insufficient permissions to manage webhooks.\n\nPlease ensure:\n1. OPENCODE_GIT_TOKEN secret is configured in repository settings\n2. Token has 'write:repository' or 'admin:repo_hook' scope\n3. Token is not expired"
     },
     "update": {
       "title": "Update Webhook",
