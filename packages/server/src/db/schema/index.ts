@@ -119,6 +119,9 @@ export interface RepositoryConfig {
   triggerKeywords?: string[]
 }
 
+/** Webhook 注册状态 */
+export type WebhookStatus = 'pending' | 'active' | 'error' | 'manual'
+
 export const repositories = pgTable('repositories', {
   id: text('id').primaryKey(),
   userId: text('user_id')
@@ -132,6 +135,12 @@ export const repositories = pgTable('repositories', {
   url: text('url').notNull(),
   name: text('name').notNull(),
   webhookSecret: text('webhook_secret'),
+  // Webhook 自动注册相关字段
+  webhookId: integer('webhook_id'),               // 平台返回的 webhook ID，用于删除/更新
+  webhookStatus: text('webhook_status')           // pending: 待注册 | active: 已激活 | error: 注册失败 | manual: 手动配置
+    .$type<WebhookStatus>()
+    .default('pending'),
+  webhookError: text('webhook_error'),            // 注册失败时的错误信息
   // 向后兼容：直接存储的 Token（如果没有关联 platformCredential 则使用此字段）
   accessToken: text('access_token'),
   templateId: text('template_id')

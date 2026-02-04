@@ -3,7 +3,14 @@
  */
 
 import { BaseProvider } from './base'
-import type { ProviderType, ListRepositoriesParams, ListRepositoriesResponse, Organization } from './types'
+import type { 
+  ProviderType, 
+  ListRepositoriesParams, 
+  ListRepositoriesResponse, 
+  Organization,
+  CreateWebhookRequest,
+  Webhook
+} from './types'
 import type {
   Repository, 
   PullRequest, 
@@ -184,6 +191,61 @@ export class GiteaProvider extends BaseProvider {
       hash = signature
     }
     return this.verifyHmacSha256(payload, hash, secret)
+  }
+
+  // ============ Webhook 管理（自动注册）============
+
+  async createWebhook(
+    owner: string,
+    repo: string,
+    webhook: CreateWebhookRequest
+  ): Promise<Webhook> {
+    // Gitea API: POST /api/v1/repos/{owner}/{repo}/hooks
+    const data = await this.fetch<GiteaHook>(
+      `/api/v1/repos/${owner}/${repo}/hooks`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'gitea',
+          active: webhook.active ?? true,
+          config: {
+            url: webhook.url,
+            content_type: 'json',
+            secret: webhook.secret || '',
+          },
+          events: webhook.events || ['pull_request', 'issue_comment'],
+          branch_filter: webhook.branchFilter || '*',
+        }),
+      }
+    )
+    return this.mapWebhook(data)
+  }
+
+  async deleteWebhook(owner: string, repo: string, hookId: number): Promise<void> {
+    // Gitea API: DELETE /api/v1/repos/{owner}/{repo}/hooks/{id}
+    await this.fetch(
+      `/api/v1/repos/${owner}/${repo}/hooks/${hookId}`,
+      { method: 'DELETE' }
+    )
+  }
+
+  async listWebhooks(owner: string, repo: string): Promise<Webhook[]> {
+    // Gitea API: GET /api/v1/repos/{owner}/{repo}/hooks
+    const data = await this.fetch<GiteaHook[]>(
+      `/api/v1/repos/${owner}/${repo}/hooks`
+    )
+    return data.map(hook => this.mapWebhook(hook))
+  }
+
+  private mapWebhook(data: GiteaHook): Webhook {
+    return {
+      id: data.id,
+      type: data.type,
+      active: data.active,
+      url: data.config?.url || '',
+      events: data.events || [],
+      createdAt: new Date(data.created_at),
+    }
   }
 
   parseWebhookEvent(
@@ -399,6 +461,20 @@ export class GiteaProvider extends BaseProvider {
 }
 
 // ============ Gitea API 类型定义 ============
+
+interface GiteaHook {
+  id: number
+  type: string
+  active: boolean
+  config: {
+    url?: string
+    content_type?: string
+    secret?: string
+  }
+  events: string[]
+  created_at: string
+  updated_at: string
+}
 
 interface GiteaRepository {
   id: number

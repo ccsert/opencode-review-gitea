@@ -58,8 +58,14 @@ class ApiClient {
     }
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}))
-      throw new Error(error.message || `HTTP error! status: ${response.status}`)
+      const errorData = await response.json().catch(() => ({}))
+      // 后端返回格式: { success: false, error: { code, message, hint? } }
+      const errorMessage = errorData?.error?.message || errorData?.message || `HTTP error! status: ${response.status}`
+      const error = new Error(errorMessage)
+      // 附加更多信息用于调试
+      ;(error as Error & { code?: string; hint?: string }).code = errorData?.error?.code
+      ;(error as Error & { code?: string; hint?: string }).hint = errorData?.error?.hint
+      throw error
     }
 
     return response.json()

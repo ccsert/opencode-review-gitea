@@ -151,6 +151,78 @@ export interface GitProvider {
     payload: unknown,
     headers: Record<string, string>
   ): WebhookEvent | null
+
+  // ============ Webhook 管理（自动注册）============
+  
+  /**
+   * 创建仓库 Webhook
+   * @param owner 仓库所有者
+   * @param repo 仓库名称
+   * @param webhook Webhook 配置
+   * @returns 创建的 Webhook 信息
+   * @throws ProviderError 如果权限不足或请求失败
+   */
+  createWebhook(
+    owner: string,
+    repo: string,
+    webhook: CreateWebhookRequest
+  ): Promise<Webhook>
+
+  /**
+   * 删除仓库 Webhook
+   * @param owner 仓库所有者
+   * @param repo 仓库名称
+   * @param hookId Webhook ID
+   */
+  deleteWebhook(
+    owner: string,
+    repo: string,
+    hookId: number
+  ): Promise<void>
+
+  /**
+   * 列出仓库的所有 Webhooks（可选实现）
+   */
+  listWebhooks?(
+    owner: string,
+    repo: string
+  ): Promise<Webhook[]>
+}
+
+// ============ Webhook 管理 ============
+
+/**
+ * 创建 Webhook 请求
+ */
+export interface CreateWebhookRequest {
+  /** Webhook 回调 URL */
+  url: string
+  /** Webhook Secret（用于签名验证） */
+  secret?: string
+  /** 订阅的事件类型，默认 ['pull_request', 'issue_comment'] */
+  events?: string[]
+  /** 是否激活，默认 true */
+  active?: boolean
+  /** 分支过滤（Gitea 特性），默认 '*' */
+  branchFilter?: string
+}
+
+/**
+ * Webhook 信息
+ */
+export interface Webhook {
+  /** Webhook ID（平台分配的） */
+  id: number
+  /** Webhook 类型 */
+  type: string
+  /** 是否激活 */
+  active: boolean
+  /** 回调 URL */
+  url: string
+  /** 订阅的事件 */
+  events: string[]
+  /** 创建时间 */
+  createdAt: Date
 }
 
 /**

@@ -22,6 +22,7 @@ const createRepoSchema = z.object({
   webhookSecret: z.string().optional(),
   templateId: z.string().optional(),
   skipValidation: z.boolean().optional(), // 用于测试，跳过仓库连接验证
+  autoRegisterWebhook: z.boolean().optional().default(true), // 默认自动注册 webhook
   config: z.object({
     language: z.string().optional(),
     style: z.enum(['concise', 'detailed', 'strict']).optional(),
@@ -88,6 +89,9 @@ repoRoutes.get('/', async (c) => {
         createdAt: repo.createdAt,
         webhookUrl,
         webhookSecret: repo.webhookSecret,
+        webhookId: repo.webhookId,
+        webhookStatus: repo.webhookStatus,
+        webhookError: repo.webhookError,
       }
     }),
     pagination: {
@@ -112,17 +116,18 @@ repoRoutes.post('/', zValidator('json', createRepoSchema), async (c) => {
   const urlParts = new URL(body.url).pathname.split('/').filter(Boolean)
   const repoName = urlParts.slice(0, 2).join('/')
   const baseUrl = new URL(body.url).origin
+  const [owner, repo] = repoName.split('/')
+
+  // 创建 Provider 实例
+  const provider = createProvider({
+    type: body.provider,
+    baseUrl,
+    token: body.accessToken,
+  })
 
   // 验证连接（除非跳过验证）
   if (!body.skipValidation) {
     try {
-      const provider = createProvider({
-        type: body.provider,
-        baseUrl,
-        token: body.accessToken,
-      })
-      
-      const [owner, repo] = repoName.split('/')
       await provider.getRepository(owner, repo)
     } catch (error) {
       return c.json({
@@ -143,6 +148,45 @@ repoRoutes.post('/', zValidator('json', createRepoSchema), async (c) => {
   const encryptedToken = body.accessToken
 
   const id = ulid()
+  const publicUrl = process.env.PUBLIC_URL || 'http://localhost:3000'
+  const webhookUrl = `${publicUrl}/api/v1/webhooks/${body.provider}/${id}`
+
+  // 尝试自动注册 Webhook
+  let webhookId: number | null = null
+  let webhookStatus: 'pending' | 'active' | 'error' | 'manual' = 'pending'
+  let webhookError: string | null = null
+
+  // 检查 PUBLIC_URL 是否配置（必须是可公网访问的地址）
+  const shouldAutoRegister = body.autoRegisterWebhook !== false && 
+    publicUrl !== 'http://localhost:3000' &&
+    !publicUrl.includes('localhost') &&
+    !publicUrl.includes('127.0.0.1')
+
+  if (shouldAutoRegister) {
+    try {
+      const webhook = await provider.createWebhook(owner, repo, {
+        url: webhookUrl,
+        secret: webhookSecret,
+        events: ['pull_request', 'issue_comment'],
+        active: true,
+      })
+      webhookId = webhook.id
+      webhookStatus = 'active'
+    } catch (error) {
+      webhookStatus = 'error'
+      webhookError = error instanceof Error ? error.message : 'Failed to create webhook'
+      // 不阻止仓库添加，用户可以手动配置或稍后重试
+      console.error(`[Webhook] Failed to auto-register webhook for ${repoName}:`, webhookError)
+    }
+  } else if (body.autoRegisterWebhook !== false) {
+    // PUBLIC_URL 未配置或是本地地址
+    webhookStatus = 'manual'
+    webhookError = publicUrl === 'http://localhost:3000' || publicUrl.includes('localhost')
+      ? 'PUBLIC_URL not configured or is localhost. Please configure a public URL and retry, or manually add webhook in Gitea.'
+      : null
+  } else {
+    webhookStatus = 'manual'
+  }
   
   await db.insert(repositories).values({
     id,
@@ -152,13 +196,14 @@ repoRoutes.post('/', zValidator('json', createRepoSchema), async (c) => {
     name: repoName,
     accessToken: encryptedToken,
     webhookSecret,
+    webhookId,
+    webhookStatus,
+    webhookError,
     templateId: body.templateId,
     config: body.config || {},
     enabled: true,
     reviewCount: 0,
   })
-
-  const webhookUrl = `${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/v1/webhooks/${body.provider}/${id}`
 
   return c.json({
     success: true,
@@ -168,6 +213,20 @@ repoRoutes.post('/', zValidator('json', createRepoSchema), async (c) => {
       name: repoName,
       webhookUrl,
       webhookSecret,
+      webhookStatus,
+      webhookError,
+      webhookId,
+      // 如果需要手动配置，提供指南
+      ...(webhookStatus !== 'active' && {
+        manualSetupRequired: true,
+        setupInstructions: {
+          url: webhookUrl,
+          secret: webhookSecret,
+          events: ['pull_request', 'issue_comment'],
+          contentType: 'application/json',
+          hint: `在 ${body.provider === 'gitea' ? 'Gitea' : body.provider} 仓库设置 > Webhooks 中添加此配置`,
+        },
+      }),
     },
   }, 201)
 })
@@ -211,6 +270,9 @@ repoRoutes.get('/:id', async (c) => {
       updatedAt: repo.updatedAt,
       webhookUrl,
       webhookSecret: repo.webhookSecret,
+      webhookId: repo.webhookId,
+      webhookStatus: repo.webhookStatus,
+      webhookError: repo.webhookError,
     },
   })
 })
@@ -257,7 +319,7 @@ repoRoutes.put('/:id', zValidator('json', updateRepoSchema), async (c) => {
 
 /**
  * DELETE /repositories/:id
- * 删除仓库
+ * 删除仓库（同时尝试删除远程 webhook）
  */
 repoRoutes.delete('/:id', async (c) => {
   const db = getDatabase()
@@ -275,6 +337,29 @@ repoRoutes.delete('/:id', async (c) => {
     }, 404)
   }
 
+  // 尝试删除远程 webhook（如果有）
+  let webhookDeleted = false
+  let webhookDeleteError: string | null = null
+  
+  if (existing.webhookId && existing.accessToken) {
+    try {
+      const baseUrl = new URL(existing.url).origin
+      const provider = createProvider({
+        type: existing.provider as 'gitea' | 'github' | 'gitlab',
+        baseUrl,
+        token: existing.accessToken,
+      })
+      
+      const [owner, repoName] = existing.name.split('/')
+      await provider.deleteWebhook(owner, repoName, existing.webhookId)
+      webhookDeleted = true
+    } catch (error) {
+      // 删除远程 webhook 失败不阻止删除本地仓库记录
+      webhookDeleteError = error instanceof Error ? error.message : 'Unknown error'
+      console.warn(`[Webhook] Failed to delete remote webhook for ${existing.name}:`, webhookDeleteError)
+    }
+  }
+
   await db.delete(repositories).where(eq(repositories.id, id))
 
   return c.json({
@@ -282,6 +367,8 @@ repoRoutes.delete('/:id', async (c) => {
     data: {
       id,
       deleted: true,
+      webhookDeleted,
+      webhookDeleteError,
     },
   })
 })
@@ -340,6 +427,201 @@ repoRoutes.post('/:id/test', async (c) => {
 })
 
 /**
+ * POST /repositories/:id/webhook/register
+ * 手动注册或重试注册 Webhook
+ * 用于初次注册失败后重试，或手动触发注册
+ */
+repoRoutes.post('/:id/webhook/register', async (c) => {
+  const db = getDatabase()
+  const id = c.req.param('id')
+
+  const [repo] = await db.select().from(repositories).where(eq(repositories.id, id))
+
+  if (!repo) {
+    return c.json({
+      success: false,
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Repository not found',
+      },
+    }, 404)
+  }
+
+  if (!repo.accessToken) {
+    return c.json({
+      success: false,
+      error: {
+        code: 'NO_TOKEN',
+        message: 'Repository has no access token configured',
+      },
+    }, 400)
+  }
+
+  const publicUrl = process.env.PUBLIC_URL || 'http://localhost:3000'
+  
+  // 检查 PUBLIC_URL 是否有效
+  if (publicUrl === 'http://localhost:3000' || publicUrl.includes('localhost') || publicUrl.includes('127.0.0.1')) {
+    return c.json({
+      success: false,
+      error: {
+        code: 'INVALID_PUBLIC_URL',
+        message: 'PUBLIC_URL is not configured or is localhost. Webhook registration requires a publicly accessible URL.',
+        hint: 'Please set the PUBLIC_URL environment variable to your server\'s public address',
+      },
+    }, 400)
+  }
+
+  const webhookUrl = `${publicUrl}/api/v1/webhooks/${repo.provider}/${repo.id}`
+  const baseUrl = new URL(repo.url).origin
+  const [owner, repoName] = repo.name.split('/')
+
+  try {
+    const provider = createProvider({
+      type: repo.provider as 'gitea' | 'github' | 'gitlab',
+      baseUrl,
+      token: repo.accessToken,
+    })
+
+    // 如果已经有 webhook，先尝试删除旧的
+    if (repo.webhookId) {
+      try {
+        await provider.deleteWebhook(owner, repoName, repo.webhookId)
+      } catch {
+        // 忽略删除失败，可能 webhook 已经不存在
+      }
+    }
+
+    // 创建新的 webhook
+    const webhook = await provider.createWebhook(owner, repoName, {
+      url: webhookUrl,
+      secret: repo.webhookSecret || '',
+      events: ['pull_request', 'issue_comment'],
+      active: true,
+    })
+
+    // 更新数据库
+    await db.update(repositories)
+      .set({
+        webhookId: webhook.id,
+        webhookStatus: 'active',
+        webhookError: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(repositories.id, id))
+
+    return c.json({
+      success: true,
+      data: {
+        webhookId: webhook.id,
+        webhookUrl,
+        webhookStatus: 'active',
+        message: 'Webhook registered successfully',
+      },
+    })
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to register webhook'
+    
+    // 更新错误状态
+    await db.update(repositories)
+      .set({
+        webhookStatus: 'error',
+        webhookError: errorMessage,
+        updatedAt: new Date(),
+      })
+      .where(eq(repositories.id, id))
+
+    return c.json({
+      success: false,
+      error: {
+        code: 'WEBHOOK_REGISTER_FAILED',
+        message: errorMessage,
+        hint: 'Make sure the access token has admin permissions on the repository',
+      },
+    }, 400)
+  }
+})
+
+/**
+ * DELETE /repositories/:id/webhook
+ * 删除远程 Webhook（不删除仓库）
+ */
+repoRoutes.delete('/:id/webhook', async (c) => {
+  const db = getDatabase()
+  const id = c.req.param('id')
+
+  const [repo] = await db.select().from(repositories).where(eq(repositories.id, id))
+
+  if (!repo) {
+    return c.json({
+      success: false,
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Repository not found',
+      },
+    }, 404)
+  }
+
+  if (!repo.webhookId) {
+    return c.json({
+      success: false,
+      error: {
+        code: 'NO_WEBHOOK',
+        message: 'No webhook registered for this repository',
+      },
+    }, 400)
+  }
+
+  if (!repo.accessToken) {
+    return c.json({
+      success: false,
+      error: {
+        code: 'NO_TOKEN',
+        message: 'Repository has no access token configured',
+      },
+    }, 400)
+  }
+
+  try {
+    const baseUrl = new URL(repo.url).origin
+    const [owner, repoName] = repo.name.split('/')
+    
+    const provider = createProvider({
+      type: repo.provider as 'gitea' | 'github' | 'gitlab',
+      baseUrl,
+      token: repo.accessToken,
+    })
+
+    await provider.deleteWebhook(owner, repoName, repo.webhookId)
+
+    // 更新数据库
+    await db.update(repositories)
+      .set({
+        webhookId: null,
+        webhookStatus: 'manual',
+        webhookError: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(repositories.id, id))
+
+    return c.json({
+      success: true,
+      data: {
+        message: 'Webhook deleted successfully',
+        webhookStatus: 'manual',
+      },
+    })
+  } catch (error) {
+    return c.json({
+      success: false,
+      error: {
+        code: 'WEBHOOK_DELETE_FAILED',
+        message: error instanceof Error ? error.message : 'Failed to delete webhook',
+      },
+    }, 400)
+  }
+})
+
+/**
  * GET /repositories/:id/webhook-url
  * 获取 Webhook URL 配置信息
  */
@@ -382,6 +664,7 @@ const importReposSchema = z.object({
     url: z.string().url(),
   })).min(1, 'At least one repository is required'),
   templateId: z.string().optional(),
+  autoRegisterWebhook: z.boolean().optional().default(true), // 默认自动注册 webhook
   config: z.object({
     language: z.string().optional(),
     style: z.enum(['concise', 'detailed', 'strict']).optional(),
@@ -428,9 +711,32 @@ repoRoutes.post('/import', zValidator('json', importReposSchema), async (c) => {
     error?: string
     webhookUrl?: string
     webhookSecret?: string
+    webhookStatus?: string
+    webhookError?: string
   }> = []
 
   const publicUrl = process.env.PUBLIC_URL || 'http://localhost:3000'
+  
+  // 检查是否应该自动注册 webhook
+  const shouldAutoRegister = body.autoRegisterWebhook !== false && 
+    publicUrl !== 'http://localhost:3000' &&
+    !publicUrl.includes('localhost') &&
+    !publicUrl.includes('127.0.0.1')
+
+  // 创建 provider 实例用于 webhook 注册
+  let provider: ReturnType<typeof createProvider> | null = null
+  if (shouldAutoRegister) {
+    try {
+      provider = createProvider({
+        type: platform.provider as 'gitea' | 'github' | 'gitlab',
+        baseUrl: platform.baseUrl,
+        token: platform.accessToken,
+      })
+    } catch {
+      // 创建 provider 失败，继续但不注册 webhook
+      provider = null
+    }
+  }
 
   for (const repo of body.repositories) {
     try {
@@ -455,6 +761,29 @@ repoRoutes.post('/import', zValidator('json', importReposSchema), async (c) => {
       // 生成 Webhook Secret
       const webhookSecret = `wh_${randomBytes(16).toString('hex')}`
       const id = ulid()
+      const webhookUrl = `${publicUrl}/api/v1/webhooks/${platform.provider}/${id}`
+
+      // 尝试自动注册 webhook
+      let webhookId: number | null = null
+      let webhookStatus: 'pending' | 'active' | 'error' | 'manual' = shouldAutoRegister ? 'pending' : 'manual'
+      let webhookError: string | null = null
+
+      if (shouldAutoRegister && provider) {
+        const [owner, repoName] = repo.fullName.split('/')
+        try {
+          const webhook = await provider.createWebhook(owner, repoName, {
+            url: webhookUrl,
+            secret: webhookSecret,
+            events: ['pull_request', 'issue_comment'],
+            active: true,
+          })
+          webhookId = webhook.id
+          webhookStatus = 'active'
+        } catch (error) {
+          webhookStatus = 'error'
+          webhookError = error instanceof Error ? error.message : 'Failed to create webhook'
+        }
+      }
 
       await db.insert(repositories).values({
         id,
@@ -465,13 +794,14 @@ repoRoutes.post('/import', zValidator('json', importReposSchema), async (c) => {
         url: repo.url,
         name: repo.fullName,
         webhookSecret,
+        webhookId,
+        webhookStatus,
+        webhookError,
         templateId: body.templateId,
         config: body.config || {},
         enabled: true,
         reviewCount: 0,
       })
-
-      const webhookUrl = `${publicUrl}/api/v1/webhooks/${platform.provider}/${id}`
 
       results.push({
         fullName: repo.fullName,
@@ -479,6 +809,8 @@ repoRoutes.post('/import', zValidator('json', importReposSchema), async (c) => {
         id,
         webhookUrl,
         webhookSecret,
+        webhookStatus,
+        webhookError: webhookError || undefined,
       })
     } catch (error) {
       results.push({
@@ -491,13 +823,19 @@ repoRoutes.post('/import', zValidator('json', importReposSchema), async (c) => {
 
   const successCount = results.filter(r => r.success).length
   const failCount = results.filter(r => !r.success).length
+  const webhookActiveCount = results.filter(r => r.webhookStatus === 'active').length
 
   return c.json({
     success: true,
     data: {
       imported: successCount,
       failed: failCount,
+      webhooksRegistered: webhookActiveCount,
       results,
+      // 如果有仓库需要手动配置 webhook，提示用户
+      ...(webhookActiveCount < successCount && {
+        manualSetupHint: `${successCount - webhookActiveCount} repositories need manual webhook configuration`,
+      }),
     },
   }, 201)
 })

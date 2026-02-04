@@ -18,6 +18,11 @@ import {
   Search,
   Loader2,
   Server,
+  Webhook,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  HelpCircle,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -68,9 +73,11 @@ import {
   useUpdateRepository,
   useDeleteRepository,
   useTestRepositoryConnection,
+  useRegisterWebhook,
+  useDeleteWebhook,
   useTemplates,
 } from '@/lib/hooks'
-import type { Repository, ProviderType } from '@/lib/types'
+import type { Repository, ProviderType, WebhookStatus, RepositoryWithWebhook } from '@/lib/types'
 
 // 创建仓库表单 Schema
 const createRepoSchema = (t: (key: string) => string) => z.object({
@@ -103,7 +110,7 @@ export function RepositoriesPage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [webhookDialogOpen, setWebhookDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null)
+  const [selectedRepo, setSelectedRepo] = useState<RepositoryWithWebhook | null>(null)
 
   // API Queries
   const { data: reposData, isLoading } = useRepositories({
@@ -401,6 +408,7 @@ export function RepositoriesPage() {
                     <TableHead>{t('repositories.repository')}</TableHead>
                     <TableHead>{t('repositories.platform')}</TableHead>
                     <TableHead>{t('repositories.status')}</TableHead>
+                    <TableHead>Webhook</TableHead>
                     <TableHead>{t('repositories.reviewCount')}</TableHead>
                     <TableHead>{t('repositories.lastReview')}</TableHead>
                     <TableHead className="text-right">{t('common.actions')}</TableHead>
@@ -440,6 +448,12 @@ export function RepositoriesPage() {
                         <Badge variant={repo.enabled ? 'default' : 'secondary'}>
                           {repo.enabled ? t('repositories.statusActive') : t('repositories.statusInactive')}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <WebhookStatusBadge 
+                          status={repo.webhookStatus} 
+                          error={repo.webhookError}
+                        />
                       </TableCell>
                       <TableCell>{repo.reviewCount}</TableCell>
                       <TableCell>
@@ -585,7 +599,9 @@ function WebhookDialog({
   repoId?: string
 }) {
   const { t } = useTranslation()
-  const { data, isLoading } = useRepository(repoId || '')
+  const { data, isLoading, refetch } = useRepository(repoId || '')
+  const registerMutation = useRegisterWebhook()
+  const deleteMutation = useDeleteWebhook()
 
   const repo = data?.data
 
@@ -594,7 +610,37 @@ function WebhookDialog({
     toast.success(t('repositories.webhookCopiedMessage', { label }))
   }
 
+  const handleRegisterWebhook = async () => {
+    if (!repoId) return
+    try {
+      await registerMutation.mutateAsync(repoId)
+      toast.success('Webhook 注册成功')
+      refetch()
+    } catch (err) {
+      const error = err as Error & { hint?: string }
+      toast.error('Webhook 注册失败', {
+        description: error.hint ? `${error.message} - ${error.hint}` : error.message,
+      })
+    }
+  }
+
+  const handleDeleteWebhook = async () => {
+    if (!repoId) return
+    try {
+      await deleteMutation.mutateAsync(repoId)
+      toast.success('Webhook 已删除')
+      refetch()
+    } catch (err) {
+      const error = err as Error & { hint?: string }
+      toast.error('Webhook 删除失败', {
+        description: error.hint ? `${error.message} - ${error.hint}` : error.message,
+      })
+    }
+  }
+
   if (!repoId) return null
+
+  const webhookStatus = repo?.webhookStatus
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -613,6 +659,54 @@ function WebhookDialog({
           </div>
         ) : repo ? (
           <div className="space-y-4">
+            {/* Webhook 状态卡片 */}
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex items-center gap-3">
+                <Webhook className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">Webhook 状态</p>
+                  <WebhookStatusBadge 
+                    status={webhookStatus} 
+                    error={repo?.webhookError}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {webhookStatus !== 'active' && (
+                  <Button 
+                    size="sm" 
+                    onClick={handleRegisterWebhook}
+                    disabled={registerMutation.isPending}
+                  >
+                    {registerMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    {webhookStatus === 'error' ? '重试注册' : '自动注册'}
+                  </Button>
+                )}
+                {webhookStatus === 'active' && repo?.webhookId && (
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={handleDeleteWebhook}
+                    disabled={deleteMutation.isPending}
+                  >
+                    {deleteMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    删除 Webhook
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {repo?.webhookError && (
+              <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                <p className="font-medium">注册失败原因：</p>
+                <p>{repo.webhookError}</p>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Webhook URL</Label>
               <div className="flex gap-2">
@@ -650,16 +744,18 @@ function WebhookDialog({
               </div>
             </div>
 
-            <div className="rounded-lg border bg-muted/50 p-4 text-sm">
-              <p className="font-medium mb-2">{t('repositories.webhookSetupInstructions')}</p>
-              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                <li>{t('repositories.webhookStep1')}</li>
-                <li>{t('repositories.webhookStep2')}</li>
-                <li>{t('repositories.webhookStep3')}</li>
-                <li>{t('repositories.webhookStep4')}</li>
-                <li>{t('repositories.webhookStep5')}</li>
-              </ol>
-            </div>
+            {webhookStatus !== 'active' && (
+              <div className="rounded-lg border bg-muted/50 p-4 text-sm">
+                <p className="font-medium mb-2">{t('repositories.webhookSetupInstructions')}</p>
+                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                  <li>{t('repositories.webhookStep1')}</li>
+                  <li>{t('repositories.webhookStep2')}</li>
+                  <li>{t('repositories.webhookStep3')}</li>
+                  <li>{t('repositories.webhookStep4')}</li>
+                  <li>{t('repositories.webhookStep5')}</li>
+                </ol>
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -766,5 +862,59 @@ function EditRepoDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// Webhook 状态徽章组件
+function WebhookStatusBadge({ 
+  status, 
+  error 
+}: { 
+  status?: WebhookStatus
+  error?: string | null 
+}) {
+  
+  const config: Record<WebhookStatus, { 
+    icon: React.ReactNode
+    variant: 'default' | 'secondary' | 'destructive' | 'outline'
+    label: string
+  }> = {
+    active: {
+      icon: <CheckCircle2 className="h-3 w-3" />,
+      variant: 'default',
+      label: '已激活',
+    },
+    pending: {
+      icon: <Clock className="h-3 w-3" />,
+      variant: 'secondary',
+      label: '待注册',
+    },
+    error: {
+      icon: <AlertCircle className="h-3 w-3" />,
+      variant: 'destructive',
+      label: '注册失败',
+    },
+    manual: {
+      icon: <HelpCircle className="h-3 w-3" />,
+      variant: 'outline',
+      label: '手动配置',
+    },
+  }
+
+  const statusKey = status || 'manual'
+  const { icon, variant, label } = config[statusKey]
+
+  return (
+    <div className="flex items-center gap-1">
+      <Badge variant={variant} className="gap-1">
+        {icon}
+        {label}
+      </Badge>
+      {status === 'error' && error && (
+        <span className="text-xs text-destructive truncate max-w-32" title={error}>
+          {error}
+        </span>
+      )}
+    </div>
   )
 }

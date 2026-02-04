@@ -33,7 +33,7 @@ import type {
 
 interface RepositoriesResponse {
   success: boolean
-  data: Repository[]
+  data: RepositoryWithWebhook[]
   pagination: PaginationMeta
 }
 
@@ -106,6 +106,32 @@ export function useDeleteRepository() {
 export function useTestRepositoryConnection() {
   return useMutation<ApiResponse<{ success: boolean }>, Error, string>({
     mutationFn: (id) => apiClient.post(`/repositories/${id}/test`),
+  })
+}
+
+// 注册/重试 Webhook
+export function useRegisterWebhook() {
+  const queryClient = useQueryClient()
+  
+  return useMutation<ApiResponse<{ webhookId: number; webhookStatus: string }>, Error, string>({
+    mutationFn: (id) => apiClient.post(`/repositories/${id}/webhook/register`),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ['repositories'] })
+      queryClient.invalidateQueries({ queryKey: ['repository', id] })
+    },
+  })
+}
+
+// 删除 Webhook
+export function useDeleteWebhook() {
+  const queryClient = useQueryClient()
+  
+  return useMutation<ApiResponse<{ message: string }>, Error, string>({
+    mutationFn: (id) => apiClient.delete(`/repositories/${id}/webhook`),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ['repositories'] })
+      queryClient.invalidateQueries({ queryKey: ['repository', id] })
+    },
   })
 }
 

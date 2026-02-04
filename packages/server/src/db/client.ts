@@ -277,6 +277,31 @@ async function runIncrementalMigrations(pglite: PGlite): Promise<void> {
       ADD COLUMN platform_credential_id TEXT REFERENCES platform_credentials(id) ON DELETE SET NULL
     `)
   }
+
+  // 迁移 2: repositories 添加 webhook 自动注册相关字段
+  if (!(await columnExists('repositories', 'webhook_id'))) {
+    console.log(`[Migration] Adding webhook_id to repositories...`)
+    await pglite.exec(`
+      ALTER TABLE repositories 
+      ADD COLUMN webhook_id INTEGER
+    `)
+  }
+
+  if (!(await columnExists('repositories', 'webhook_status'))) {
+    console.log(`[Migration] Adding webhook_status to repositories...`)
+    await pglite.exec(`
+      ALTER TABLE repositories 
+      ADD COLUMN webhook_status TEXT DEFAULT 'pending'
+    `)
+  }
+
+  if (!(await columnExists('repositories', 'webhook_error'))) {
+    console.log(`[Migration] Adding webhook_error to repositories...`)
+    await pglite.exec(`
+      ALTER TABLE repositories 
+      ADD COLUMN webhook_error TEXT
+    `)
+  }
 }
 
 /**

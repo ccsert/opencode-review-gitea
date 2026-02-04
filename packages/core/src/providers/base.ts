@@ -3,7 +3,7 @@
  */
 
 import { createHmac, timingSafeEqual } from 'crypto'
-import type { GitProvider, ProviderType, ProviderError, ListRepositoriesParams, ListRepositoriesResponse, Organization } from './types'
+import type { GitProvider, ProviderType, ProviderError, ListRepositoriesParams, ListRepositoriesResponse, Organization, CreateWebhookRequest, Webhook } from './types'
 import type { 
   Repository, 
   PullRequest, 
@@ -109,4 +109,8 @@ export abstract class BaseProvider implements GitProvider {
   abstract createLineComment(owner: string, repo: string, number: number, comment: LineCommentRequest): Promise<Comment>
   abstract verifyWebhookSignature(payload: string, signature: string, secret: string): boolean
   abstract parseWebhookEvent(payload: unknown, headers: Record<string, string>): WebhookEvent | null
+  
+  // Webhook 管理（自动注册）
+  abstract createWebhook(owner: string, repo: string, webhook: CreateWebhookRequest): Promise<Webhook>
+  abstract deleteWebhook(owner: string, repo: string, hookId: number): Promise<void>
 }

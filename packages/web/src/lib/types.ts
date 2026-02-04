@@ -71,9 +71,15 @@ export interface UpdateRepositoryInput {
   config?: RepositoryConfig
 }
 
+// Webhook 状态类型
+export type WebhookStatus = 'pending' | 'active' | 'error' | 'manual'
+
 export interface RepositoryWithWebhook extends Repository {
   webhookUrl: string
   webhookSecret: string
+  webhookId?: number | null
+  webhookStatus?: WebhookStatus
+  webhookError?: string | null
 }
 
 // Review 类型
