@@ -18,6 +18,8 @@
 - 🏷️ **结构化标签** - 按类型（BUG、SECURITY、PERFORMANCE）和严重程度分类问题
 - �🐳 **Docker 支持** - 预构建镜像，零配置安装
 - 🛡️ **隔离配置** - 使用独立的 `.opencode-review/` 目录，不会与你现有的 `.opencode/` 配置冲突
+- 🔗 **Webhook 管理** - 实时查询和管理 Webhook（无需数据库）
+- 🌐 **国际化支持** - 完整支持中文和英文（zh-CN、en）
 
 ## 📦 安装
 
@@ -211,19 +213,37 @@ export default tool({
 └── .opencode-review/               # 隔离的配置目录
     ├── agents/
     │   ├── code-review.md          # 代码审查 Agent（主）
-    │   └── gitea-assistant.md      # 通用助手 Agent
+    │   ├── gitea-assistant.md      # 通用助手 Agent
+    │   └── webhook-manager.md      # Webhook 管理 Agent
     ├── tools/
     │   ├── gitea-pr-diff.ts        # 获取完整 PR Diff
     │   ├── gitea-pr-files.ts       # 列出变更的文件
     │   ├── gitea-incremental-diff.ts # 获取增量 Diff（仅新变更）
     │   ├── gitea-review.ts         # 提交审查和评论
-    │   └── gitea-comment.ts        # 在 issue/PR 上发表评论
+    │   ├── gitea-comment.ts        # 在 issue/PR 上发表评论
+    │   ├── gitea-webhook-list.ts   # 列出 Webhook（实时）
+    │   ├── gitea-webhook-create.ts # 创建 Webhook
+    │   ├── gitea-webhook-delete.ts # 删除 Webhook
+    │   ├── gitea-webhook-update.ts # 更新 Webhook
+    │   └── i18n.ts                 # 国际化工具
+    ├── locales/
+    │   ├── en.json                 # 英文翻译
+    │   └── zh-CN.json              # 中文翻译
     ├── skills/
     │   └── pr-review/SKILL.md      # 可复用的审查技能
     └── package.json                # 依赖
 ```
 
 > **注意**: 安装后，会在你的项目中创建 `.gitea/workflows/opencode-review.yaml`。
+
+## 🔗 Webhook 管理
+
+本项目包含完整的 Webhook 管理工具。查看 [WEBHOOK_GUIDE.md](WEBHOOK_GUIDE.md) 了解：
+- 实时 Webhook 查询（无需数据库）
+- 创建和删除 Webhook
+- 修复"仓库未配置访问令牌"错误
+- Webhook 安全最佳实践
+- 完整的国际化支持
 
 ## 🔗 相关链接
 

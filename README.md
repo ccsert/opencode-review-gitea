@@ -18,6 +18,8 @@ An AI-powered **automatic code review tool for Gitea/Forgejo PRs**, built on the
 - 🏷️ **Structured Tags** - Categorizes issues by type (BUG, SECURITY, PERFORMANCE) and severity
 - �🐳 **Docker Support** - Zero-config installation with pre-built image
 - 🛡️ **Isolated Configuration** - Uses `.opencode-review/` directory, won't conflict with your existing `.opencode/` setup
+- 🔗 **Webhook Management** - Real-time webhook querying and management (no database required)
+- 🌐 **Internationalization** - Full support for English and Chinese (en, zh-CN)
 
 ## 📦 Installation
 
@@ -211,19 +213,37 @@ export default tool({
 └── .opencode-review/               # Isolated config directory
     ├── agents/
     │   ├── code-review.md          # Code review agent (main)
-    │   └── gitea-assistant.md      # General assistant agent
+    │   ├── gitea-assistant.md      # General assistant agent
+    │   └── webhook-manager.md      # Webhook management agent
     ├── tools/
     │   ├── gitea-pr-diff.ts        # Get full PR diff
     │   ├── gitea-pr-files.ts       # List changed files
     │   ├── gitea-incremental-diff.ts # Get incremental diff (new changes only)
     │   ├── gitea-review.ts         # Submit review with comments
-    │   └── gitea-comment.ts        # Post comments on issues/PRs
+    │   ├── gitea-comment.ts        # Post comments on issues/PRs
+    │   ├── gitea-webhook-list.ts   # List webhooks (real-time)
+    │   ├── gitea-webhook-create.ts # Create webhooks
+    │   ├── gitea-webhook-delete.ts # Delete webhooks
+    │   ├── gitea-webhook-update.ts # Update webhooks
+    │   └── i18n.ts                 # Internationalization utilities
+    ├── locales/
+    │   ├── en.json                 # English translations
+    │   └── zh-CN.json              # Chinese translations
     ├── skills/
     │   └── pr-review/SKILL.md      # Reusable review skill
     └── package.json                # Dependencies
 ```
 
 > **Note**: After installation, `.gitea/workflows/opencode-review.yaml` will be created in your project.
+
+## 🔗 Webhook Management
+
+This project includes comprehensive webhook management tools. See [WEBHOOK_GUIDE.md](WEBHOOK_GUIDE.md) for:
+- Real-time webhook querying (no database)
+- Creating and deleting webhooks
+- Fixing "Repository has no access token configured" errors
+- Webhook security best practices
+- Full internationalization support
 
 ## 🔗 Related Links
 
