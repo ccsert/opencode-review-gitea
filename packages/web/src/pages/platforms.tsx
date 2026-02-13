@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -67,14 +68,14 @@ import type { Platform, RemoteRepository, ProviderType, ImportResult } from '@/l
 type ImportResultItem = ImportResult['results'][0]
 
 // 创建平台凭证表单 Schema
-const createPlatformSchema = z.object({
+const createPlatformSchema = (t: (key: string, options?: Record<string, unknown>) => string) => z.object({
   provider: z.enum(['gitea']),
-  baseUrl: z.string().url('请输入有效的平台地址'),
-  name: z.string().min(1, '请输入平台名称').max(50, '名称过长'),
-  accessToken: z.string().min(1, '请输入访问令牌'),
+  baseUrl: z.string().url(t('platforms.validation.baseUrlInvalid')),
+  name: z.string().min(1, t('platforms.validation.nameRequired')).max(50, t('platforms.validation.nameTooLong')),
+  accessToken: z.string().min(1, t('platforms.validation.accessTokenRequired')),
 })
 
-type CreatePlatformFormData = z.infer<typeof createPlatformSchema>
+type CreatePlatformFormData = z.input<ReturnType<typeof createPlatformSchema>>
 
 // Provider 配置
 const providerConfig: Record<ProviderType, { label: string; color: string; icon: string }> = {
@@ -86,6 +87,7 @@ const providerConfig: Record<ProviderType, { label: string; color: string; icon:
 const ALL_ORG_VALUE = '__all__'
 
 export function PlatformsPage() {
+  const { t } = useTranslation()
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
@@ -115,7 +117,7 @@ export function PlatformsPage() {
 
   // Form
   const form = useForm<CreatePlatformFormData>({
-    resolver: zodResolver(createPlatformSchema),
+    resolver: zodResolver(createPlatformSchema(t)),
     defaultValues: {
       provider: 'gitea',
       baseUrl: '',
@@ -133,15 +135,15 @@ export function PlatformsPage() {
     try {
       const result = await createMutation.mutateAsync(data)
       if (result.success) {
-        toast.success('平台添加成功', {
-          description: '现在可以从该平台选择仓库了',
+        toast.success(t('platforms.addSuccess'), {
+          description: t('platforms.addSuccessDescription'),
         })
         setAddDialogOpen(false)
         form.reset()
       }
     } catch (error) {
-      toast.error('添加失败', {
-        description: error instanceof Error ? error.message : '请检查平台地址和令牌是否正确',
+      toast.error(t('platforms.addFailed'), {
+        description: error instanceof Error ? error.message : t('platforms.addFailedDescription'),
       })
     }
   }
@@ -151,12 +153,12 @@ export function PlatformsPage() {
     
     try {
       await deleteMutation.mutateAsync(selectedPlatform.id)
-      toast.success('平台已删除')
+      toast.success(t('platforms.deleteSuccess'))
       setDeleteDialogOpen(false)
       setSelectedPlatform(null)
     } catch (error) {
-      toast.error('删除失败', {
-        description: error instanceof Error ? error.message : '未知错误',
+      toast.error(t('platforms.deleteFailed'), {
+        description: error instanceof Error ? error.message : t('common.unknownError'),
       })
     }
   }
@@ -214,18 +216,18 @@ export function PlatformsPage() {
         }
         
         if (failed > 0) {
-          toast.warning(`导入完成：${imported} 个成功，${failed} 个失败`, {
-            description: '部分仓库可能已存在',
+          toast.warning(t('platforms.importCompleted', { imported, failed }), {
+            description: t('platforms.importPartialDescription'),
           })
         } else {
-          toast.success(`成功导入 ${imported} 个仓库`)
+          toast.success(t('platforms.importSuccess', { imported }))
         }
         setImportDialogOpen(false)
         setSelectedRepos(new Set())
       }
     } catch (error) {
-      toast.error('导入失败', {
-        description: error instanceof Error ? error.message : '未知错误',
+      toast.error(t('platforms.importFailed'), {
+        description: error instanceof Error ? error.message : t('common.unknownError'),
       })
     }
   }
@@ -233,7 +235,7 @@ export function PlatformsPage() {
   const handleCopy = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text)
     setCopiedField(field)
-    toast.success('已复制到剪贴板')
+    toast.success(t('common.copiedToClipboard'))
     setTimeout(() => setCopiedField(null), 2000)
   }
 
@@ -248,14 +250,14 @@ export function PlatformsPage() {
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">平台管理</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t('platforms.title')}</h1>
           <p className="text-muted-foreground">
-            配置 Git 平台凭证，快速导入仓库
+            {t('platforms.description')}
           </p>
         </div>
         <Button onClick={() => setAddDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          添加平台
+          {t('platforms.addPlatform')}
         </Button>
       </div>
 
@@ -277,12 +279,12 @@ export function PlatformsPage() {
       ) : platforms.length === 0 ? (
         <EmptyState
           icon={Server}
-          title="还没有配置平台"
-          description="添加 Git 平台凭证后，可以快速选择并导入仓库"
+          title={t('platforms.emptyTitle')}
+          description={t('platforms.emptyDescription')}
           action={
             <Button onClick={() => setAddDialogOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              添加平台
+              {t('platforms.addPlatform')}
             </Button>
           }
         />
@@ -312,7 +314,7 @@ export function PlatformsPage() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => handleOpenImport(platform)}>
                         <Import className="mr-2 h-4 w-4" />
-                        导入仓库
+                        {t('platforms.importRepositories')}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
@@ -323,7 +325,7 @@ export function PlatformsPage() {
                         }}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
-                        删除
+                        {t('common.delete')}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -336,8 +338,8 @@ export function PlatformsPage() {
                   </Badge>
                   <span>
                     {platform.lastUsedAt 
-                      ? `最近使用: ${new Date(platform.lastUsedAt).toLocaleDateString()}`
-                      : '从未使用'
+                      ? t('platforms.lastUsed', { date: new Date(platform.lastUsedAt).toLocaleDateString() })
+                      : t('platforms.neverUsed')
                     }
                   </span>
                 </div>
@@ -347,7 +349,7 @@ export function PlatformsPage() {
                   onClick={() => handleOpenImport(platform)}
                 >
                   <GitBranch className="mr-2 h-4 w-4" />
-                  选择仓库
+                  {t('platforms.selectRepositories')}
                   <ChevronRight className="ml-auto h-4 w-4" />
                 </Button>
               </CardContent>
@@ -360,21 +362,21 @@ export function PlatformsPage() {
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent className="sm:max-w-125">
           <DialogHeader>
-            <DialogTitle>添加 Git 平台</DialogTitle>
+            <DialogTitle>{t('platforms.addDialogTitle')}</DialogTitle>
             <DialogDescription>
-              配置平台访问凭证后，可以直接选择仓库进行导入
+              {t('platforms.addDialogDescription')}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={form.handleSubmit(handleCreate)}>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="provider">平台类型</Label>
+                <Label htmlFor="provider">{t('platforms.providerType')}</Label>
                 <Select
                   value={form.watch('provider')}
                   onValueChange={(v) => form.setValue('provider', v as 'gitea')}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="选择平台类型" />
+                    <SelectValue placeholder={t('platforms.selectProviderType')} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="gitea">
@@ -388,10 +390,10 @@ export function PlatformsPage() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="name">平台名称</Label>
+                <Label htmlFor="name">{t('platforms.name')}</Label>
                 <Input
                   id="name"
-                  placeholder="例如：公司 Gitea"
+                  placeholder={t('platforms.namePlaceholder')}
                   {...form.register('name')}
                 />
                 {form.formState.errors.name && (
@@ -402,10 +404,10 @@ export function PlatformsPage() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="baseUrl">平台地址</Label>
+                <Label htmlFor="baseUrl">{t('platforms.baseUrl')}</Label>
                 <Input
                   id="baseUrl"
-                  placeholder="https://gitea.example.com"
+                  placeholder={t('platforms.baseUrlPlaceholder')}
                   {...form.register('baseUrl')}
                 />
                 {form.formState.errors.baseUrl && (
@@ -416,11 +418,11 @@ export function PlatformsPage() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="accessToken">访问令牌 (Access Token)</Label>
+                <Label htmlFor="accessToken">{t('platforms.accessToken')}</Label>
                 <Input
                   id="accessToken"
                   type="password"
-                  placeholder="在平台设置中生成的个人访问令牌"
+                  placeholder={t('platforms.accessTokenPlaceholder')}
                   {...form.register('accessToken')}
                 />
                 {form.formState.errors.accessToken && (
@@ -429,7 +431,7 @@ export function PlatformsPage() {
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  需要 repo 读取权限，用于获取仓库列表和提交 Review
+                  {t('platforms.accessTokenHint')}
                 </p>
               </div>
             </div>
@@ -439,13 +441,13 @@ export function PlatformsPage() {
                 variant="outline"
                 onClick={() => setAddDialogOpen(false)}
               >
-                取消
+                {t('common.cancel')}
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>
                 {createMutation.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                添加平台
+                {t('platforms.addPlatform')}
               </Button>
             </DialogFooter>
           </form>
@@ -458,12 +460,12 @@ export function PlatformsPage() {
           <DialogHeader className="flex items-center gap-2">
             <DialogTitle className="flex items-center gap-2">
               <GitBranch className="h-5 w-5" />
-              选择要导入的仓库
+              {t('platforms.selectRepositoriesTitle')}
             </DialogTitle>
             <DialogDescription>
               {selectedPlatform && (
                 <span className="flex items-center gap-1">
-                  从 <strong>{selectedPlatform.name}</strong> 选择仓库
+                  {t('platforms.selectRepositoriesFrom', { name: selectedPlatform.name })}
                 </span>
               )}
             </DialogDescription>
@@ -476,10 +478,10 @@ export function PlatformsPage() {
                 <Building2 className="h-4 w-4 text-muted-foreground" />
                 <Select value={selectedOrg} onValueChange={handleOrgChange}>
                   <SelectTrigger className="w-50">
-                    <SelectValue placeholder="选择组织" />
+                    <SelectValue placeholder={t('platforms.selectOrganization')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ALL_ORG_VALUE}>全部仓库</SelectItem>
+                    <SelectItem value={ALL_ORG_VALUE}>{t('platforms.allRepositories')}</SelectItem>
                     {organizations.map((org) => (
                       <SelectItem key={org.id} value={org.name}>
                         {org.name}
@@ -512,7 +514,7 @@ export function PlatformsPage() {
               ) : repositories.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                   <GitBranch className="h-8 w-8 mb-2" />
-                  <p>没有找到仓库</p>
+                  <p>{t('platforms.noRepositoriesFound')}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -524,7 +526,7 @@ export function PlatformsPage() {
                       onCheckedChange={handleSelectAll}
                     />
                     <Label htmlFor="selectAll" className="text-sm font-medium cursor-pointer">
-                      全选 ({selectedRepos.size}/{repositories.length})
+                      {t('platforms.selectAll', { selected: selectedRepos.size, total: repositories.length })}
                     </Label>
                   </div>
 
@@ -572,7 +574,7 @@ export function PlatformsPage() {
                       onClick={() => setRepoPage(p => p + 1)}
                       disabled={isLoadingRepos}
                     >
-                      加载更多
+                      {t('platforms.loadMore')}
                     </Button>
                   )}
                 </div>
@@ -583,14 +585,14 @@ export function PlatformsPage() {
           <DialogFooter>
             <div className="flex items-center justify-between w-full">
               <span className="text-sm text-muted-foreground">
-                已选择 {selectedRepos.size} 个仓库
+                {t('platforms.selectedRepositories', { count: selectedRepos.size })}
               </span>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   onClick={() => setImportDialogOpen(false)}
                 >
-                  取消
+                  {t('common.cancel')}
                 </Button>
                 <Button
                   onClick={handleImport}
@@ -599,7 +601,7 @@ export function PlatformsPage() {
                   {importMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  导入 {selectedRepos.size > 0 && `(${selectedRepos.size})`}
+                  {t('platforms.importSelected', { count: selectedRepos.size })}
                 </Button>
               </div>
             </div>
@@ -611,10 +613,10 @@ export function PlatformsPage() {
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="删除平台"
-        description={`确定要删除平台 "${selectedPlatform?.name}" 吗？此操作不可撤销。已导入的仓库不会被删除。`}
-        confirmText="删除"
-        cancelText="取消"
+        title={t('platforms.deleteTitle')}
+        description={t('platforms.deleteDescription', { name: selectedPlatform?.name || '' })}
+        confirmText={t('common.delete')}
+        cancelText={t('common.cancel')}
         variant="destructive"
         onConfirm={handleDelete}
         loading={deleteMutation.isPending}
@@ -626,10 +628,10 @@ export function PlatformsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Check className="h-5 w-5 text-green-500" />
-              Webhook 配置信息
+              {t('platforms.webhookConfigTitle')}
             </DialogTitle>
             <DialogDescription>
-              请将以下信息配置到 Gitea 仓库的 Webhook 设置中
+              {t('platforms.webhookConfigDescription')}
             </DialogDescription>
           </DialogHeader>
           
@@ -688,13 +690,13 @@ export function PlatformsPage() {
                     
                     {/* 配置说明 */}
                     <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-                      <p className="font-medium mb-1">配置步骤：</p>
+                      <p className="font-medium mb-1">{t('platforms.webhookSetupSteps')}</p>
                       <ol className="list-decimal list-inside space-y-0.5">
-                        <li>进入仓库设置 → Webhooks → 添加 Webhook</li>
-                        <li>粘贴上方 URL 到目标地址</li>
-                        <li>粘贴上方 Secret 到密钥字段</li>
-                        <li>选择事件：Pull Request、Issue Comment</li>
-                        <li>Content Type 选择 application/json</li>
+                        <li>{t('platforms.webhookStep1')}</li>
+                        <li>{t('platforms.webhookStep2')}</li>
+                        <li>{t('platforms.webhookStep3')}</li>
+                        <li>{t('platforms.webhookStep4')}</li>
+                        <li>{t('platforms.webhookStep5')}</li>
                       </ol>
                     </div>
                   </CardContent>
@@ -705,7 +707,7 @@ export function PlatformsPage() {
           
           <DialogFooter>
             <Button onClick={() => setImportResultDialogOpen(false)}>
-              完成
+              {t('platforms.done')}
             </Button>
           </DialogFooter>
         </DialogContent>

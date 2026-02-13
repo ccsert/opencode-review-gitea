@@ -64,16 +64,16 @@ import {
 import type { AiProvider, AiProviderType, AiProviderPreset } from '@/lib/types'
 
 // 创建 AI 供应商表单 Schema
-const createProviderSchema = z.object({
-  name: z.string().min(1, '请输入供应商名称').max(50, '名称过长'),
+const createProviderSchema = (t: (key: string, options?: Record<string, unknown>) => string) => z.object({
+  name: z.string().min(1, t('aiProviders.validation.nameRequired')).max(50, t('aiProviders.validation.nameTooLong')),
   provider: z.enum(['openai', 'anthropic', 'deepseek', 'openrouter', 'ollama', 'custom']),
-  baseUrl: z.string().url('请输入有效的 URL').optional().or(z.literal('')),
+  baseUrl: z.string().url(t('aiProviders.validation.baseUrlInvalid')).optional().or(z.literal('')),
   apiKey: z.string().optional(),
   defaultModel: z.string().optional(),
   isDefault: z.boolean().optional(),
 })
 
-type CreateProviderFormData = z.infer<typeof createProviderSchema>
+type CreateProviderFormData = z.input<ReturnType<typeof createProviderSchema>>
 
 // Provider 配置
 const providerConfig: Record<AiProviderType, { label: string; color: string; icon: string; needsKey: boolean }> = {
@@ -82,7 +82,7 @@ const providerConfig: Record<AiProviderType, { label: string; color: string; ico
   deepseek: { label: 'DeepSeek', color: 'bg-blue-500', icon: '🔍', needsKey: true },
   openrouter: { label: 'OpenRouter', color: 'bg-purple-500', icon: '🌐', needsKey: true },
   ollama: { label: 'Ollama', color: 'bg-gray-600', icon: '🦙', needsKey: false },
-  custom: { label: '自定义', color: 'bg-slate-500', icon: '⚙️', needsKey: true },
+  custom: { label: 'Custom', color: 'bg-slate-500', icon: '⚙️', needsKey: true },
 }
 
 export function AiProvidersPage() {
@@ -104,7 +104,7 @@ export function AiProvidersPage() {
 
   // Form
   const form = useForm<CreateProviderFormData>({
-    resolver: zodResolver(createProviderSchema),
+    resolver: zodResolver(createProviderSchema(t)),
     defaultValues: {
       name: '',
       provider: 'deepseek',

@@ -223,7 +223,7 @@ export function RepositoriesPage() {
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => navigate('/platforms')}>
             <Server className="mr-2 h-4 w-4" />
-            从平台导入
+            {t('repositories.importFromPlatform')}
           </Button>
           <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
             <DialogTrigger asChild>
@@ -408,7 +408,7 @@ export function RepositoriesPage() {
                     <TableHead>{t('repositories.repository')}</TableHead>
                     <TableHead>{t('repositories.platform')}</TableHead>
                     <TableHead>{t('repositories.status')}</TableHead>
-                    <TableHead>Webhook</TableHead>
+                    <TableHead>{t('repositories.webhook')}</TableHead>
                     <TableHead>{t('repositories.reviewCount')}</TableHead>
                     <TableHead>{t('repositories.lastReview')}</TableHead>
                     <TableHead className="text-right">{t('common.actions')}</TableHead>
@@ -614,11 +614,11 @@ function WebhookDialog({
     if (!repoId) return
     try {
       await registerMutation.mutateAsync(repoId)
-      toast.success('Webhook 注册成功')
+      toast.success(t('repositories.webhookRegisterSuccess'))
       refetch()
     } catch (err) {
       const error = err as Error & { hint?: string }
-      toast.error('Webhook 注册失败', {
+      toast.error(t('repositories.webhookRegisterFailed'), {
         description: error.hint ? `${error.message} - ${error.hint}` : error.message,
       })
     }
@@ -628,11 +628,11 @@ function WebhookDialog({
     if (!repoId) return
     try {
       await deleteMutation.mutateAsync(repoId)
-      toast.success('Webhook 已删除')
+      toast.success(t('repositories.webhookDeleteSuccess'))
       refetch()
     } catch (err) {
       const error = err as Error & { hint?: string }
-      toast.error('Webhook 删除失败', {
+      toast.error(t('repositories.webhookDeleteFailed'), {
         description: error.hint ? `${error.message} - ${error.hint}` : error.message,
       })
     }
@@ -664,7 +664,7 @@ function WebhookDialog({
               <div className="flex items-center gap-3">
                 <Webhook className="h-5 w-5 text-muted-foreground" />
                 <div>
-                  <p className="font-medium">Webhook 状态</p>
+                  <p className="font-medium">{t('repositories.webhookStatus')}</p>
                   <WebhookStatusBadge 
                     status={webhookStatus} 
                     error={repo?.webhookError}
@@ -681,7 +681,7 @@ function WebhookDialog({
                     {registerMutation.isPending && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
-                    {webhookStatus === 'error' ? '重试注册' : '自动注册'}
+                    {webhookStatus === 'error' ? t('repositories.webhookRetryRegister') : t('repositories.webhookAutoRegister')}
                   </Button>
                 )}
                 {webhookStatus === 'active' && repo?.webhookId && (
@@ -694,7 +694,7 @@ function WebhookDialog({
                     {deleteMutation.isPending && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
-                    删除 Webhook
+                    {t('repositories.webhookDelete')}
                   </Button>
                 )}
               </div>
@@ -702,7 +702,7 @@ function WebhookDialog({
 
             {repo?.webhookError && (
               <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                <p className="font-medium">注册失败原因：</p>
+                <p className="font-medium">{t('repositories.webhookFailureReason')}</p>
                 <p>{repo.webhookError}</p>
               </div>
             )}
@@ -718,7 +718,7 @@ function WebhookDialog({
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => copyToClipboard(repo.webhookUrl || '', 'Webhook URL')}
+                  onClick={() => copyToClipboard(repo.webhookUrl || '', t('repositories.webhookUrl'))}
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
@@ -737,7 +737,7 @@ function WebhookDialog({
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => copyToClipboard(repo.webhookSecret || '', 'Webhook Secret')}
+                  onClick={() => copyToClipboard(repo.webhookSecret || '', t('repositories.webhookSecret'))}
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
@@ -873,7 +873,8 @@ function WebhookStatusBadge({
   status?: WebhookStatus
   error?: string | null 
 }) {
-  
+  const { t } = useTranslation()
+
   const config: Record<WebhookStatus, { 
     icon: React.ReactNode
     variant: 'default' | 'secondary' | 'destructive' | 'outline'
@@ -882,22 +883,22 @@ function WebhookStatusBadge({
     active: {
       icon: <CheckCircle2 className="h-3 w-3" />,
       variant: 'default',
-      label: '已激活',
+      label: t('repositories.webhookStatusActive'),
     },
     pending: {
       icon: <Clock className="h-3 w-3" />,
       variant: 'secondary',
-      label: '待注册',
+      label: t('repositories.webhookStatusPending'),
     },
     error: {
       icon: <AlertCircle className="h-3 w-3" />,
       variant: 'destructive',
-      label: '注册失败',
+      label: t('repositories.webhookStatusError'),
     },
     manual: {
       icon: <HelpCircle className="h-3 w-3" />,
       variant: 'outline',
-      label: '手动配置',
+      label: t('repositories.webhookStatusManual'),
     },
   }
 
