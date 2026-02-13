@@ -19,7 +19,7 @@ import { createProvider } from '@opencode-review/core'
 
 // 创建平台凭证 Schema
 const createPlatformSchema = z.object({
-  provider: z.enum(['gitea']), // 暂时只支持 Gitea
+  provider: z.enum(['gitea', 'gitlab']),
   baseUrl: z.string().url('Invalid platform URL'),
   name: z.string().min(1, 'Name is required').max(50, 'Name too long'),
   accessToken: z.string().min(1, 'Access token is required'),
@@ -196,7 +196,7 @@ platformRoutes.put('/:id', zValidator('json', updatePlatformSchema), async (c) =
   if (body.accessToken) {
     try {
       const provider = createProvider({
-        type: existing.provider as 'gitea',
+        type: existing.provider as 'gitea' | 'gitlab',
         baseUrl: existing.baseUrl,
         token: body.accessToken,
       })
@@ -291,7 +291,7 @@ platformRoutes.get('/:id/repositories', zValidator('query', listReposQuerySchema
 
   try {
     const provider = createProvider({
-      type: platform.provider as 'gitea',
+      type: platform.provider as 'gitea' | 'gitlab',
       baseUrl: platform.baseUrl,
       token: platform.accessToken,
     })
@@ -367,7 +367,7 @@ platformRoutes.get('/:id/organizations', async (c) => {
 
   try {
     const provider = createProvider({
-      type: platform.provider as 'gitea',
+      type: platform.provider as 'gitea' | 'gitlab',
       baseUrl: platform.baseUrl,
       token: platform.accessToken,
     })

@@ -217,7 +217,7 @@
     "importPartialDescription": "Some repositories may already exist",
     "importFailed": "Import failed",
     "webhookConfigTitle": "Webhook Configuration",
-    "webhookConfigDescription": "Please configure the following information in your Gitea repository webhook settings",
+    "webhookConfigDescription": "Please configure the following information in your repository webhook settings",
     "webhookSetupSteps": "Setup Steps:",
     "webhookStep1": "Go to repository settings → Webhooks → Add Webhook",
     "webhookStep2": "Paste the URL above into target URL",
@@ -265,6 +265,8 @@
     "errorMessage": "Error message",
     "noComments": "No comments",
     "viewOnGitea": "View on Gitea",
+    "viewOnGitlab": "View on GitLab",
+    "viewOnPlatform": "View on {{provider}}",
     "pagination": {
       "total": "Total {{count}} records, Page {{page}} / {{totalPages}}",
       "previous": "Previous",

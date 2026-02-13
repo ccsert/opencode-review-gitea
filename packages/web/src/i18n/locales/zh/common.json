@@ -218,7 +218,7 @@
     "importPartialDescription": "部分仓库可能已存在",
     "importFailed": "导入失败",
     "webhookConfigTitle": "Webhook 配置信息",
-    "webhookConfigDescription": "请将以下信息配置到 Gitea 仓库的 Webhook 设置中",
+    "webhookConfigDescription": "请将以下信息配置到仓库的 Webhook 设置中",
     "webhookSetupSteps": "配置步骤：",
     "webhookStep1": "进入仓库设置 → Webhooks → 添加 Webhook",
     "webhookStep2": "粘贴上方 URL 到目标地址",
@@ -266,6 +266,8 @@
     "errorMessage": "错误信息",
     "noComments": "暂无评论",
     "viewOnGitea": "在 Gitea 上查看",
+    "viewOnGitlab": "在 GitLab 上查看",
+    "viewOnPlatform": "在 {{provider}} 上查看",
     "pagination": {
       "total": "共 {{count}} 条记录，第 {{page}} / {{totalPages}} 页",
       "previous": "上一页",

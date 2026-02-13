@@ -4,7 +4,7 @@
 
 import { createHmac, timingSafeEqual } from 'crypto'
 import type { GitProvider, ProviderType, ProviderError, ListRepositoriesParams, ListRepositoriesResponse, Organization, CreateWebhookRequest, Webhook } from './types'
-import type { 
+import type {
   Repository, 
   PullRequest, 
   ChangedFile, 
@@ -35,7 +35,7 @@ export abstract class BaseProvider implements GitProvider {
     const response = await fetch(url, {
       ...options,
       headers: {
-        'Authorization': this.getAuthHeader(),
+        ...this.getAuthHeaders(),
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         ...options.headers,
@@ -53,7 +53,15 @@ export abstract class BaseProvider implements GitProvider {
   }
 
   /**
-   * 获取认证 Header
+   * 获取认证 Headers
+   * 子类可覆盖以支持不同的认证方式（如 GitLab 使用 PRIVATE-TOKEN 头）
+   */
+  protected getAuthHeaders(): Record<string, string> {
+    return { 'Authorization': this.getAuthHeader() }
+  }
+
+  /**
+   * 获取认证 Header 值
    * 子类可覆盖以支持不同的认证方式
    */
   protected getAuthHeader(): string {

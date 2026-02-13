@@ -238,11 +238,11 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
           id: ulid(),
           repositoryId,
           eventType: 'signature_invalid',
-          deliveryId: headers['x-gitea-delivery'] || headers['x-github-delivery'],
+          deliveryId: headers['x-gitea-delivery'] || headers['x-github-delivery'] || headers['x-gitlab-event-uuid'],
           payload: JSON.parse(rawBody),
           headers,
           processed: false,
-          error: `Invalid webhook signature. Expected header: x-gitea-signature (format: sha256=...), Received: ${signature || 'none'}`,
+          error: `Invalid webhook signature for ${provider} provider. Received: ${signature || 'none'}`,
         })
 
         return c.json({
@@ -280,7 +280,7 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
   }
 
   // 调试：显示收到的事件类型
-  const rawEventType = headers['x-gitea-event'] || headers['x-github-event'] || 'unknown'
+  const rawEventType = headers['x-gitea-event'] || headers['x-github-event'] || headers['x-gitlab-event'] || 'unknown'
   if (process.env.NODE_ENV !== 'production') {
     console.log('[Webhook] Received event:', {
       provider,
@@ -300,7 +300,7 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
     id: logId,
     repositoryId,
     eventType: event?.type || 'unknown',
-    deliveryId: headers['x-gitea-delivery'] || headers['x-github-delivery'],
+    deliveryId: headers['x-gitea-delivery'] || headers['x-github-delivery'] || headers['x-gitlab-event-uuid'],
     payload: payload as any,
     headers,
     processed: false,

@@ -69,7 +69,7 @@ type ImportResultItem = ImportResult['results'][0]
 
 // 创建平台凭证表单 Schema
 const createPlatformSchema = (t: (key: string, options?: Record<string, unknown>) => string) => z.object({
-  provider: z.enum(['gitea']),
+  provider: z.enum(['gitea', 'gitlab']),
   baseUrl: z.string().url(t('platforms.validation.baseUrlInvalid')),
   name: z.string().min(1, t('platforms.validation.nameRequired')).max(50, t('platforms.validation.nameTooLong')),
   accessToken: z.string().min(1, t('platforms.validation.accessTokenRequired')),
@@ -373,7 +373,7 @@ export function PlatformsPage() {
                 <Label htmlFor="provider">{t('platforms.providerType')}</Label>
                 <Select
                   value={form.watch('provider')}
-                  onValueChange={(v) => form.setValue('provider', v as 'gitea')}
+                  onValueChange={(v) => form.setValue('provider', v as 'gitea' | 'gitlab')}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={t('platforms.selectProviderType')} />
@@ -384,7 +384,12 @@ export function PlatformsPage() {
                         🍵 Gitea
                       </span>
                     </SelectItem>
-                    {/* GitHub 和 GitLab 暂不支持 */}
+                    <SelectItem value="gitlab">
+                      <span className="flex items-center gap-2">
+                        🦊 GitLab
+                      </span>
+                    </SelectItem>
+                    {/* GitHub 暂不支持 */}
                   </SelectContent>
                 </Select>
               </div>
