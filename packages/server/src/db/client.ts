@@ -233,6 +233,7 @@ export async function runMigrations(): Promise<void> {
 
     -- Create indexes
     CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
+    CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
     CREATE INDEX IF NOT EXISTS idx_platform_credentials_user ON platform_credentials(user_id);
     CREATE INDEX IF NOT EXISTS idx_repos_user ON repositories(user_id);
     CREATE INDEX IF NOT EXISTS idx_repos_platform_credential ON repositories(platform_credential_id);
@@ -335,7 +336,7 @@ export async function seedDatabase(): Promise<void> {
       )
     `)
     
-    console.log(`[Database] Created default admin user (password: ${adminPassword})`)
+    console.log(`[Database] Default admin user created. Set ADMIN_PASSWORD env var to configure.`)
   } else {
     console.log(`[Database] Admin user already exists`)
   }

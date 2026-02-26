@@ -4,12 +4,14 @@
 
 import { GiteaProvider } from './gitea'
 import { GitLabProvider } from './gitlab'
+import { GitHubProvider } from './github'
 import type { GitProvider, ProviderConfig, ProviderType } from './types'
 
 export * from './types'
 export { BaseProvider } from './base'
 export { GiteaProvider } from './gitea'
 export { GitLabProvider } from './gitlab'
+export { GitHubProvider } from './github'
 
 /**
  * 创建 Provider 实例
@@ -19,7 +21,7 @@ export function createProvider(config: ProviderConfig): GitProvider {
     case 'gitea':
       return new GiteaProvider(config.baseUrl, config.token)
     case 'github':
-      throw new Error('GitHub provider not implemented yet')
+      return new GitHubProvider(config.baseUrl, config.token)
     case 'gitlab':
       return new GitLabProvider(config.baseUrl, config.token)
     default:
@@ -45,8 +47,7 @@ export function createProviderFromEnv(env: Record<string, string | undefined> = 
   if (env.GITHUB_SERVER_URL && env.GITHUB_TOKEN && !env.GITEA_SERVER_URL) {
     // 检查是否真的是 GitHub
     if (env.GITHUB_SERVER_URL.includes('github.com')) {
-      // TODO: 未来支持 GitHub
-      return null
+      return new GitHubProvider('https://api.github.com', env.GITHUB_TOKEN)
     }
     // 可能是 Gitea 使用 GitHub 风格的变量名
     return new GiteaProvider(env.GITHUB_SERVER_URL, env.GITHUB_TOKEN)
@@ -59,5 +60,5 @@ export function createProviderFromEnv(env: Record<string, string | undefined> = 
  * 获取支持的 Provider 类型列表
  */
 export function getSupportedProviders(): ProviderType[] {
-  return ['gitea', 'gitlab']
+  return ['gitea', 'github', 'gitlab']
 }

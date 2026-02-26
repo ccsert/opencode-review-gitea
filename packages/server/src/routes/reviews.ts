@@ -10,6 +10,7 @@ import { z } from 'zod'
 import { getDatabase } from '../db/client'
 import { reviews, repositories } from '../db/schema/index'
 import { authMiddleware } from '../middleware/auth'
+import { executeReviewForRetry } from '../services/review-executor'
 
 export const reviewRoutes = new Hono()
 
@@ -350,7 +351,10 @@ reviewRoutes.post('/:id/retry', async (c) => {
     })
     .where(eq(reviews.id, id))
 
-  // TODO: 触发重新执行 Review
+  // Fire and forget the retry execution
+  executeReviewForRetry(id, repo).catch((err) => {
+    console.error(`[Review Retry] Failed for review ${id}:`, err);
+  });
 
   return c.json({
     success: true,

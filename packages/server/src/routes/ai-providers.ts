@@ -12,6 +12,7 @@ import { ulid } from 'ulid'
 import { getDatabase } from '../db/client'
 import { aiProviders, PREDEFINED_PROVIDERS, type PredefinedProviderKey } from '../db/schema/index'
 import { authMiddleware } from '../middleware/auth'
+import { encrypt, decrypt, isEncrypted } from '../utils/crypto'
 
 // ============ Schema 定义 ============
 
@@ -159,7 +160,9 @@ aiProviderRoutes.get('/default', async (c) => {
       name: provider.name,
       provider: provider.provider,
       baseUrl: provider.baseUrl,
-      apiKey: provider.apiKey, // 在实际调用时需要
+      apiKey: provider.apiKey && isEncrypted(provider.apiKey)
+        ? decrypt(provider.apiKey)
+        : provider.apiKey,
       defaultModel: provider.defaultModel,
       config: provider.config,
     },
@@ -199,14 +202,23 @@ aiProviderRoutes.post('/', zValidator('json', createProviderSchema), async (c) =
       ))
   }
 
-  // TODO: 实现 API Key 加密存储
+
+  let encryptedApiKey: string | null = null
+  if (body.apiKey) {
+    try {
+      encryptedApiKey = encrypt(body.apiKey)
+    } catch {
+      encryptedApiKey = body.apiKey // fallback if ENCRYPTION_KEY not set
+    }
+  }
+
   await db.insert(aiProviders).values({
     id,
     userId,
     name: body.name,
     provider: body.provider,
     baseUrl,
-    apiKey: body.apiKey || null,
+    apiKey: encryptedApiKey,
     models,
     defaultModel: body.defaultModel || models[0] || null,
     isDefault: body.isDefault || false,
@@ -320,7 +332,13 @@ aiProviderRoutes.put('/:id', zValidator('json', updateProviderSchema), async (c)
 
   if (body.name !== undefined) updateData.name = body.name
   if (body.baseUrl !== undefined) updateData.baseUrl = body.baseUrl
-  if (body.apiKey !== undefined) updateData.apiKey = body.apiKey
+  if (body.apiKey !== undefined) {
+    try {
+      updateData.apiKey = body.apiKey ? encrypt(body.apiKey) : body.apiKey
+    } catch {
+      updateData.apiKey = body.apiKey // fallback
+    }
+  }
   if (body.models !== undefined) updateData.models = body.models
   if (body.defaultModel !== undefined) updateData.defaultModel = body.defaultModel
   if (body.isDefault !== undefined) updateData.isDefault = body.isDefault

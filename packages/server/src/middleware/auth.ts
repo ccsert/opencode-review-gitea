@@ -12,9 +12,7 @@ import { getDatabase } from '../db/client'
 import { users, apiKeys } from '../db/schema/index'
 
 // JWT 密钥（从环境变量获取）
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'opencode-review-secret-change-in-production'
-)
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!)
 
 // 定义用户上下文类型
 export interface AuthUser {

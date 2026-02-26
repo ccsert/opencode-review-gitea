@@ -14,6 +14,7 @@ import { getDatabase } from '../db/client'
 import { platformCredentials } from '../db/schema/index'
 import { authMiddleware } from '../middleware/auth'
 import { createProvider } from '@opencode-review/core'
+import { encrypt, decrypt, isEncrypted } from '../utils/crypto'
 
 // ============ Schema 定义 ============
 
@@ -102,14 +103,20 @@ platformRoutes.post('/', zValidator('json', createPlatformSchema), async (c) => 
 
   const id = ulid()
   
-  // TODO: 实现 Token 加密存储
+  let tokenToStore = body.accessToken
+  try {
+    tokenToStore = encrypt(body.accessToken)
+  } catch {
+    // ENCRYPTION_KEY not set, store plaintext (warn logged at startup)
+  }
+  
   await db.insert(platformCredentials).values({
     id,
     userId,
     provider: body.provider,
     baseUrl: body.baseUrl.replace(/\/$/, ''), // 移除尾部斜杠
     name: body.name,
-    accessToken: body.accessToken,
+    accessToken: tokenToStore,
   })
 
   return c.json({
@@ -210,6 +217,13 @@ platformRoutes.put('/:id', zValidator('json', updatePlatformSchema), async (c) =
         },
       }, 400)
     }
+
+    // Encrypt the token before storing
+    try {
+      body.accessToken = encrypt(body.accessToken)
+    } catch {
+      // ENCRYPTION_KEY not set, store plaintext
+    }
   }
 
   await db
@@ -290,10 +304,14 @@ platformRoutes.get('/:id/repositories', zValidator('query', listReposQuerySchema
   }
 
   try {
+    const token = platform.accessToken && isEncrypted(platform.accessToken)
+      ? decrypt(platform.accessToken)
+      : platform.accessToken
+
     const provider = createProvider({
       type: platform.provider as 'gitea' | 'gitlab',
       baseUrl: platform.baseUrl,
-      token: platform.accessToken,
+      token,
     })
 
     let result
@@ -366,10 +384,14 @@ platformRoutes.get('/:id/organizations', async (c) => {
   }
 
   try {
+    const token = platform.accessToken && isEncrypted(platform.accessToken)
+      ? decrypt(platform.accessToken)
+      : platform.accessToken
+
     const provider = createProvider({
       type: platform.provider as 'gitea' | 'gitlab',
       baseUrl: platform.baseUrl,
-      token: platform.accessToken,
+      token,
     })
 
     const organizations = await provider.listUserOrganizations()

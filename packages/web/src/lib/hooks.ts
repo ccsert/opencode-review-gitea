@@ -33,8 +33,10 @@ import type {
 
 interface RepositoriesResponse {
   success: boolean
-  data: RepositoryWithWebhook[]
-  pagination: PaginationMeta
+  data: {
+    items: RepositoryWithWebhook[]
+    pagination: PaginationMeta
+  }
 }
 
 interface RepositoryListParams {

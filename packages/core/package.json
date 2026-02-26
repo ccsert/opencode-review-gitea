@@ -36,18 +36,16 @@
     "dev": "tsc --watch",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@ai-sdk/openai-compatible": "^2.0.26",
-    "@opencode-ai/sdk": "^1.1.48",
-    "ai": "^6.0.67",
-    "zod": "^3.22.0"
+    "@mastra/core": "^1.1.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@types/bun": "^1.1.0",
     "@types/node": "^20.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^4.0.18"
   }
 }

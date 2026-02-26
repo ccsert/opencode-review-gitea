@@ -7,118 +7,15 @@ import { eq } from 'drizzle-orm'
 import { ulid } from 'ulid'
 
 import { getDatabase } from '../db/client'
-import { repositories, webhookLogs, reviews, platformCredentials, aiProviders, reviewTemplates } from '../db/schema/index'
+import { repositories, webhookLogs, reviews, platformCredentials } from '../db/schema/index'
 import { 
   createProvider, 
   shouldTriggerReview, 
   getEventDescription,
-  ReviewEngine,
-  getDefaultTemplate,
-  type WebhookEvent,
-  type ReviewTemplate,
-  type ReviewCategory,
-  type ReviewSeverity
 } from '@opencode-review/core'
+import { decrypt, isEncrypted } from '../utils/crypto'
+import { executeReviewAsync } from '../services/review-executor'
 
-// ReviewEngine 实例缓存（按配置缓存）
-const reviewEngineCache = new Map<string, ReviewEngine>()
-
-/**
- * 获取或创建 ReviewEngine 实例
- * 支持从数据库读取用户的 AI 供应商配置
- */
-async function getReviewEngineForUser(userId: string): Promise<ReviewEngine> {
-  const db = getDatabase()
-
-  // 查找用户的默认 AI 供应商
-  let [aiProvider] = await db
-    .select()
-    .from(aiProviders)
-    .where(eq(aiProviders.userId, userId))
-    .orderBy(aiProviders.isDefault)
-    .limit(1)
-  
-  // 如果用户没有配置 AI 供应商，使用环境变量配置
-  if (!aiProvider) {
-    console.log('[ReviewEngine] No AI provider configured for user, using environment config')
-    return getDefaultReviewEngine()
-  }
-
-  // 创建缓存键
-  const cacheKey = `${aiProvider.id}:${aiProvider.updatedAt?.toISOString() || aiProvider.createdAt.toISOString()}`
-  
-  // 检查缓存
-  if (reviewEngineCache.has(cacheKey)) {
-    return reviewEngineCache.get(cacheKey)!
-  }
-
-  console.log(`[ReviewEngine] Creating engine for AI provider: ${aiProvider.name} (${aiProvider.provider})`)
-
-  // 构建模型 ID - 直接模式不需要 provider 前缀
-  const modelID = aiProvider.defaultModel || 'deepseek-chat'
-
-  const engine = new ReviewEngine({
-    opencode: {
-      port: process.env.OPENCODE_PORT ? parseInt(process.env.OPENCODE_PORT, 10) : 4096,
-      hostname: process.env.OPENCODE_HOSTNAME || '127.0.0.1',
-      serverUrl: process.env.OPENCODE_SERVER_URL,
-    },
-    model: {
-      providerID: aiProvider.provider,
-      modelID,
-    },
-    apiKey: aiProvider.apiKey || undefined,
-    baseUrl: aiProvider.baseUrl || undefined,
-    useDirectMode: true, // 使用直接 AI 调用模式，更可靠
-    debug: process.env.NODE_ENV !== 'production',
-  })
-
-  // 更新最后使用时间
-  await db.update(aiProviders)
-    .set({ lastUsedAt: new Date() })
-    .where(eq(aiProviders.id, aiProvider.id))
-
-  // 缓存引擎（限制缓存大小）
-  if (reviewEngineCache.size > 100) {
-    const firstKey = reviewEngineCache.keys().next().value
-    if (firstKey) {
-      reviewEngineCache.delete(firstKey)
-    }
-  }
-  reviewEngineCache.set(cacheKey, engine)
-
-  return engine
-}
-
-/**
- * 获取默认的 ReviewEngine（使用环境变量配置）
- */
-function getDefaultReviewEngine(): ReviewEngine {
-  const cacheKey = 'default'
-  
-  if (reviewEngineCache.has(cacheKey)) {
-    return reviewEngineCache.get(cacheKey)!
-  }
-
-  const portEnv = process.env.OPENCODE_PORT
-  const port = portEnv ? parseInt(portEnv, 10) : 4096
-  
-  const engine = new ReviewEngine({
-    opencode: {
-      port: isNaN(port) ? 4096 : port,
-      hostname: process.env.OPENCODE_HOSTNAME || '127.0.0.1',
-      serverUrl: process.env.OPENCODE_SERVER_URL,
-    },
-    model: {
-      providerID: process.env.OPENCODE_PROVIDER_ID || 'deepseek',
-      modelID: process.env.OPENCODE_MODEL_ID || 'deepseek/deepseek-chat',
-    },
-    debug: process.env.NODE_ENV !== 'production',
-  })
-
-  reviewEngineCache.set(cacheKey, engine)
-  return engine
-}
 
 export const webhookRoutes = new Hono()
 
@@ -165,13 +62,13 @@ webhookRoutes.post('/:provider/:repositoryId', async (c) => {
   }
 
   // 获取 Access Token（优先从平台凭证获取，向后兼容直接存储的 Token）
-  let accessToken = repo.accessToken
+  let accessToken = repo.accessToken && isEncrypted(repo.accessToken) ? decrypt(repo.accessToken) : repo.accessToken
   if (repo.platformCredentialId) {
     const [platform] = await db.select()
       .from(platformCredentials)
       .where(eq(platformCredentials.id, repo.platformCredentialId))
     if (platform) {
-      accessToken = platform.accessToken
+      accessToken = platform.accessToken && isEncrypted(platform.accessToken) ? decrypt(platform.accessToken) : platform.accessToken
     }
   }
 
@@ -434,117 +331,6 @@ webhookRoutes.post('/:provider', async (c) => {
   })
 })
 
-/**
- * 异步执行 Review
- */
-async function executeReviewAsync(
-  reviewId: string,
-  repo: typeof repositories.$inferSelect,
-  event: WebhookEvent,
-  provider: ReturnType<typeof createProvider>
-) {
-  const db = getDatabase()
-  const startTime = Date.now()
-
-  try {
-    // 更新状态为 processing
-    await db.update(reviews)
-      .set({ status: 'processing' })
-      .where(eq(reviews.id, reviewId))
-
-    const [owner, repoName] = repo.name.split('/')
-    const prNumber = event.pullRequest.number
-
-    console.log(`[Review] Starting AI review for PR #${prNumber} in ${repo.name}`)
-
-    // 获取审查模板：优先使用仓库关联的模板，否则使用默认模板
-    let template: ReviewTemplate = getDefaultTemplate()
-    
-    if (repo.templateId) {
-      const [customTemplate] = await db.select()
-        .from(reviewTemplates)
-        .where(eq(reviewTemplates.id, repo.templateId))
-      
-      if (customTemplate) {
-        console.log(`[Review] Using custom template: ${customTemplate.name}`)
-        template = {
-          id: customTemplate.id,
-          name: customTemplate.name,
-          description: customTemplate.description || '',
-          systemPrompt: customTemplate.systemPrompt,
-          categories: (customTemplate.categories || ['BUG', 'SECURITY', 'PERFORMANCE', 'STYLE']) as ReviewCategory[],
-          severities: (customTemplate.severities || ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']) as ReviewSeverity[],
-          isSystem: customTemplate.isSystem,
-          isDefault: customTemplate.isDefault,
-        }
-      }
-    }
-
-    // 获取 ReviewEngine 实例（使用用户配置的 AI 供应商）
-    const engine = await getReviewEngineForUser(repo.userId)
-
-    // 执行 AI 审查
-    const result = await engine.executeReview({
-      provider,
-      repository: {
-        owner,
-        repo: repoName,
-        fullName: repo.name,
-      },
-      pullRequest: {
-        number: prNumber,
-        title: event.pullRequest.title,
-        author: event.pullRequest.author.login,
-        baseBranch: event.pullRequest.base?.ref || 'main',
-        headBranch: event.pullRequest.head?.ref || 'unknown',
-      },
-      template,
-      config: {
-        language: 'zh-CN',
-        style: 'detailed',
-      },
-    })
-
-    if (!result.success) {
-      throw new Error(result.error || 'Review execution failed')
-    }
-
-    // 更新 Review 记录
-    await db.update(reviews)
-      .set({
-        status: 'completed',
-        decision: result.decision || 'COMMENT',
-        summary: result.summary,
-        commentsCount: result.commentsCount || 0,
-        model: process.env.OPENCODE_MODEL_ID || 'deepseek/deepseek-chat',
-        tokensUsed: result.tokensUsed,
-        durationMs: result.durationMs || (Date.now() - startTime),
-        completedAt: new Date(),
-      })
-      .where(eq(reviews.id, reviewId))
-
-    // 更新仓库统计
-    await db.update(repositories)
-      .set({
-        reviewCount: repo.reviewCount + 1,
-        lastReviewAt: new Date(),
-      })
-      .where(eq(repositories.id, repo.id))
-
-    console.log(`[Review] Completed review ${reviewId} in ${result.durationMs || (Date.now() - startTime)}ms`)
-  } catch (error) {
-    console.error(`[Review] Failed:`, error)
-    
-    await db.update(reviews)
-      .set({
-        status: 'failed',
-        error: error instanceof Error ? error.message : String(error),
-        durationMs: Date.now() - startTime,
-        completedAt: new Date(),
-      })
-      .where(eq(reviews.id, reviewId))
-  }
-}
 
 /**
  * GET /webhooks/:provider/:repositoryId/test

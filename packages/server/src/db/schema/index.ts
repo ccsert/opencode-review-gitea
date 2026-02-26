@@ -50,7 +50,10 @@ export const apiKeys = pgTable('api_keys', {
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
-})
+}, (table) => ({
+  userIdx: index('idx_api_keys_user_id').on(table.userId),
+  keyHashIdx: index('idx_api_keys_key_hash').on(table.keyHash),
+}))
 
 export type ApiKey = typeof apiKeys.$inferSelect
 export type NewApiKey = typeof apiKeys.$inferInsert

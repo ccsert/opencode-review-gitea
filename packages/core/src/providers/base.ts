@@ -28,28 +28,41 @@ export abstract class BaseProvider implements GitProvider {
    */
   protected async fetch<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    timeoutMs: number = 30_000
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`
-    
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...this.getAuthHeaders(),
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...options.headers,
-      },
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => '')
-      throw new Error(
-        `${this.name} API error: ${response.status} ${response.statusText}${errorBody ? ` - ${errorBody}` : ''}`
-      )
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          ...this.getAuthHeaders(),
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...options.headers,
+        },
+      })
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '')
+        throw new Error(
+          `${this.name} API error: ${response.status} ${response.statusText}${errorBody ? ` - ${errorBody}` : ''}`
+        )
+      }
+
+      return response.json()
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error(`${this.name} API request timed out after ${timeoutMs}ms: ${endpoint}`)
+      }
+      throw error
+    } finally {
+      clearTimeout(timeout)
     }
-
-    return response.json()
   }
 
   /**

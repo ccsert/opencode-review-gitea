@@ -51,7 +51,7 @@ export function DashboardPage() {
   const { data: reviewsData, isLoading: reviewsLoading } = useReviews({ limit: 5 })
 
   const stats = statsData?.data
-  const repos = reposData?.data || []
+  const repos = reposData?.data?.items || []
   const recentReviews = reviewsData?.data?.items || []
 
   // 计算成功率

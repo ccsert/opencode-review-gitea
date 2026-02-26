@@ -206,8 +206,8 @@ export function RepositoriesPage() {
     }
   }
 
-  const repos = reposData?.data || []
-  const pagination = reposData?.pagination
+  const repos = reposData?.data?.items || []
+  const pagination = reposData?.data?.pagination
   const navigate = useNavigate()
 
   return (
