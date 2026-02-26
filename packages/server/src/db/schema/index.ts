@@ -64,6 +64,7 @@ export const reviewTemplates = pgTable('review_templates', {
   id: text('id').primaryKey(),
   userId: text('user_id')
     .references(() => users.id, { onDelete: 'cascade' }),
+  orgId: text('org_id'),  // 多用户预留
   name: text('name').notNull(),
   description: text('description'),
   systemPrompt: text('system_prompt').notNull(),
@@ -130,6 +131,7 @@ export const repositories = pgTable('repositories', {
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
+  orgId: text('org_id'),  // 多用户预留
   // 关联平台凭证（推荐方式，Token 集中管理）
   platformCredentialId: text('platform_credential_id')
     .references(() => platformCredentials.id, { onDelete: 'set null' }),
@@ -297,3 +299,65 @@ export const PREDEFINED_PROVIDERS = {
 } as const
 
 export type PredefinedProviderKey = keyof typeof PREDEFINED_PROVIDERS
+
+// ============ Agent Threads 表 ============
+// Agent 对话线程
+
+export const agentThreads = pgTable(
+  "agent_threads",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    orgId: text("org_id"), // 多用户预留
+    title: text("title"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => ({
+    userIdx: index("idx_agent_threads_user").on(table.userId),
+  }),
+);
+
+export type AgentThread = typeof agentThreads.$inferSelect;
+export type NewAgentThread = typeof agentThreads.$inferInsert;
+
+// ============ Agent Messages 表 ============
+// Agent 对话消息
+
+export const agentMessages = pgTable(
+  "agent_messages",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => agentThreads.id, { onDelete: "cascade" }),
+    role: text("role").notNull(), // 'user' | 'assistant' | 'tool'
+    content: text("content"),
+    toolCalls: jsonb("tool_calls").$type<
+      Array<{
+        id: string;
+        name: string;
+        args: Record<string, unknown>;
+        result?: unknown;
+      }>
+    >(),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    threadIdx: index("idx_agent_messages_thread").on(
+      table.threadId,
+      table.createdAt,
+    ),
+  }),
+);
+
+export type AgentMessage = typeof agentMessages.$inferSelect;
+export type NewAgentMessage = typeof agentMessages.$inferInsert;

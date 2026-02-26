@@ -231,6 +231,28 @@ export async function runMigrations(): Promise<void> {
       updated_at TIMESTAMPTZ
     );
 
+    -- Agent Threads table (AI Agent 对话线程)
+    CREATE TABLE IF NOT EXISTS agent_threads (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      org_id TEXT,
+      title TEXT,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ
+    );
+
+    -- Agent Messages table (Agent 对话消息)
+    CREATE TABLE IF NOT EXISTS agent_messages (
+      id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL REFERENCES agent_threads(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      content TEXT,
+      tool_calls JSONB,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
     -- Create indexes
     CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
     CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
@@ -246,6 +268,8 @@ export async function runMigrations(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_ai_providers_user ON ai_providers(user_id);
     CREATE INDEX IF NOT EXISTS idx_ai_providers_provider ON ai_providers(provider);
     CREATE INDEX IF NOT EXISTS idx_ai_providers_default ON ai_providers(user_id, is_default);
+    CREATE INDEX IF NOT EXISTS idx_agent_threads_user ON agent_threads(user_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_messages_thread ON agent_messages(thread_id, created_at);
   `)
   
   // 增量迁移：为已存在的表添加缺失的列
@@ -301,6 +325,24 @@ async function runIncrementalMigrations(pglite: PGlite): Promise<void> {
     await pglite.exec(`
       ALTER TABLE repositories 
       ADD COLUMN webhook_error TEXT
+    `)
+  }
+
+  // 迁移 3: review_templates 添加 org_id 列
+  if (!(await columnExists('review_templates', 'org_id'))) {
+    console.log(`[Migration] Adding org_id to review_templates...`)
+    await pglite.exec(`
+      ALTER TABLE review_templates 
+      ADD COLUMN org_id TEXT
+    `)
+  }
+
+  // 迁移 4: repositories 添加 org_id 列
+  if (!(await columnExists('repositories', 'org_id'))) {
+    console.log(`[Migration] Adding org_id to repositories...`)
+    await pglite.exec(`
+      ALTER TABLE repositories 
+      ADD COLUMN org_id TEXT
     `)
   }
 }
