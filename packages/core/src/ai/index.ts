@@ -1,26 +1,18 @@
 /**
- * AI 模块 - OpenCode SDK 集成 + 直接 AI 调用
+ * AI Module - Mastra Agent integration for code review
  */
 
-export {
-  OpenCodeClient,
-  createClient,
-  getGlobalClient,
-  resetGlobalClient
-} from './client'
+// Structured output schemas
+export { reviewCommentSchema, reviewResultSchema } from "./schemas";
+export type { ReviewOutput, ReviewComment } from "./schemas";
 
-export type { 
-  OpenCodeClientConfig, 
-  PromptOptions, 
-  PromptResult 
-} from './client'
+// AI provider configuration
+export { resolveModelId, resolveModelConfig } from "./provider";
+export type { AIProviderConfig } from "./provider";
 
-export {
-  DirectAIClient,
-  createDirectClient,
-} from './direct-client'
+// Mastra Agent factory
+export { createReviewAgent } from "./agent";
+export type { ReviewAgentConfig } from "./agent";
 
-export type {
-  DirectAIConfig,
-  DirectAIResult,
-} from './direct-client'
+// Tools (reserved for future autonomous mode)
+export { createGitDiffTool, createGitReviewTool } from "./tools";

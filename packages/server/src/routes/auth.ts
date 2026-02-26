@@ -10,10 +10,7 @@ import * as jose from 'jose'
 import { createHash } from 'crypto'
 
 // 使用与 middleware/auth.ts 相同的密钥
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'opencode-review-secret-change-in-production'
-)
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin'
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!)
 const ACCESS_TOKEN_EXPIRES = 15 * 60 // 15 分钟
 const REFRESH_TOKEN_EXPIRES = 7 * 24 * 60 * 60 // 7 天
 
@@ -36,7 +33,16 @@ export const authRoutes = new Hono()
 authRoutes.post('/login', zValidator('json', loginSchema), async (c: any) => {
   const { secret } = c.req.valid('json')
   
-  // 验证管理员密钥
+  // Validate ADMIN_SECRET from environment
+  const ADMIN_SECRET = process.env.ADMIN_SECRET
+  if (!ADMIN_SECRET) {
+    return c.json({
+      success: false,
+      error: { code: 'SERVER_ERROR', message: 'ADMIN_SECRET not configured' },
+    }, 500)
+  }
+  
+  // Verify admin secret
   if (secret !== ADMIN_SECRET) {
     return c.json({
       success: false,

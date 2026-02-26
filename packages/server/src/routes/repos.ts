@@ -5,7 +5,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, desc, like, sql } from 'drizzle-orm'
 import { ulid } from 'ulid'
 import { createHash, randomBytes } from 'crypto'
 
@@ -13,6 +13,7 @@ import { getDatabase } from '../db/client'
 import { repositories, platformCredentials } from '../db/schema/index'
 import { authMiddleware } from '../middleware/auth'
 import { createProvider } from '@opencode-review/core'
+import { encrypt, decrypt, isEncrypted } from '../utils/crypto'
 
 // 创建仓库 Schema
 const createRepoSchema = z.object({
@@ -48,6 +49,16 @@ const updateRepoSchema = z.object({
 })
 type UpdateRepoInput = z.infer<typeof updateRepoSchema>
 
+// 列表查询 Schema
+const listReposQuerySchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(100).default(20),
+  provider: z.enum(['gitea', 'github', 'gitlab']).optional(),
+  enabled: z.enum(['true', 'false']).optional(),
+  search: z.string().optional(),
+})
+type ListReposQuery = z.infer<typeof listReposQuerySchema>
+
 export const repoRoutes = new Hono()
 
 // 所有路由需要认证
@@ -57,51 +68,77 @@ repoRoutes.use('/*', authMiddleware)
  * GET /repositories
  * 获取仓库列表
  */
-repoRoutes.get('/', async (c) => {
-  const db = getDatabase()
-  const userId = c.get('user').id
-  
-  const page = parseInt(c.req.query('page') || '1', 10)
-  const pageSize = parseInt(c.req.query('pageSize') || '20', 10)
-  const provider = c.req.query('provider')
-  const enabled = c.req.query('enabled')
-  const search = c.req.query('search')
+repoRoutes.get(
+  '/',
+  zValidator('query', listReposQuerySchema),
+  async (c) => {
+    const db = getDatabase()
+    const userId = c.get('user').id
+    const query = c.req.valid<ListReposQuery>('query')
 
-  // 构建查询
-  let query = db.select().from(repositories).$dynamic()
-  
-  // TODO: 添加过滤条件和分页
+    // Build conditions
+    const conditions: any[] = [eq(repositories.userId, userId)]
+
+    if (query.provider) {
+      conditions.push(eq(repositories.provider, query.provider))
+    }
+
+    if (query.enabled !== undefined) {
+      conditions.push(eq(repositories.enabled, query.enabled === 'true'))
+    }
+
+    if (query.search) {
+      conditions.push(like(repositories.name, `%${query.search}%`))
+    }
+
+    const offset = (query.page - 1) * query.limit
+
+    // Get total count
+    const [countResult] = await db.select({ count: sql<number>`count(*)` })
+      .from(repositories)
+      .where(and(...conditions))
+
+    const total = countResult?.count || 0
+
+    // Get paginated data
   const repos = await db.select().from(repositories)
+      .where(and(...conditions))
+      .orderBy(desc(repositories.createdAt))
+      .limit(query.limit)
+      .offset(offset)
 
-  return c.json({
-    success: true,
-    data: repos.map(repo => {
-      const webhookUrl = `${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/v1/webhooks/${repo.provider}/${repo.id}`
-      return {
-        id: repo.id,
-        provider: repo.provider,
-        name: repo.name,
-        url: repo.url,
-        enabled: repo.enabled,
-        templateId: repo.templateId,
-        reviewCount: repo.reviewCount,
-        lastReviewAt: repo.lastReviewAt,
-        createdAt: repo.createdAt,
-        webhookUrl,
-        webhookSecret: repo.webhookSecret,
-        webhookId: repo.webhookId,
-        webhookStatus: repo.webhookStatus,
-        webhookError: repo.webhookError,
-      }
-    }),
-    pagination: {
-      page,
-      pageSize,
-      total: repos.length,
-      totalPages: Math.ceil(repos.length / pageSize),
-    },
-  })
-})
+    return c.json({
+      success: true,
+      data: {
+        items: repos.map(repo => {
+          const webhookUrl = `${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/v1/webhooks/${repo.provider}/${repo.id}`
+          return {
+            id: repo.id,
+            provider: repo.provider,
+            name: repo.name,
+            url: repo.url,
+            enabled: repo.enabled,
+            templateId: repo.templateId,
+            reviewCount: repo.reviewCount,
+            lastReviewAt: repo.lastReviewAt,
+            createdAt: repo.createdAt,
+            webhookUrl,
+            webhookSecret: repo.webhookSecret,
+            webhookId: repo.webhookId,
+            webhookStatus: repo.webhookStatus,
+            webhookError: repo.webhookError,
+          }
+        }),
+        pagination: {
+          page: query.page,
+          limit: query.limit,
+          total,
+          totalPages: Math.ceil(total / query.limit),
+        },
+      },
+    })
+  }
+)
 
 /**
  * POST /repositories
@@ -144,8 +181,12 @@ repoRoutes.post('/', zValidator('json', createRepoSchema), async (c) => {
   const webhookSecret = body.webhookSecret || `wh_${randomBytes(16).toString('hex')}`
   
   // 加密存储 Token
-  // TODO: 使用加密存储
-  const encryptedToken = body.accessToken
+  let encryptedToken = body.accessToken;
+  try {
+    encryptedToken = encrypt(body.accessToken);
+  } catch {
+    // ENCRYPTION_KEY not set, store plaintext
+  }
 
   const id = ulid()
   const publicUrl = process.env.PUBLIC_URL || 'http://localhost:3000'
@@ -344,10 +385,13 @@ repoRoutes.delete('/:id', async (c) => {
   if (existing.webhookId && existing.accessToken) {
     try {
       const baseUrl = new URL(existing.url).origin
+      const token = existing.accessToken && isEncrypted(existing.accessToken)
+        ? decrypt(existing.accessToken)
+        : existing.accessToken;
       const provider = createProvider({
         type: existing.provider as 'gitea' | 'github' | 'gitlab',
         baseUrl,
-        token: existing.accessToken,
+        token,
       })
       
       const [owner, repoName] = existing.name.split('/')
@@ -395,10 +439,13 @@ repoRoutes.post('/:id/test', async (c) => {
 
   try {
     const baseUrl = new URL(repo.url).origin
+    const token = repo.accessToken && isEncrypted(repo.accessToken)
+      ? decrypt(repo.accessToken)
+      : repo.accessToken;
     const provider = createProvider({
       type: repo.provider as 'gitea' | 'github' | 'gitlab',
       baseUrl,
-      token: repo.accessToken!,
+      token: token!,
     })
     
     const [owner, repoName] = repo.name.split('/')
@@ -476,10 +523,13 @@ repoRoutes.post('/:id/webhook/register', async (c) => {
   const [owner, repoName] = repo.name.split('/')
 
   try {
+    const token = repo.accessToken && isEncrypted(repo.accessToken)
+      ? decrypt(repo.accessToken)
+      : repo.accessToken;
     const provider = createProvider({
       type: repo.provider as 'gitea' | 'github' | 'gitlab',
       baseUrl,
-      token: repo.accessToken,
+      token,
     })
 
     // 如果已经有 webhook，先尝试删除旧的
@@ -584,11 +634,14 @@ repoRoutes.delete('/:id/webhook', async (c) => {
   try {
     const baseUrl = new URL(repo.url).origin
     const [owner, repoName] = repo.name.split('/')
+    const token = repo.accessToken && isEncrypted(repo.accessToken)
+      ? decrypt(repo.accessToken)
+      : repo.accessToken;
     
     const provider = createProvider({
       type: repo.provider as 'gitea' | 'github' | 'gitlab',
       baseUrl,
-      token: repo.accessToken,
+      token,
     })
 
     await provider.deleteWebhook(owner, repoName, repo.webhookId)

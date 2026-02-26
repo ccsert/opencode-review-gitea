@@ -113,21 +113,33 @@ export class GitLabProvider extends BaseProvider {
 
   async getPullRequestDiff(owner: string, repo: string, number: number): Promise<string> {
     const projectPath = this.getProjectPath(owner, repo)
-    // 使用 .diff 后缀获取纯文本 diff
     const url = `${this.baseUrl}/api/v4/projects/${projectPath}/merge_requests/${number}/diffs`
-    const response = await fetch(url, {
-      headers: {
-        ...this.getAuthHeaders(),
-      },
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 60_000)
 
-    if (!response.ok) {
-      throw new Error(`Failed to get MR diff: ${response.status}`)
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          ...this.getAuthHeaders(),
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to get MR diff: ${response.status}`)
+      }
+
+      // GitLab returns JSON array of diffs, need to assemble into unified diff
+      const diffs = await response.json() as GitLabDiff[]
+      return this.assembleDiff(diffs)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error(`gitlab API request timed out after 60000ms: GET merge_requests/${number}/diffs`)
+      }
+      throw error
+    } finally {
+      clearTimeout(timeout)
     }
-
-    // GitLab 返回的是 JSON 格式的 diff 数组，需要拼装为 unified diff
-    const diffs = await response.json() as GitLabDiff[]
-    return this.assembleDiff(diffs)
   }
 
   async getPullRequestFiles(owner: string, repo: string, number: number): Promise<ChangedFile[]> {

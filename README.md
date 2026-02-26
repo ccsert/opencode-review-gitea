@@ -28,11 +28,13 @@ An **AI-powered code review platform** for Gitea/Forgejo, GitHub, and GitLab. Bu
 ### Platform Mode (NEW!)
 - 🌐 **Web UI** - Beautiful dashboard for managing repositories and reviews
 - 🔐 **Authentication** - JWT + API Key authentication
-- 📂 **Multi-Repository** - Manage multiple repos from one place
+- 📂 **Multi-Repository** — Manage multiple repositories across Gitea, GitHub, and GitLab
 - 📋 **Custom Templates** - Create reusable review templates
 - 📈 **Statistics** - Track review history and metrics
 - 🔗 **Webhook Integration** - Direct webhook receiver without Gitea Actions Runner
 - 💾 **Flexible Database** - SQLite (default) or PostgreSQL
+- 🔐 **Encryption at Rest** — Tokens and API keys encrypted with AES-256-GCM
+- 🔄 **Review Retry** — Retry failed reviews with one click
 
 ---
 
@@ -85,11 +87,11 @@ opencode-review-gitea/
 │   │   ├── events/            # Webhook event types
 │   │   ├── review/            # Review engine
 │   │   └── templates/         # Template system
-│   ├── server/                # Hono + Bun API server
+│   ├── server/                # Hono + Node.js API server
 │   │   ├── routes/            # API endpoints
 │   │   ├── middleware/        # Auth, error handling
 │   │   └── db/                # Drizzle ORM schemas
-│   └── web/                   # React frontend (coming soon)
+│   └── web/                   # React 19 frontend (Shadcn/UI + TailwindCSS)
 ├── docker/                    # Docker configurations
 └── docs/                      # Documentation
     └── architecture/          # Design documents
@@ -119,7 +121,8 @@ Environment variables (see `docker/.env.example`):
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | No | `file:./data/review.db` | SQLite or PostgreSQL URL |
 | `JWT_SECRET` | Yes | - | JWT signing secret |
-| `ADMIN_PASSWORD` | No | `admin123` | Initial admin password |
+| `ADMIN_PASSWORD` | Yes | - | Initial admin password (required, no default) |
+| `ENCRYPTION_KEY` | Yes | - | AES-256-GCM key for encrypting tokens at rest (generate with: `openssl rand -hex 32`) |
 | `OPENAI_API_KEY` | * | - | OpenAI API Key |
 | `DEFAULT_MODEL` | No | `gpt-4o-mini` | Default AI model |
 | `CORS_ORIGINS` | No | `localhost` | Allowed CORS origins |
@@ -195,28 +198,34 @@ GET    /api/v1/system/models       # Available AI models
 3. Set Content Type to: `application/json`
 4. Set Secret and select Pull request events
 
+### For GitLab
+
+1. Go to Project → Settings → Webhooks → Add new webhook
+2. Set URL to: `https://your-server/api/v1/webhooks/gitlab/{repository_id}`
+3. Select "Merge request events" and "Note events"
+4. Set Secret token and save webhook
 ---
 
 ## 🛠️ Development
 
 ### Prerequisites
-- [Bun](https://bun.sh) >= 1.0
-- Node.js >= 18 (optional, for compatibility)
+- [Node.js](https://nodejs.org) >= 18
+- [pnpm](https://pnpm.io) >= 9
 
 ### Setup
 
 ```bash
 # Install dependencies
-bun install
+pnpm install
 
 # Run development server
-bun run dev
+pnpm run dev
 
 # Build for production
-bun run build
+pnpm run build
 
 # Run tests
-bun run test
+pnpm run test
 ```
 
 ### Project Structure
@@ -225,7 +234,7 @@ bun run test
 |---------|-------------|--------|
 | `@opencode-review/core` | Provider abstraction, events, templates | ✅ Complete |
 | `@opencode-review/server` | Hono API server | ✅ Complete |
-| `@opencode-review/web` | React web UI | 🔜 Coming soon |
+| `@opencode-review/web` | React 19 web UI (Shadcn/UI) | ✅ Complete |
 
 ---
 
@@ -241,7 +250,7 @@ bun run test
 - [x] Template system with built-in presets
 
 ### ✅ Phase 2: Backend Platform (Completed)
-- [x] Hono + Bun HTTP server
+- [x] Hono + Node.js HTTP server
 - [x] SQLite + Drizzle ORM database
 - [x] JWT + API Key authentication
 - [x] Repository management API
@@ -250,15 +259,18 @@ bun run test
 - [x] Webhook receiver endpoints
 - [x] System health & config API
 
-### 🔄 Phase 3: In Progress
-- [x] ReviewEngine framework (40% - SDK integration pending)
-- [x] Docker deployment configs (70% - frontend pending)
-- [ ] Web UI (React + Shadcn/UI + TailwindCSS)
-- [ ] OpenCode SDK integration
+### ✅ Phase 3: Complete
+- [x] ReviewEngine framework & AI output validation (Zod)
+- [x] Docker deployment configs (Full stack)
+- [x] Web UI (React 19 + Shadcn/UI + TailwindCSS)
+- [x] GitHub Provider integration
+- [x] Security hardening (Encryption at rest, Startup validation)
+- [x] Fetch timeouts & Review retry mechanism
+- [x] Repository listing pagination
+
 
 ### 📋 Phase 4: Future
-- [ ] GitHub Provider
-- [ ] GitLab Provider
+- [ ] GitLab Provider (Full implementation)
 - [ ] OAuth integration (Gitea/GitHub/GitLab)
 - [ ] Review analytics dashboard
 - [ ] Slack/Discord notifications

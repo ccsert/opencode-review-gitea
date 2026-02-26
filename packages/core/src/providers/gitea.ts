@@ -91,17 +91,30 @@ export class GiteaProvider extends BaseProvider {
 
   async getPullRequestDiff(owner: string, repo: string, number: number): Promise<string> {
     const url = `${this.baseUrl}/api/v1/repos/${owner}/${repo}/pulls/${number}.diff`
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': this.getAuthHeader(),
-      },
-    })
-    
-    if (!response.ok) {
-      throw new Error(`Failed to get PR diff: ${response.status}`)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 60_000)
+
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'Authorization': this.getAuthHeader(),
+        },
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get PR diff: ${response.status}`)
+      }
+      
+      return response.text()
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error(`gitea API request timed out after 60000ms: GET ${owner}/${repo}/pulls/${number}.diff`)
+      }
+      throw error
+    } finally {
+      clearTimeout(timeout)
     }
-    
-    return response.text()
   }
 
   async getPullRequestFiles(owner: string, repo: string, number: number): Promise<ChangedFile[]> {

@@ -164,7 +164,7 @@ export function ReviewsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={allFilterValue}>{t('reviews.allRepositories')}</SelectItem>
-                {reposData?.data?.map((repo) => (
+                {reposData?.data?.items?.map((repo) => (
                   <SelectItem key={repo.id} value={repo.id}>
                     {repo.name}
                   </SelectItem>
