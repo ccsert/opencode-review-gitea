@@ -149,7 +149,7 @@ export function invalidateAgentCache(userId?: string): void {
 
 // ─── Role Mapping ─────────────────────────────────────────────────────
 
-function mapUserRole(dbRole: string): "admin" | "member" | "viewer" {
+export function mapUserRole(dbRole: string): "admin" | "member" | "viewer" {
   switch (dbRole) {
     case "admin":
       return "admin";
@@ -158,6 +158,34 @@ function mapUserRole(dbRole: string): "admin" | "member" | "viewer" {
     default:
       return "viewer";
   }
+}
+
+// ─── Platform Context Builder ─────────────────────────────────────────
+
+/**
+ * Build a PlatformToolContext and PlatformAgentDeps for a given user.
+ * Used by the MCP HTTP proxy route to create per-request context.
+ */
+export function buildPlatformContext(
+  userId: string,
+  userRole: "admin" | "member" | "viewer" = "member",
+): { ctx: PlatformToolContext; deps: PlatformAgentDeps } {
+  const ctx: PlatformToolContext = {
+    db: { query: <T>(fn: () => Promise<T>) => fn() },
+    userId,
+    userRole,
+  };
+
+  const deps: PlatformAgentDeps = {
+    template: buildTemplateDeps(),
+    repo: buildRepoDeps(),
+    review: buildReviewDeps(),
+    aiConfig: buildAIConfigDeps(),
+    webhook: buildWebhookDeps(),
+    system: buildSystemDeps(),
+  };
+
+  return { ctx, deps };
 }
 
 // ─── Template ToolDeps ────────────────────────────────────────────────

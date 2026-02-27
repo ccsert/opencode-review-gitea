@@ -24,6 +24,7 @@ import { platformRoutes } from "./routes/platforms";
 import { aiProviderRoutes } from "./routes/ai-providers";
 import { aguiRoutes } from "./routes/agui";
 import { agentThreadRoutes } from "./routes/agent-threads";
+import { mcpRoutes } from "./routes/mcp";
 import {
   errorMiddleware,
   notFoundHandler,
@@ -65,7 +66,8 @@ const api = new Hono()
   .route("/ai-providers", aiProviderRoutes)
   .route("/system", systemRoutes)
   .route("/agui", aguiRoutes)
-  .route("/agent-threads", agentThreadRoutes);
+  .route("/agent-threads", agentThreadRoutes)
+  .route("/mcp", mcpRoutes);
 
 app.route("/api/v1", api);
 
