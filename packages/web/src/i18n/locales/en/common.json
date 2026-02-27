@@ -453,5 +453,16 @@
       "nameTooLong": "Name is too long",
       "baseUrlInvalid": "Please enter a valid URL"
     }
+  },
+  "agent": {
+    "title": "Platform Agent",
+    "openChat": "Open Agent Chat",
+    "welcomeMessage": "Hi! I'm your platform assistant. I can help you manage templates, repositories, reviews, webhooks, and AI providers. What would you like to do?",
+    "inputPlaceholder": "Ask the agent anything...",
+    "confirmAction": "Confirm Action",
+    "confirmDescription": "The agent wants to perform the following action:",
+    "confirmProceed": "Are you sure you want to proceed?",
+    "actionApproved": "Action approved",
+    "actionRejected": "Action cancelled"
   }
 }
