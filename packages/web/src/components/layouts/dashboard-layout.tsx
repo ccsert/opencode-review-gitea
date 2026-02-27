@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { useAuthStore } from '@/stores/auth'
+import { AgentPanel, AgentStatusBadge } from '@/components/agent'
 
 const navItems = [
   { key: 'dashboard', icon: LayoutDashboard, href: '/' },
@@ -93,6 +94,8 @@ export function DashboardLayout() {
       <div className="flex-1 pl-64">
         {/* Header */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-end gap-2 border-b bg-background/95 px-6 backdrop-blur supports-backdrop-filter:bg-background/60">
+          <AgentStatusBadge />
+          <div className="mx-1 h-6 w-px bg-border" />
           <LanguageSwitcher />
           <ThemeSwitcher />
         </header>
@@ -102,6 +105,9 @@ export function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Agent chat panel */}
+      <AgentPanel />
     </div>
   )
 }
