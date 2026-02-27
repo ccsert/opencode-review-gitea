@@ -18,6 +18,10 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@ag-ui/core": "^0.0.45",
+    "@ag-ui/encoder": "^0.0.45",
+    "@ag-ui/mastra": "^1.0.0",
+    "@copilotkit/runtime": "^1.52.0",
     "@electric-sql/pglite": "^0.3.15",
     "@hono/node-server": "^1.13.0",
     "@hono/zod-validator": "^0.4.0",
