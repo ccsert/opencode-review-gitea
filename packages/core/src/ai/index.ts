@@ -16,3 +16,7 @@ export type { ReviewAgentConfig } from "./agent";
 
 // Tools (reserved for future autonomous mode)
 export { createGitDiffTool, createGitReviewTool } from "./tools";
+
+// Platform Agent factory
+export { createPlatformAgent } from "./platform-agent";
+export type { PlatformAgentConfig, PlatformAgentDeps } from "./platform-agent";
