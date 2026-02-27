@@ -18,6 +18,7 @@ export function AgentProvider({ children }: AgentProviderProps) {
   return (
     <CopilotKit
       runtimeUrl="/api/v1/agui"
+      agent="platform-agent"
       headers={
         accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined
       }
