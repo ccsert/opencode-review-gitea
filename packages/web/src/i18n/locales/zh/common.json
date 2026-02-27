@@ -464,6 +464,7 @@
     "confirmDescription": "助手想要执行以下操作：",
     "confirmProceed": "确定要继续吗？",
     "actionApproved": "操作已批准",
-    "actionRejected": "操作已取消"
+    "actionRejected": "操作已取消",
+    "requiresApproval": "需要确认"
   }
 }

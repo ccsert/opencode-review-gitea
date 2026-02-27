@@ -2,7 +2,8 @@
  * AgentPanel — sliding sidebar panel for chatting with the platform agent
  *
  * Wraps CopilotSidebar from @copilotkit/react-ui and registers the
- * ToolCallVisualization component for rendering tool call cards inline.
+ * ToolCallVisualization component for rendering tool call cards inline,
+ * plus ConfirmAction for human-in-the-loop on dangerous operations.
  */
 
 import "@copilotkit/react-ui/styles.css";
@@ -15,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ToolCallVisualization } from "./ToolCallVisualization";
 import { AgentStateIndicator } from "./AgentStateIndicator";
+import { ConfirmAction } from "./ConfirmAction";
 
 export function AgentPanel() {
   const { t } = useTranslation();
@@ -24,6 +26,8 @@ export function AgentPanel() {
     <>
       {/* Register tool call renderer inside CopilotKit context */}
       <ToolCallVisualization />
+      {/* Register human-in-the-loop confirmation for dangerous operations */}
+      <ConfirmAction />
 
       {/* Floating trigger button — fixed bottom-right */}
       <Button

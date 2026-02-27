@@ -463,6 +463,7 @@
     "confirmDescription": "The agent wants to perform the following action:",
     "confirmProceed": "Are you sure you want to proceed?",
     "actionApproved": "Action approved",
-    "actionRejected": "Action cancelled"
+    "actionRejected": "Action cancelled",
+    "requiresApproval": "Requires approval"
   }
 }
