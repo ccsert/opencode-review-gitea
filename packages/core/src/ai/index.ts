@@ -14,8 +14,8 @@ export type { AIProviderConfig } from "./provider";
 export { createReviewAgent } from "./agent";
 export type { ReviewAgentConfig } from "./agent";
 
-// Tools (reserved for future autonomous mode)
-export { createGitDiffTool, createGitReviewTool } from "./tools";
+// Tools (git tools + platform management tools)
+export * from "./tools";
 
 // Platform Agent factory
 export { createPlatformAgent } from "./platform-agent";
