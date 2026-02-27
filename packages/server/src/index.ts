@@ -25,6 +25,7 @@ import { aiProviderRoutes } from "./routes/ai-providers";
 import { aguiRoutes } from "./routes/agui";
 import { agentThreadRoutes } from "./routes/agent-threads";
 import { mcpRoutes } from "./routes/mcp";
+import { a2aRoutes } from "./routes/a2a";
 import {
   errorMiddleware,
   notFoundHandler,
@@ -67,9 +68,74 @@ const api = new Hono()
   .route("/system", systemRoutes)
   .route("/agui", aguiRoutes)
   .route("/agent-threads", agentThreadRoutes)
-  .route("/mcp", mcpRoutes);
+  .route("/a2a", a2aRoutes);
 
 app.route("/api/v1", api);
+
+// A2A Agent Card discovery (well-known endpoint)
+app.get("/.well-known/agent.json", (c) => {
+  const baseUrl =
+    process.env.PUBLIC_URL ||
+    `${c.req.header("x-forwarded-proto") || "http"}://${c.req.header("host")}`;
+
+  return c.json({
+    name: "OpenCode Review Platform Agent",
+    description:
+      "AI-powered code review platform agent that manages repositories, templates, reviews, AI configurations, webhooks, and system settings.",
+    url: `${baseUrl}/api/v1/a2a`,
+    version: "0.1.0",
+    protocolVersion: "0.2.0",
+    capabilities: {
+      streaming: false,
+      pushNotifications: false,
+      stateTransitionHistory: true,
+    },
+    authentication: {
+      schemes: ["apiKey"],
+      credentials: null,
+    },
+    defaultInputModes: ["text"],
+    defaultOutputModes: ["text"],
+    skills: [
+      {
+        id: "template-management",
+        name: "Template Management",
+        description: "Create, update, delete, and list review templates.",
+        tags: ["templates", "review"],
+      },
+      {
+        id: "repository-management",
+        name: "Repository Management",
+        description: "Add, update, remove, and list repositories across Gitea, GitHub, and GitLab.",
+        tags: ["repositories", "git"],
+      },
+      {
+        id: "review-operations",
+        name: "Review Operations",
+        description: "List reviews, get review details, view statistics, and trigger manual reviews.",
+        tags: ["reviews", "code-review", "ai"],
+      },
+      {
+        id: "ai-config",
+        name: "AI Configuration",
+        description: "Manage AI provider configurations.",
+        tags: ["ai", "configuration"],
+      },
+      {
+        id: "webhook-management",
+        name: "Webhook Management",
+        description: "View webhook logs, manage webhook configurations.",
+        tags: ["webhooks", "integrations"],
+      },
+      {
+        id: "system-management",
+        name: "System Management",
+        description: "Check system health, view platform info, and get statistics.",
+        tags: ["system", "monitoring"],
+      },
+    ],
+  });
+});
 
 // Health check (root path - only in standalone mode)
 if (!SERVE_STATIC) {
