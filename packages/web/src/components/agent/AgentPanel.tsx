@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { Bot, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth";
 import { ToolCallVisualization } from "./ToolCallVisualization";
 import { AgentStateIndicator } from "./AgentStateIndicator";
 import { ConfirmAction } from "./ConfirmAction";
@@ -21,6 +22,11 @@ import { ConfirmAction } from "./ConfirmAction";
 export function AgentPanel() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const { isAuthenticated } = useAuthStore();
+
+  // Guard: CopilotKit child components require an active CopilotKit context.
+  // Return null during logout until the router redirects to /login.
+  if (!isAuthenticated) return null;
 
   return (
     <>

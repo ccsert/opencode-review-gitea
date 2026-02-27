@@ -4,7 +4,7 @@
  */
 
 import { Agent } from "@mastra/core/agent";
-import type { OpenAICompatibleConfig } from "@mastra/core/llm";
+import { resolveModel } from "./model-router";
 import type { GitProvider } from "../providers/types";
 
 export interface ReviewAgentConfig {
@@ -17,17 +17,21 @@ export interface ReviewAgentConfig {
 }
 
 export function createReviewAgent(config: ReviewAgentConfig): Agent {
-  const modelConfig: OpenAICompatibleConfig = {
-    id: config.model as `${string}/${string}`,
+  // config.model is in 'provider/modelId' format from resolveModelId()
+  const [providerType, ...modelParts] = config.model.split("/");
+  const modelId = modelParts.join("/") || providerType;
+  const model = resolveModel({
+    provider: providerType,
+    modelId,
     apiKey: config.apiKey,
-    ...(config.baseUrl ? { url: config.baseUrl } : {}),
-  };
+    baseUrl: config.baseUrl,
+  });
 
   return new Agent({
     id: "code-review-agent",
     name: "Code Review Agent",
     instructions: config.instructions,
-    model: modelConfig,
+    model,
     // Tools reserved for future autonomous mode
     tools: {},
   });

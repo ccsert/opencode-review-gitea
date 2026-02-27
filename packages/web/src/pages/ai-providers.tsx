@@ -66,7 +66,7 @@ import type { AiProvider, AiProviderType, AiProviderPreset } from '@/lib/types'
 // 创建 AI 供应商表单 Schema
 const createProviderSchema = (t: (key: string, options?: Record<string, unknown>) => string) => z.object({
   name: z.string().min(1, t('aiProviders.validation.nameRequired')).max(50, t('aiProviders.validation.nameTooLong')),
-  provider: z.enum(['openai', 'anthropic', 'deepseek', 'openrouter', 'ollama', 'custom']),
+  provider: z.enum(['openai', 'anthropic', 'deepseek', 'glm', 'minimax', 'openrouter', 'ollama', 'custom']),
   baseUrl: z.string().url(t('aiProviders.validation.baseUrlInvalid')).optional().or(z.literal('')),
   apiKey: z.string().optional(),
   defaultModel: z.string().optional(),
@@ -80,6 +80,8 @@ const providerConfig: Record<AiProviderType, { label: string; color: string; ico
   openai: { label: 'OpenAI', color: 'bg-emerald-500', icon: '🤖', needsKey: true },
   anthropic: { label: 'Anthropic', color: 'bg-orange-500', icon: '🧠', needsKey: true },
   deepseek: { label: 'DeepSeek', color: 'bg-blue-500', icon: '🔍', needsKey: true },
+  glm: { label: '智谱 GLM', color: 'bg-violet-500', icon: '🌟', needsKey: true },
+  minimax: { label: 'MiniMax', color: 'bg-pink-500', icon: '🔮', needsKey: true },
   openrouter: { label: 'OpenRouter', color: 'bg-purple-500', icon: '🌐', needsKey: true },
   ollama: { label: 'Ollama', color: 'bg-gray-600', icon: '🦙', needsKey: false },
   custom: { label: 'Custom', color: 'bg-slate-500', icon: '⚙️', needsKey: true },

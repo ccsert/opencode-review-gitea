@@ -5,15 +5,21 @@
  * - Idle (no activity)
  * - Thinking (generating response)
  * - Executing tool (tool call in progress)
+ *
+ * Guarded: the inner component that calls the CopilotKit hook is only rendered
+ * when the user is authenticated (i.e. CopilotKit is mounted). This prevents
+ * crashes during logout when CopilotKit is unmounted before the router redirects.
  */
 
 import { useCopilotChat } from "@copilotkit/react-core";
+import { useAuthStore } from "@/stores/auth";
 import { cn } from "@/lib/utils";
 import { Loader2, Bot, Wrench } from "lucide-react";
 
 type AgentState = "idle" | "thinking" | "tool";
 
-export function AgentStateIndicator({ className }: { className?: string }) {
+/** Inner component — only rendered inside a live CopilotKit context */
+function AgentStateIndicatorInner({ className }: { className?: string }) {
   const { isLoading } = useCopilotChat();
 
   // Derive state — CopilotKit exposes isLoading for active generation
@@ -49,13 +55,25 @@ export function AgentStateIndicator({ className }: { className?: string }) {
 }
 
 /**
+ * Public wrapper — guards against rendering the CopilotKit hook
+ * when the user is not authenticated and CopilotKit is not mounted.
+ */
+export function AgentStateIndicator({ className }: { className?: string }) {
+  const { isAuthenticated } = useAuthStore();
+  if (!isAuthenticated) return null;
+  return <AgentStateIndicatorInner className={className} />;
+}
+
+/**
  * Floating badge that sits in the header bar area
  */
 export function AgentStatusBadge() {
+  const { isAuthenticated } = useAuthStore();
+  if (!isAuthenticated) return null;
   return (
     <div className="flex items-center gap-1.5">
       <Bot className="h-4 w-4 text-muted-foreground" />
-      <AgentStateIndicator />
+      <AgentStateIndicatorInner />
     </div>
   );
 }

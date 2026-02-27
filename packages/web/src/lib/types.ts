@@ -268,7 +268,7 @@ export interface ImportResult {
 }
 
 // AI Provider 类型
-export type AiProviderType = 'openai' | 'anthropic' | 'deepseek' | 'openrouter' | 'ollama' | 'custom'
+export type AiProviderType = 'openai' | 'anthropic' | 'deepseek' | 'glm' | 'minimax' | 'openrouter' | 'ollama' | 'custom'
 
 export interface AiProvider {
   id: string

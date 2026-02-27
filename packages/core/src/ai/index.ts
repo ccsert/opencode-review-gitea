@@ -10,6 +10,10 @@ export type { ReviewOutput, ReviewComment } from "./schemas";
 export { resolveModelId, resolveModelConfig } from "./provider";
 export type { AIProviderConfig } from "./provider";
 
+// Model router — routes to correct native AI SDK provider
+export { resolveModel } from "./model-router";
+export type { ModelRouterConfig, AIProviderType } from "./model-router";
+
 // Mastra Agent factory
 export { createReviewAgent } from "./agent";
 export type { ReviewAgentConfig } from "./agent";

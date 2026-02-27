@@ -281,6 +281,18 @@ export const PREDEFINED_PROVIDERS = {
     baseUrl: 'https://api.deepseek.com',
     models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
   },
+  glm: {
+    name: '智谱 GLM (Zhipu AI)',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    // glm-z1-* 系列为深度思考模型，自动启用推理 middleware
+    models: ['glm-4-plus', 'glm-4-air', 'glm-4-flash', 'glm-z1-flash', 'glm-z1-plus', 'glm-z1-air', 'codegeex-4'],
+  },
+  minimax: {
+    name: 'MiniMax',
+    baseUrl: 'https://api.minimax.chat/v1',
+    // MiniMax-M1 为深度思考模型，自动启用推理 middleware
+    models: ['MiniMax-Text-01', 'MiniMax-M1', 'abab6.5s-chat'],
+  },
   openrouter: {
     name: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',

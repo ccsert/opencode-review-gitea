@@ -5,7 +5,7 @@
  */
 
 import { Agent } from "@mastra/core/agent";
-import type { OpenAICompatibleConfig } from "@mastra/core/llm";
+import { resolveModel } from "./model-router";
 import {
   createTemplateTools,
   type TemplateToolDeps,
@@ -150,17 +150,21 @@ export function createPlatformAgent(config: PlatformAgentConfig): Agent {
     ...systemTools,
   };
 
-  const modelConfig: OpenAICompatibleConfig = {
-    id: config.model as `${string}/${string}`,
+  // Split 'provider/modelId' format back into components for router
+  const [providerType, ...modelParts] = config.model.split("/");
+  const modelId = modelParts.join("/") || providerType;
+  const model = resolveModel({
+    provider: providerType,
+    modelId,
     apiKey: config.apiKey,
-    ...(config.baseUrl ? { url: config.baseUrl } : {}),
-  };
+    baseUrl: config.baseUrl,
+  });
 
   return new Agent({
     id: "platform-agent",
     name: "OpenCode Review Platform Agent",
     instructions: PLATFORM_AGENT_SYSTEM_PROMPT,
-    model: modelConfig,
+    model,
     tools,
   });
 }
