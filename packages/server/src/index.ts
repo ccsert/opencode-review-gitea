@@ -22,6 +22,7 @@ import { systemRoutes } from "./routes/system";
 import { apiKeyRoutes } from "./routes/api-keys";
 import { platformRoutes } from "./routes/platforms";
 import { aiProviderRoutes } from "./routes/ai-providers";
+import { aguiRoutes } from "./routes/agui";
 import {
   errorMiddleware,
   notFoundHandler,
@@ -61,7 +62,8 @@ const api = new Hono()
   .route("/api-keys", apiKeyRoutes)
   .route("/platforms", platformRoutes)
   .route("/ai-providers", aiProviderRoutes)
-  .route("/system", systemRoutes);
+  .route("/system", systemRoutes)
+  .route("/agui", aguiRoutes);
 
 app.route("/api/v1", api);
 
