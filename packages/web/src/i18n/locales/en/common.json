@@ -457,6 +457,7 @@
   "agent": {
     "title": "Platform Agent",
     "openChat": "Open Agent Chat",
+    "newChat": "New Chat",
     "welcomeMessage": "Hi! I'm your platform assistant. I can help you manage templates, repositories, reviews, webhooks, and AI providers. What would you like to do?",
     "inputPlaceholder": "Ask the agent anything...",
     "confirmAction": "Confirm Action",
@@ -464,6 +465,11 @@
     "confirmProceed": "Are you sure you want to proceed?",
     "actionApproved": "Action approved",
     "actionRejected": "Action cancelled",
-    "requiresApproval": "Requires approval"
+    "requiresApproval": "Requires approval",
+    "suggestion": {
+      "listTemplates": "View all templates",
+      "listRepos": "View repositories",
+      "configAI": "Configure AI provider"
+    }
   }
 }

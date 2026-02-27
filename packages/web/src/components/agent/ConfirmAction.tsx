@@ -1,138 +1,183 @@
 /**
  * ConfirmAction — human-in-the-loop confirmation for dangerous agent operations
  *
+ * Uses ai-elements Confirmation components for a consistent look.
  * Registers useCopilotAction hooks with `renderAndWaitForResponse` for tools
  * that perform destructive or sensitive actions (delete, configure AI provider).
- * Each hook pauses tool execution until the user explicitly approves or rejects.
  */
 
 import { useCopilotAction } from "@copilotkit/react-core";
 import { useTranslation } from "react-i18next";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Trash2, Settings, Shield } from "lucide-react";
+  Confirmation,
+  ConfirmationRequest,
+  ConfirmationAccepted,
+  ConfirmationRejected,
+  ConfirmationActions,
+  ConfirmationAction,
+} from "@/components/ai-elements/confirmation";
+import { AlertDescription } from "@/components/ui/alert";
+import {
+  AlertTriangle,
+  Trash2,
+  Settings,
+  Shield,
+  Check,
+  X,
+} from "lucide-react";
 import type { ReactNode } from "react";
+import { useState } from "react";
 
-// Dangerous tools that require explicit user confirmation before execution
+// Dangerous tools that require explicit user confirmation
 const DANGEROUS_TOOLS: Record<
   string,
-  { icon: ReactNode; variant: "destructive" | "default"; labelKey: string }
+  { icon: ReactNode; labelKey: string }
 > = {
   "delete-template": {
-    icon: <Trash2 className="h-5 w-5 text-destructive" />,
-    variant: "destructive",
+    icon: <Trash2 className="h-4 w-4 text-destructive" />,
     labelKey: "deleteTemplate",
   },
   "delete-webhook": {
-    icon: <Trash2 className="h-5 w-5 text-destructive" />,
-    variant: "destructive",
+    icon: <Trash2 className="h-4 w-4 text-destructive" />,
     labelKey: "deleteWebhook",
   },
   "configure-ai-provider": {
-    icon: <Settings className="h-5 w-5 text-amber-500" />,
-    variant: "default",
+    icon: <Settings className="h-4 w-4 text-amber-500" />,
     labelKey: "configureAI",
   },
 };
 
 /**
- * Renders a confirmation dialog for a dangerous tool call.
- * Returns JSX that blocks agent execution until the user responds.
+ * Confirmation UI for a dangerous tool call.
+ * Wraps ai-elements Confirmation with CopilotKit's respond pattern.
  */
-function ConfirmationDialog({
+function ToolConfirmation({
   toolName,
   toolMeta,
   args,
-  isExecuting,
+  status,
   onApprove,
   onReject,
 }: {
   toolName: string;
   toolMeta: (typeof DANGEROUS_TOOLS)[string];
   args: Record<string, unknown>;
-  isExecuting: boolean;
+  status: "executing" | "complete" | "inProgress";
   onApprove: () => void;
   onReject: () => void;
 }) {
   const { t } = useTranslation();
+  const [responded, setResponded] = useState<"approved" | "rejected" | null>(
+    null
+  );
 
   const displayName = toolName
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
+  // Map to Confirmation component state
+  const confirmState =
+    responded === "approved"
+      ? ("output-available" as const)
+      : responded === "rejected"
+        ? ("output-denied" as const)
+        : status === "complete"
+          ? ("output-available" as const)
+          : ("approval-requested" as const);
+
+  const approval = responded
+    ? { id: toolName, approved: responded === "approved" }
+    : status === "complete"
+      ? { id: toolName, approved: true }
+      : { id: toolName };
+
   return (
-    <AlertDialog open={true}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
+    <Confirmation
+      state={confirmState}
+      approval={approval as any}
+      className="my-3"
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10">
+          <AlertTriangle className="h-4 w-4 text-destructive" />
+        </div>
+        <div className="flex-1 space-y-2">
+          <AlertDescription className="text-sm font-medium">
+            {t("agent.confirmAction")}
+          </AlertDescription>
+          <p className="text-xs text-muted-foreground">
+            {t("agent.confirmDescription")}
+          </p>
+
+          {/* Tool info */}
+          <div className="rounded-md border bg-muted/30 p-2.5 space-y-1.5">
+            <div className="flex items-center gap-2 text-sm">
+              {toolMeta.icon}
+              <span className="font-medium">{displayName}</span>
+              <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
+                <Shield className="h-3 w-3" />
+                {t("agent.requiresApproval")}
+              </span>
             </div>
-            <AlertDialogTitle className="text-base">
-              {t("agent.confirmAction")}
-            </AlertDialogTitle>
-          </div>
-          <AlertDialogDescription asChild>
-            <div className="space-y-3">
-              <p>{t("agent.confirmDescription")}</p>
-
-              {/* Tool info card */}
-              <div className="rounded-md border bg-muted/50 p-3 space-y-2">
-                <div className="flex items-center gap-2">
-                  {toolMeta.icon}
-                  <span className="font-medium text-sm text-foreground">
-                    {displayName}
-                  </span>
-                  <Badge variant="outline" className="ml-auto text-xs">
-                    <Shield className="mr-1 h-3 w-3" />
-                    {t("agent.requiresApproval")}
-                  </Badge>
-                </div>
-
-                {/* Show relevant args */}
-                {Object.keys(args).length > 0 && (
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    {Object.entries(args).map(([key, value]) => (
-                      <div key={key} className="flex gap-2">
-                        <span className="font-medium min-w-[80px]">{key}:</span>
-                        <code className="rounded bg-muted px-1 py-0.5 break-all">
-                          {typeof value === "string"
-                            ? value.slice(0, 100)
-                            : JSON.stringify(value, null, 0).slice(0, 100)}
-                        </code>
-                      </div>
-                    ))}
+            {Object.keys(args).length > 0 && (
+              <div className="space-y-0.5 text-xs text-muted-foreground">
+                {Object.entries(args).map(([key, value]) => (
+                  <div key={key} className="flex gap-2">
+                    <span className="font-medium min-w-18">{key}:</span>
+                    <code className="rounded bg-muted px-1 py-0.5 break-all text-[11px]">
+                      {typeof value === "string"
+                        ? value.slice(0, 80)
+                        : JSON.stringify(value).slice(0, 80)}
+                    </code>
                   </div>
-                )}
+                ))}
               </div>
+            )}
+          </div>
 
-              <p className="text-sm font-medium">{t("agent.confirmProceed")}</p>
+          <ConfirmationRequest>
+            <p className="text-xs font-medium text-foreground">
+              {t("agent.confirmProceed")}
+            </p>
+          </ConfirmationRequest>
+
+          <ConfirmationAccepted>
+            <div className="flex items-center gap-1.5 text-xs text-green-600">
+              <Check className="h-3.5 w-3.5" />
+              {t("agent.actionApproved")}
             </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={onReject} disabled={!isExecuting}>
-            {t("common.cancel")}
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onApprove}
-            variant={toolMeta.variant}
-            disabled={!isExecuting}
-          >
-            {t("common.confirm")}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </ConfirmationAccepted>
+
+          <ConfirmationRejected>
+            <div className="flex items-center gap-1.5 text-xs text-destructive">
+              <X className="h-3.5 w-3.5" />
+              {t("agent.actionRejected")}
+            </div>
+          </ConfirmationRejected>
+        </div>
+      </div>
+
+      <ConfirmationActions>
+        <ConfirmationAction
+          variant="outline"
+          onClick={() => {
+            setResponded("rejected");
+            onReject();
+          }}
+        >
+          {t("common.cancel")}
+        </ConfirmationAction>
+        <ConfirmationAction
+          variant="destructive"
+          onClick={() => {
+            setResponded("approved");
+            onApprove();
+          }}
+        >
+          {t("common.confirm")}
+        </ConfirmationAction>
+      </ConfirmationActions>
+    </Confirmation>
   );
 }
 
@@ -141,21 +186,16 @@ function ConfirmationDialog({
  * Must be rendered inside a CopilotKit context.
  */
 export function ConfirmAction() {
-  // Register a renderAndWaitForResponse hook for each dangerous tool.
-  // When the agent calls one of these tools, execution pauses and the
-  // confirmation dialog is shown. The agent resumes only after the user
-  // clicks Approve or Reject.
-
   useCopilotAction({
     name: "delete-template",
     renderAndWaitForResponse: (props) => {
       if (props.status === "complete") return <></>;
       return (
-        <ConfirmationDialog
+        <ToolConfirmation
           toolName="delete-template"
           toolMeta={DANGEROUS_TOOLS["delete-template"]}
           args={(props.args ?? {}) as Record<string, unknown>}
-          isExecuting={props.status === "executing"}
+          status={props.status}
           onApprove={() => props.respond?.({ approved: true })}
           onReject={() => props.respond?.({ approved: false })}
         />
@@ -168,11 +208,11 @@ export function ConfirmAction() {
     renderAndWaitForResponse: (props) => {
       if (props.status === "complete") return <></>;
       return (
-        <ConfirmationDialog
+        <ToolConfirmation
           toolName="delete-webhook"
           toolMeta={DANGEROUS_TOOLS["delete-webhook"]}
           args={(props.args ?? {}) as Record<string, unknown>}
-          isExecuting={props.status === "executing"}
+          status={props.status}
           onApprove={() => props.respond?.({ approved: true })}
           onReject={() => props.respond?.({ approved: false })}
         />
@@ -185,11 +225,11 @@ export function ConfirmAction() {
     renderAndWaitForResponse: (props) => {
       if (props.status === "complete") return <></>;
       return (
-        <ConfirmationDialog
+        <ToolConfirmation
           toolName="configure-ai-provider"
           toolMeta={DANGEROUS_TOOLS["configure-ai-provider"]}
           args={(props.args ?? {}) as Record<string, unknown>}
-          isExecuting={props.status === "executing"}
+          status={props.status}
           onApprove={() => props.respond?.({ approved: true })}
           onReject={() => props.respond?.({ approved: false })}
         />
@@ -197,6 +237,5 @@ export function ConfirmAction() {
     },
   });
 
-  // This component only registers hooks — it doesn't render anything itself
   return null;
 }

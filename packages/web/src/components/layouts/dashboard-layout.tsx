@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { useAuthStore } from '@/stores/auth'
+import { useAgentUIStore } from '@/stores/agent-ui'
 import { AgentPanel, AgentStatusBadge } from '@/components/agent'
 
 const navItems = [
@@ -33,6 +34,7 @@ export function DashboardLayout() {
   const { t } = useTranslation()
   const location = useLocation()
   const { clearTokens } = useAuthStore()
+  const { isOpen } = useAgentUIStore()
 
   const handleLogout = () => {
     clearTokens()
@@ -91,7 +93,12 @@ export function DashboardLayout() {
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 pl-64">
+      <div
+        className={cn(
+          'flex-1 pl-64 transition-all duration-300 ease-in-out',
+          isOpen && 'mr-105'
+        )}
+      >
         {/* Header */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-end gap-2 border-b bg-background/95 px-6 backdrop-blur supports-backdrop-filter:bg-background/60">
           <AgentStatusBadge />

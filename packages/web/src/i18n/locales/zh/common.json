@@ -458,6 +458,7 @@
   "agent": {
     "title": "平台助手",
     "openChat": "打开助手对话",
+    "newChat": "新对话",
     "welcomeMessage": "你好！我是你的平台助手。我可以帮助你管理模板、仓库、审查、Webhook 和 AI 供应商。你想做什么？",
     "inputPlaceholder": "向助手提问...",
     "confirmAction": "确认操作",
@@ -465,6 +466,11 @@
     "confirmProceed": "确定要继续吗？",
     "actionApproved": "操作已批准",
     "actionRejected": "操作已取消",
-    "requiresApproval": "需要确认"
+    "requiresApproval": "需要确认",
+    "suggestion": {
+      "listTemplates": "查看所有模板",
+      "listRepos": "查看仓库列表",
+      "configAI": "配置 AI 供应商"
+    }
   }
 }
