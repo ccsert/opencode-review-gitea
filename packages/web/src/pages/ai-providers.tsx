@@ -18,6 +18,7 @@ import {
   EyeOff,
   TestTube2,
   Sparkles,
+  Pencil,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -90,10 +91,14 @@ const providerConfig: Record<AiProviderType, { label: string; color: string; ico
 export function AiProvidersPage() {
   const { t } = useTranslation()
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState<AiProvider | null>(null)
+  const [editingProvider, setEditingProvider] = useState<AiProvider | null>(null)
   const [showApiKey, setShowApiKey] = useState(false)
+  const [showEditApiKey, setShowEditApiKey] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [editTestResult, setEditTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
   // API Queries
   const { data: providersData, isLoading } = useAiProviders()
@@ -117,7 +122,21 @@ export function AiProvidersPage() {
     },
   })
 
+  // Edit form (reuses CreateProviderFormData shape)
+  const editForm = useForm<CreateProviderFormData>({
+    resolver: zodResolver(createProviderSchema(t)),
+    defaultValues: {
+      name: '',
+      provider: 'deepseek',
+      baseUrl: '',
+      apiKey: '',
+      defaultModel: '',
+      isDefault: false,
+    },
+  })
+
   const watchProvider = form.watch('provider')
+  const watchEditProvider = editForm.watch('provider')
   const providers = providersData?.data || []
   const presets = presetsData?.data || []
 
@@ -142,6 +161,35 @@ export function AiProvidersPage() {
       }
     } catch (error) {
       toast.error(t('aiProviders.createFailed'), {
+        description: error instanceof Error ? error.message : t('common.unknownError'),
+      })
+    }
+  }
+
+  const handleEdit = async (data: CreateProviderFormData) => {
+    if (!editingProvider) return
+    try {
+      const result = await updateMutation.mutateAsync({
+        id: editingProvider.id,
+        data: {
+          name: data.name,
+          baseUrl: data.baseUrl || undefined,
+          apiKey: data.apiKey || undefined,
+          defaultModel: data.defaultModel || undefined,
+          isDefault: data.isDefault,
+        },
+      })
+      if (result.success) {
+        toast.success(t('aiProviders.editSuccess'), {
+          description: t('aiProviders.editSuccessDesc'),
+        })
+        setEditDialogOpen(false)
+        setEditingProvider(null)
+        editForm.reset()
+        setEditTestResult(null)
+      }
+    } catch (error) {
+      toast.error(t('aiProviders.editFailed'), {
         description: error instanceof Error ? error.message : t('common.unknownError'),
       })
     }
@@ -227,6 +275,48 @@ export function AiProvidersPage() {
     setShowApiKey(false)
     setAddDialogOpen(true)
   }
+
+  const openEditDialog = (provider: AiProvider) => {
+    setEditingProvider(provider)
+    editForm.reset({
+      name: provider.name,
+      provider: provider.provider as AiProviderType,
+      baseUrl: provider.baseUrl || '',
+      apiKey: '', // Don't pre-fill API key for security
+      defaultModel: provider.defaultModel || '',
+      isDefault: provider.isDefault,
+    })
+    setEditTestResult(null)
+    setShowEditApiKey(false)
+    setEditDialogOpen(true)
+  }
+
+  const handleEditTestConnection = async () => {
+    const values = editForm.getValues()
+    const preset = presets.find(p => p.id === values.provider)
+    try {
+      setEditTestResult(null)
+      const result = await testMutation.mutateAsync({
+        provider: values.provider,
+        baseUrl: values.baseUrl || preset?.baseUrl,
+        apiKey: values.apiKey || undefined,
+      })
+      if (result.success && result.data) {
+        setEditTestResult({ success: true, message: result.data.message })
+        if (result.data.models.length > 0 && !values.defaultModel) {
+          editForm.setValue('defaultModel', result.data.models[0])
+        }
+      }
+    } catch (error) {
+      setEditTestResult({
+        success: false,
+        message: error instanceof Error ? error.message : t('aiProviders.testFailed'),
+      })
+    }
+  }
+
+  // Preset for the edit dialog
+  const editSelectedPreset = presets.find(p => p.id === watchEditProvider)
 
   return (
     <div className="space-y-6">
@@ -332,6 +422,10 @@ export function AiProvidersPage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => openEditDialog(provider)}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        {t('common.edit')}
+                      </DropdownMenuItem>
                       {!provider.isDefault && (
                         <DropdownMenuItem onClick={() => handleSetDefault(provider)}>
                           <Star className="mr-2 h-4 w-4" />
@@ -562,6 +656,148 @@ export function AiProvidersPage() {
               <Button type="submit" disabled={createMutation.isPending}>
                 {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {t('common.create')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-125">
+          <DialogHeader>
+            <DialogTitle>{t('aiProviders.editTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('aiProviders.editDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={editForm.handleSubmit(handleEdit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('aiProviders.providerType')}</Label>
+              <div className="flex items-center gap-2 rounded-md border px-3 py-2 bg-muted/50">
+                <span>{providerConfig[watchEditProvider]?.icon}</span>
+                <span className="text-sm font-medium">{providerConfig[watchEditProvider]?.label}</span>
+              </div>
+              <input type="hidden" {...editForm.register('provider')} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">{t('aiProviders.name')}</Label>
+              <Input
+                id="edit-name"
+                placeholder={t('aiProviders.namePlaceholder')}
+                {...editForm.register('name')}
+              />
+              {editForm.formState.errors.name && (
+                <p className="text-sm text-destructive">{editForm.formState.errors.name.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-baseUrl">{t('aiProviders.baseUrl')}</Label>
+              <Input
+                id="edit-baseUrl"
+                placeholder={editSelectedPreset?.baseUrl || 'https://api.example.com'}
+                {...editForm.register('baseUrl')}
+              />
+              {editForm.formState.errors.baseUrl && (
+                <p className="text-sm text-destructive">{editForm.formState.errors.baseUrl.message}</p>
+              )}
+            </div>
+
+            {providerConfig[watchEditProvider]?.needsKey && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-apiKey">{t('aiProviders.apiKey')}</Label>
+                <div className="relative">
+                  <Input
+                    id="edit-apiKey"
+                    type={showEditApiKey ? 'text' : 'password'}
+                    placeholder={t('aiProviders.apiKeyEditPlaceholder')}
+                    {...editForm.register('apiKey')}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0"
+                    onClick={() => setShowEditApiKey(!showEditApiKey)}
+                  >
+                    {showEditApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">{t('aiProviders.apiKeyEditHint')}</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-defaultModel">{t('aiProviders.defaultModel')}</Label>
+              <Select
+                value={editForm.watch('defaultModel') || ''}
+                onValueChange={(value) => editForm.setValue('defaultModel', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('aiProviders.selectModel')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(editSelectedPreset?.models || []).map((model) => (
+                    <SelectItem key={model} value={model}>
+                      {model}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="edit-isDefault"
+                checked={editForm.watch('isDefault')}
+                onCheckedChange={(checked) => editForm.setValue('isDefault', checked)}
+              />
+              <Label htmlFor="edit-isDefault">{t('aiProviders.setAsDefaultOnCreate')}</Label>
+            </div>
+
+            {/* Test Connection */}
+            <div className="space-y-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleEditTestConnection}
+                disabled={testMutation.isPending}
+              >
+                {testMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <TestTube2 className="mr-2 h-4 w-4" />
+                )}
+                {t('aiProviders.testConnection')}
+              </Button>
+              {editTestResult && (
+                <div className={`p-3 rounded-lg text-sm ${
+                  editTestResult.success
+                    ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300'
+                    : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {editTestResult.success ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                    {editTestResult.message}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
+                {t('common.cancel')}
+              </Button>
+              <Button type="submit" disabled={updateMutation.isPending}>
+                {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {t('common.save')}
               </Button>
             </DialogFooter>
           </form>
