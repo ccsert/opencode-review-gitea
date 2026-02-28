@@ -9,7 +9,7 @@
  * it duplicates tool cards and swallows assistant text content.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useCopilotChatInternal, useCopilotChatSuggestions } from "@copilotkit/react-core";
 import { nanoid } from "nanoid";
 import { useTranslation } from "react-i18next";
@@ -276,10 +276,74 @@ function AutoCollapsingTool({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function AgentPanel() {
+  const MIN_SIDEBAR_WIDTH = 360;
+  const MAX_SIDEBAR_WIDTH = 720;
+
   const { t } = useTranslation();
-  const { isOpen, setOpen } = useAgentUIStore();
+  const { isOpen, setOpen, sidebarWidth, setSidebarWidth } = useAgentUIStore();
   const available = useCopilotAvailable();
   const [input, setInput] = useState("");
+  const [isResizing, setIsResizing] = useState(false);
+
+  const clampWidth = useCallback(
+    (value: number) => {
+      const viewportMax = typeof window === "undefined"
+        ? MAX_SIDEBAR_WIDTH
+        : Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, window.innerWidth - 24));
+      return Math.max(MIN_SIDEBAR_WIDTH, Math.min(viewportMax, value));
+    },
+    [MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH]
+  );
+
+  const handleResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+
+      const startX = event.clientX;
+      const startWidth = sidebarWidth;
+      setIsResizing(true);
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const delta = startX - moveEvent.clientX;
+        setSidebarWidth(clampWidth(startWidth + delta));
+      };
+
+      const handlePointerUp = () => {
+        setIsResizing(false);
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+      };
+
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+    },
+    [clampWidth, setSidebarWidth, sidebarWidth]
+  );
+
+  useEffect(() => {
+    const normalizedWidth = clampWidth(sidebarWidth);
+    if (normalizedWidth !== sidebarWidth) {
+      setSidebarWidth(normalizedWidth);
+    }
+  }, [clampWidth, setSidebarWidth, sidebarWidth]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+    };
+  }, [isResizing]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--agent-sidebar-width", `${sidebarWidth}px`);
+  }, [sidebarWidth]);
 
   // Guard: CopilotKit hooks require an active CopilotKit context.
   if (!available) return null;
@@ -308,10 +372,17 @@ export function AgentPanel() {
       {/* Sidebar panel */}
       <div
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex w-105 max-w-full flex-col border-l bg-background shadow-xl transition-transform duration-300 ease-in-out",
+          "fixed inset-y-0 right-0 z-50 flex max-w-full w-(--agent-sidebar-width) flex-col border-l bg-background shadow-xl transition-transform duration-300 ease-in-out",
           isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
+        <div
+          role="separator"
+          aria-label="Resize agent sidebar"
+          className="absolute inset-y-0 left-0 z-10 w-2 -translate-x-1 cursor-col-resize"
+          onPointerDown={handleResizeStart}
+        />
+
         {/* ── Header ── */}
         <div className="flex h-14 shrink-0 items-center justify-between border-b px-4">
           <div className="flex items-center gap-2">

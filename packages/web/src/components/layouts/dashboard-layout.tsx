@@ -96,7 +96,7 @@ export function DashboardLayout() {
       <div
         className={cn(
           'flex-1 pl-64 transition-all duration-300 ease-in-out',
-          isOpen && 'mr-105'
+          isOpen && 'mr-(--agent-sidebar-width)'
         )}
       >
         {/* Header */}
