@@ -6,10 +6,14 @@
  *
  * CopilotKit is only mounted when the user is authenticated to avoid
  * unauthenticated requests to /api/v1/agui on app startup.
+ *
+ * Also provides CopilotAvailableContext so child components can safely
+ * check whether CopilotKit is mounted without touching CopilotKit internals.
  */
 
 import { CopilotKit } from "@copilotkit/react-core";
 import { useAuthStore } from "@/stores/auth";
+import { CopilotAvailableContext } from "./useCopilotAvailable";
 
 interface AgentProviderProps {
   children: React.ReactNode;
@@ -20,16 +24,22 @@ export function AgentProvider({ children }: AgentProviderProps) {
 
   // Only mount CopilotKit when authenticated — prevents 401 on startup
   if (!isAuthenticated || !accessToken) {
-    return <>{children}</>;
+    return (
+      <CopilotAvailableContext.Provider value={false}>
+        {children}
+      </CopilotAvailableContext.Provider>
+    );
   }
 
   return (
-    <CopilotKit
-      runtimeUrl="/api/v1/agui"
-      agent="platform-agent"
-      headers={{ Authorization: `Bearer ${accessToken}` }}
-    >
-      {children}
-    </CopilotKit>
+    <CopilotAvailableContext.Provider value={true}>
+      <CopilotKit
+        runtimeUrl="/api/v1/agui"
+        agent="platform-agent"
+        headers={{ Authorization: `Bearer ${accessToken}` }}
+      >
+        {children}
+      </CopilotKit>
+    </CopilotAvailableContext.Provider>
   );
 }

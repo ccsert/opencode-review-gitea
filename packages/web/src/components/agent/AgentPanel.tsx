@@ -1,11 +1,15 @@
 /**
  * AgentPanel — sliding sidebar panel for chatting with the platform agent
  *
- * Uses ai-elements components (Conversation, Message, PromptInput, Suggestion)
- * to provide a beautiful, consistent chat UI powered by CopilotKit runtime.
+ * Uses ai-elements components (Conversation, Message, PromptInput, Suggestion,
+ * Tool) to provide a beautiful, consistent chat UI powered by CopilotKit runtime.
+ *
+ * Tool calls are rendered inline using ai-elements Tool components — we do NOT
+ * use CopilotKit's generativeUI / useCopilotAction catch-all renderer because
+ * it duplicates tool cards and swallows assistant text content.
  */
 
-import { useCallback, useState, Fragment, type ReactNode } from "react";
+import { useCallback, useState, Fragment } from "react";
 import { useCopilotChatInternal, useCopilotChatSuggestions } from "@copilotkit/react-core";
 import { nanoid } from "nanoid";
 import { useTranslation } from "react-i18next";
@@ -15,9 +19,6 @@ import {
   Copy,
   Trash2,
   MessageSquare,
-  Wrench,
-  Check,
-  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -41,21 +42,19 @@ import {
   PromptInputBody,
   PromptInputFooter,
 } from "@/components/ai-elements/prompt-input";
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool";
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { AgentStateIndicator } from "./AgentStateIndicator";
-import { ToolCallVisualization } from "./ToolCallVisualization";
 import { ConfirmAction } from "./ConfirmAction";
 import { useCopilotAvailable } from "./useCopilotAvailable";
 
-// ─── Inline Tool Card ─────────────────────────────────────────────────────────
-
-interface ToolCallInfo {
-  id: string;
-  name: string;
-  args: Record<string, unknown>;
-  result?: string;
-  status: "executing" | "complete" | "inProgress";
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 // AG-UI message types (CopilotKit v1.52+ uses these internally)
 interface AGUIToolCall {
@@ -72,47 +71,44 @@ interface AGUIContentPart {
 interface AGUIMessage {
   id: string;
   role: string;
-  content?: string | AGUIContentPart[];
+  content?: string | AGUIContentPart[] | null;
   name?: string;
   toolCalls?: AGUIToolCall[];
   toolCallId?: string;
   toolName?: string;
-  generativeUI?: (() => ReactNode) | null;
-  generativeUIPosition?: "before" | "after";
 }
 
-function InlineToolCard({ tool }: { tool: ToolCallInfo }) {
-  const displayName = tool.name
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Extract plain-text content from a message, handling all known shapes. */
+function extractTextContent(msg: AGUIMessage): string {
+  if (typeof msg.content === "string") return msg.content;
+  if (Array.isArray(msg.content)) {
+    return (msg.content as AGUIContentPart[])
+      .filter((p) => p.type === "text" && p.text)
+      .map((p) => p.text!)
+      .join("");
+  }
+  return "";
+}
+
+/** Human-readable tool name */
+function formatToolName(name: string): string {
+  return name
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (s) => s.toUpperCase())
-    .replace(/-/g, " ");
+    .replace(/-/g, " ")
+    .trim();
+}
 
-  const isComplete = tool.status === "complete";
+/** Map our status to ai-elements ToolUIPart state */
+function mapToolStatus(complete: boolean): "input-available" | "output-available" {
+  return complete ? "output-available" : "input-available";
+}
 
-  return (
-    <div className="my-1.5 rounded-lg border bg-muted/20 px-3 py-2">
-      <div className="flex items-center gap-2 text-xs">
-        <Wrench className="h-3 w-3 text-muted-foreground shrink-0" />
-        <span className="font-medium text-foreground truncate">{displayName}</span>
-        {isComplete ? (
-          <span className="ml-auto flex items-center gap-1 text-green-600 text-[10px] font-medium shrink-0">
-            <Check className="h-3 w-3" /> Done
-          </span>
-        ) : (
-          <span className="ml-auto flex items-center gap-1 text-blue-500 text-[10px] font-medium shrink-0">
-            <Loader2 className="h-3 w-3 animate-spin" /> Running
-          </span>
-        )}
-      </div>
-      {tool.result && isComplete && (
-        <div className="mt-1.5 max-h-20 overflow-auto rounded bg-muted/40 p-1.5 text-[11px] text-muted-foreground">
-          <code className="whitespace-pre-wrap break-all">
-            {tool.result.length > 200 ? tool.result.slice(0, 200) + "…" : tool.result}
-          </code>
-        </div>
-      )}
-    </div>
-  );
+/** Parse JSON safely */
+function safeParseJSON(str: string): Record<string, unknown> {
+  try { return JSON.parse(str); } catch { return {}; }
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -128,8 +124,7 @@ export function AgentPanel() {
 
   return (
     <>
-      {/* Register CopilotKit action hooks (catch-all renderer + confirmations) */}
-      <ToolCallVisualization />
+      {/* Register confirmation hooks for dangerous tools only */}
       <ConfirmAction />
 
       {/* Floating trigger button */}
@@ -256,12 +251,25 @@ function AgentChatContent({
   );
 
   // ── Filter messages ──
-  const renderMessages = ((aguiMessages ?? []) as AGUIMessage[]).filter(
+  // Build a set of tool-result message IDs so we can skip them in the main loop
+  // (they are merged into the corresponding assistant message's tool cards).
+  const allMessages = (aguiMessages ?? []) as AGUIMessage[];
+  const toolResultMap = new Map<string, AGUIMessage>();
+  const toolResultIds = new Set<string>();
+  for (const msg of allMessages) {
+    if (msg.role === "tool" && msg.toolCallId) {
+      toolResultMap.set(msg.toolCallId, msg);
+      toolResultIds.add(msg.id);
+    }
+  }
+
+  const renderMessages = allMessages.filter(
     (msg) =>
       msg.role !== "system" &&
       msg.role !== "developer" &&
       msg.role !== "activity" &&
-      msg.name !== "coagent-state-render"
+      msg.name !== "coagent-state-render" &&
+      !toolResultIds.has(msg.id) // skip standalone tool-result messages
   );
   const hasMessages = renderMessages.length > 0;
 
@@ -304,15 +312,8 @@ function AgentChatContent({
 
               // User messages
               if (msgRole === "user") {
-                const textContent =
-                  typeof msg.content === "string"
-                    ? msg.content
-                    : Array.isArray(msg.content)
-                      ? (msg.content as AGUIContentPart[])
-                          .filter((p) => p.type === "text")
-                          .map((p) => p.text)
-                          .join("")
-                      : "";
+                const textContent = extractTextContent(msg);
+                if (!textContent) return null;
 
                 return (
                   <Fragment key={msg.id}>
@@ -327,93 +328,82 @@ function AgentChatContent({
 
               // Assistant messages
               if (msgRole === "assistant") {
-                const textContent =
-                  typeof msg.content === "string"
-                    ? msg.content
-                    : Array.isArray(msg.content)
-                      ? (msg.content as AGUIContentPart[])
-                          .filter((p) => p.type === "text")
-                          .map((p) => p.text)
-                          .join("")
-                      : "";
+                const textContent = extractTextContent(msg);
                 const isLastAssistant =
                   index === renderMessages.length - 1 && !isLoading;
 
-                // If the message has a generativeUI renderer, use it
-                if (msg.generativeUI && typeof msg.generativeUI === "function") {
-                  const rendered = msg.generativeUI();
-                  if (rendered) {
-                    return <Fragment key={msg.id}>{rendered}</Fragment>;
-                  }
-                }
-
-                // Render inline tool call cards for tool invocations
                 const toolCalls = msg.toolCalls;
-                if (toolCalls && toolCalls.length > 0 && !textContent) {
-                  return (
-                    <Fragment key={msg.id}>
-                      {toolCalls.map((tc) => (
-                        <InlineToolCard
-                          key={tc.id}
-                          tool={{
-                            id: tc.id,
-                            name: tc.function?.name || "Tool",
-                            args: tc.function?.arguments
-                              ? (() => { try { return JSON.parse(tc.function.arguments); } catch { return {}; } })()
-                              : {},
-                            status: "executing",
-                          }}
-                        />
-                      ))}
-                    </Fragment>
-                  );
-                }
+                const hasToolCalls = toolCalls && toolCalls.length > 0;
+                const hasText = !!textContent;
 
-                // Only render if there's text content
-                if (!textContent) return null;
+                // Skip completely empty assistant messages
+                if (!hasText && !hasToolCalls) return null;
 
                 return (
                   <Fragment key={msg.id}>
-                    <Message from="assistant">
-                      <MessageContent>
-                        <MessageResponse>{textContent}</MessageResponse>
-                      </MessageContent>
-                      {isLastAssistant && (
-                        <MessageActions>
-                          <MessageAction
-                            tooltip={t("common.copy", "复制")}
-                            label="Copy"
-                            onClick={() =>
-                              navigator.clipboard.writeText(textContent)
-                            }
-                          >
-                            <Copy className="h-3 w-3" />
-                          </MessageAction>
-                        </MessageActions>
-                      )}
-                    </Message>
+                    {/* Tool call cards (using ai-elements Tool) */}
+                    {hasToolCalls &&
+                      toolCalls.map((tc) => {
+                        const resultMsg = toolResultMap.get(tc.id);
+                        const isComplete = !!resultMsg;
+                        const args = tc.function?.arguments
+                          ? safeParseJSON(tc.function.arguments)
+                          : {};
+                        const hasArgs = Object.keys(args).length > 0;
+                        const result = resultMsg
+                          ? typeof resultMsg.content === "string"
+                            ? resultMsg.content
+                            : JSON.stringify(resultMsg.content)
+                          : undefined;
+                        const state = mapToolStatus(isComplete);
+
+                        return (
+                          <Tool key={tc.id} defaultOpen={!isComplete}>
+                            <ToolHeader
+                              title={formatToolName(tc.function?.name || "Tool")}
+                              type="tool-invocation"
+                              state={state}
+                            />
+                            {(hasArgs || result != null) && (
+                              <ToolContent>
+                                {hasArgs && <ToolInput input={args} />}
+                                {result != null && isComplete && (
+                                  <ToolOutput output={result} errorText={undefined} />
+                                )}
+                              </ToolContent>
+                            )}
+                          </Tool>
+                        );
+                      })}
+
+                    {/* Text content */}
+                    {hasText && (
+                      <Message from="assistant">
+                        <MessageContent>
+                          <MessageResponse>{textContent}</MessageResponse>
+                        </MessageContent>
+                        {isLastAssistant && (
+                          <MessageActions>
+                            <MessageAction
+                              tooltip={t("common.copy", "复制")}
+                              label="Copy"
+                              onClick={() =>
+                                navigator.clipboard.writeText(textContent)
+                              }
+                            >
+                              <Copy className="h-3 w-3" />
+                            </MessageAction>
+                          </MessageActions>
+                        )}
+                      </Message>
+                    )}
                   </Fragment>
                 );
               }
 
-              // Tool result messages
-              if (msgRole === "tool") {
-                return (
-                  <InlineToolCard
-                    key={msg.id}
-                    tool={{
-                      id: msg.id,
-                      name: msg.toolName || msg.name || "Tool",
-                      args: {},
-                      result:
-                        typeof msg.content === "string"
-                          ? msg.content
-                          : JSON.stringify(msg.content),
-                      status: "complete",
-                    }}
-                  />
-                );
-              }
+              // Tool result messages — already merged into assistant tool cards above.
+              // If we encounter one here (shouldn't happen due to filter), skip it.
+              if (msgRole === "tool") return null;
 
               return null;
             })
