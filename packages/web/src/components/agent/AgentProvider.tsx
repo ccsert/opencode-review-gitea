@@ -36,6 +36,7 @@ export function AgentProvider({ children }: AgentProviderProps) {
       <CopilotKit
         runtimeUrl="/api/v1/agui"
         agent="platform-agent"
+        useSingleEndpoint={true}
         headers={{ Authorization: `Bearer ${accessToken}` }}
       >
         {children}

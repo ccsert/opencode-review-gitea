@@ -67,6 +67,10 @@ interface AGUIToolCall {
 interface AGUIContentPart {
   type: string;
   text?: string;
+  toolCallId?: string;
+  id?: string;
+  name?: string;
+  toolName?: string;
 }
 
 interface AGUIMessage {
@@ -78,6 +82,10 @@ interface AGUIMessage {
   toolCallId?: string;
   toolName?: string;
 }
+
+type AssistantRenderSegment =
+  | { type: "text"; key: string; text: string }
+  | { type: "tool"; key: string; toolCall: AGUIToolCall };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -110,6 +118,125 @@ function mapToolStatus(complete: boolean): "input-available" | "output-available
 /** Parse JSON safely */
 function safeParseJSON(str: string): Record<string, unknown> {
   try { return JSON.parse(str); } catch { return {}; }
+}
+
+function splitLeadAndTailText(text: string): { lead: string; tail: string } {
+  const trimmed = text.trim();
+  if (!trimmed) return { lead: "", tail: "" };
+
+  const paragraphMatch = /\n\s*\n/.exec(trimmed);
+  if (paragraphMatch && paragraphMatch.index > 0) {
+    const lead = trimmed.slice(0, paragraphMatch.index).trim();
+    const tail = trimmed.slice(paragraphMatch.index).trim();
+    return { lead, tail };
+  }
+
+  const sentencePunctuation = ["。", "！", "？", ". ", "! ", "? "];
+  for (const marker of sentencePunctuation) {
+    const idx = trimmed.indexOf(marker);
+    if (idx > 0 && idx < trimmed.length - marker.length) {
+      const lead = trimmed.slice(0, idx + marker.length).trim();
+      const tail = trimmed.slice(idx + marker.length).trim();
+      if (lead && tail) {
+        return { lead, tail };
+      }
+    }
+  }
+
+  return { lead: trimmed, tail: "" };
+}
+
+function buildAssistantSegments(msg: AGUIMessage): AssistantRenderSegment[] {
+  const segments: AssistantRenderSegment[] = [];
+  const toolCalls = msg.toolCalls ?? [];
+  const usedToolCallIds = new Set<string>();
+
+  if (Array.isArray(msg.content)) {
+    for (let index = 0; index < msg.content.length; index++) {
+      const part = msg.content[index];
+
+      if (part.type === "text" && part.text?.trim()) {
+        segments.push({
+          type: "text",
+          key: `${msg.id}-text-${index}`,
+          text: part.text,
+        });
+        continue;
+      }
+
+      const partToolCallId = part.toolCallId || part.id;
+      const partToolName = part.toolName || part.name;
+      const matchedToolCall = toolCalls.find((tc) => {
+        if (usedToolCallIds.has(tc.id)) return false;
+        if (partToolCallId && tc.id === partToolCallId) return true;
+        if (partToolName && tc.function?.name === partToolName) return true;
+        return false;
+      });
+
+      if (matchedToolCall) {
+        usedToolCallIds.add(matchedToolCall.id);
+        segments.push({
+          type: "tool",
+          key: `${msg.id}-tool-${matchedToolCall.id}`,
+          toolCall: matchedToolCall,
+        });
+      }
+    }
+  }
+
+  if (segments.length === 0) {
+    const textContent = extractTextContent(msg);
+    if (textContent && toolCalls.length > 0) {
+      const { lead, tail } = splitLeadAndTailText(textContent);
+      if (lead) {
+        segments.push({ type: "text", key: `${msg.id}-text-lead`, text: lead });
+      }
+      for (const tc of toolCalls) {
+        segments.push({
+          type: "tool",
+          key: `${msg.id}-tool-${tc.id}`,
+          toolCall: tc,
+        });
+      }
+      if (tail) {
+        segments.push({ type: "text", key: `${msg.id}-text-tail`, text: tail });
+      }
+      return segments;
+    }
+
+    if (textContent) {
+      segments.push({ type: "text", key: `${msg.id}-text`, text: textContent });
+    }
+    for (const tc of toolCalls) {
+      segments.push({
+        type: "tool",
+        key: `${msg.id}-tool-${tc.id}`,
+        toolCall: tc,
+      });
+    }
+    return segments;
+  }
+
+  for (const tc of toolCalls) {
+    if (!usedToolCallIds.has(tc.id)) {
+      segments.push({
+        type: "tool",
+        key: `${msg.id}-tool-${tc.id}`,
+        toolCall: tc,
+      });
+    }
+  }
+
+  const firstTextIndex = segments.findIndex((seg) => seg.type === "text");
+  if (firstTextIndex > 0) {
+    const leadingTools = segments.slice(0, firstTextIndex).filter((seg) => seg.type === "tool");
+    if (leadingTools.length > 0) {
+      const textAndRest = segments.slice(firstTextIndex);
+      return [textAndRest[0], ...leadingTools, ...textAndRest.slice(1)];
+    }
+  }
+
+  return segments;
 }
 
 // ─── Auto-Collapsing Tool ─────────────────────────────────────────────────────
@@ -311,11 +438,13 @@ function AgentChatContent({
   );
   const hasMessages = renderMessages.length > 0;
 
-  // Find the last assistant message index that has text content (for copy button)
   let lastAssistantTextIdx = -1;
   for (let i = renderMessages.length - 1; i >= 0; i--) {
-    const m = renderMessages[i];
-    if (m.role === "assistant" && extractTextContent(m)) {
+    const msg = renderMessages[i];
+    if (
+      msg.role === "assistant" &&
+      buildAssistantSegments(msg).some((seg) => seg.type === "text")
+    ) {
       lastAssistantTextIdx = i;
       break;
     }
@@ -354,12 +483,12 @@ function AgentChatContent({
               </Suggestions>
             </div>
           ) : (
-            /* ── Per-message rendering ── */
+            /* ── Message list (strict renderMessages order) ── */
             renderMessages.map((msg, index) => {
-              // ── User messages ──
               if (msg.role === "user") {
                 const textContent = extractTextContent(msg);
                 if (!textContent) return null;
+
                 return (
                   <Message key={msg.id} from="user">
                     <MessageContent>
@@ -369,31 +498,35 @@ function AgentChatContent({
                 );
               }
 
-              // ── Assistant messages ──
               if (msg.role === "assistant") {
-                const textContent = extractTextContent(msg);
-                const toolCalls = msg.toolCalls;
-                const hasToolCalls = toolCalls && toolCalls.length > 0;
-                const hasText = !!textContent;
+                const segments = buildAssistantSegments(msg);
+                const hasText = segments.some((seg) => seg.type === "text");
 
-                // Skip completely empty assistant messages
-                if (!hasText && !hasToolCalls) return null;
+                if (segments.length === 0) return null;
 
                 const showCopyAction =
                   hasText && index === lastAssistantTextIdx && !isLoading;
 
+                const copyText = segments
+                  .filter(
+                    (seg): seg is Extract<AssistantRenderSegment, { type: "text" }> =>
+                      seg.type === "text",
+                  )
+                  .map((seg) => seg.text)
+                  .join("\n\n");
+
                 return (
                   <Message key={msg.id} from="assistant">
-                    {/* Text content first */}
-                    {hasText && (
-                      <MessageContent>
-                        <MessageResponse>{textContent}</MessageResponse>
-                      </MessageContent>
-                    )}
+                    {segments.map((seg) => {
+                      if (seg.type === "text") {
+                        return (
+                          <MessageContent key={seg.key}>
+                            <MessageResponse>{seg.text}</MessageResponse>
+                          </MessageContent>
+                        );
+                      }
 
-                    {/* Tool call cards — inside the same Message container */}
-                    {hasToolCalls &&
-                      toolCalls.map((tc) => {
+                      const tc = seg.toolCall;
                         const resultMsg = toolResultMap.get(tc.id);
                         const isComplete = !!resultMsg;
                         const args = tc.function?.arguments
@@ -407,42 +540,31 @@ function AgentChatContent({
                           : undefined;
                         const state = mapToolStatus(isComplete);
 
-                        return (
-                          <AutoCollapsingTool
-                            key={tc.id}
-                            isComplete={isComplete}
-                          >
-                            <ToolHeader
-                              title={formatToolName(
-                                tc.function?.name || "Tool",
+                      return (
+                        <AutoCollapsingTool key={seg.key} isComplete={isComplete}>
+                          <ToolHeader
+                            title={formatToolName(tc.function?.name || "Tool")}
+                            type="tool-invocation"
+                            state={state}
+                          />
+                          {(hasArgs || result != null) && (
+                            <ToolContent>
+                              {hasArgs && <ToolInput input={args} />}
+                              {result != null && isComplete && (
+                                <ToolOutput output={result} errorText={undefined} />
                               )}
-                              type="tool-invocation"
-                              state={state}
-                            />
-                            {(hasArgs || result != null) && (
-                              <ToolContent>
-                                {hasArgs && <ToolInput input={args} />}
-                                {result != null && isComplete && (
-                                  <ToolOutput
-                                    output={result}
-                                    errorText={undefined}
-                                  />
-                                )}
-                              </ToolContent>
-                            )}
-                          </AutoCollapsingTool>
-                        );
-                      })}
+                            </ToolContent>
+                          )}
+                        </AutoCollapsingTool>
+                      );
+                    })}
 
-                    {/* Copy action — only on the last assistant text */}
                     {showCopyAction && (
                       <MessageActions>
                         <MessageAction
                           tooltip={t("common.copy", "复制")}
                           label="Copy"
-                          onClick={() =>
-                            navigator.clipboard.writeText(textContent!)
-                          }
+                          onClick={() => navigator.clipboard.writeText(copyText)}
                         >
                           <Copy className="h-3 w-3" />
                         </MessageAction>
