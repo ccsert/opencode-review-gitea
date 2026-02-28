@@ -69,6 +69,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@ag-ui/client':
+        specifier: ^0.0.45
+        version: 0.0.45
       '@ag-ui/core':
         specifier: ^0.0.45
         version: 0.0.45
@@ -102,6 +105,9 @@ importers:
       jose:
         specifier: ^5.2.0
         version: 5.10.0
+      rxjs:
+        specifier: ^7.8.2
+        version: 7.8.2
       ulid:
         specifier: ^2.3.0
         version: 2.4.0
@@ -138,13 +144,13 @@ importers:
         version: 0.0.45
       '@copilotkit/react-core':
         specifier: ^1.52.0
-        version: 1.52.0(@ag-ui/core@0.0.45)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(graphql@16.13.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)
+        version: 1.52.0(@ag-ui/core@0.0.46)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(graphql@16.13.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)
       '@copilotkit/react-ui':
         specifier: ^1.52.0
-        version: 1.52.0(@ag-ui/core@0.0.45)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(graphql@16.13.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)
+        version: 1.52.0(@ag-ui/core@0.0.46)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(graphql@16.13.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)
       '@copilotkit/runtime-client-gql':
         specifier: 1.52.0
-        version: 1.52.0(@ag-ui/core@0.0.45)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(graphql@16.13.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        version: 1.52.0(@ag-ui/core@0.0.46)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(graphql@16.13.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@copilotkitnext/shared':
         specifier: ^1.52.0
         version: 1.52.0
@@ -343,6 +349,9 @@ packages:
 
   '@ag-ui/core@0.0.45':
     resolution: {integrity: sha512-Ccsarxb23TChONOWXDbNBqp1fIbOSMht8g7w6AsSYBTtdOwZ7h7AkjNkr3LSdVv+RbT30JMdSLtieJE0YepNPg==}
+
+  '@ag-ui/core@0.0.46':
+    resolution: {integrity: sha512-5/gC9n20ImA10LMFLLYKOowqn2Btrr3UYXWGosmLc1+KJqREI0t35NXnwqoKlw7TWySznF1bpwY6uIvMtO/ZUg==}
 
   '@ag-ui/encoder@0.0.45':
     resolution: {integrity: sha512-EGvLZfadsmOyXJ8uYrqA/STnqdKxYQlNDHO51og7WZbJszZ/dpMCqo6GBfN0uVW7blSQvJS9UDCxztopbp/zFw==}
@@ -5531,6 +5540,9 @@ packages:
   rxjs@7.8.1:
     resolution: {integrity: sha512-AA3TVj+0A2iuIoQkWEK/tqFjBq2j+6PO6Y0zJcvzLAFhEFIO3HL0vls9hWLncZbAAbK0mar7oZ4V079I/qPMxg==}
 
+  rxjs@7.8.2:
+    resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
+
   sade@1.8.1:
     resolution: {integrity: sha512-xal3CZX1Xlo/k4ApwCFrHVACi9fBqJ7V+mwhBsuf/1IOKbBy098Fex+Wa/5QMubw09pSZ/u8EY8PWgevJsXp1A==}
     engines: {node: '>=6'}
@@ -6280,6 +6292,11 @@ snapshots:
       rxjs: 7.8.1
       zod: 3.25.76
 
+  '@ag-ui/core@0.0.46':
+    dependencies:
+      rxjs: 7.8.1
+      zod: 3.25.76
+
   '@ag-ui/encoder@0.0.45':
     dependencies:
       '@ag-ui/core': 0.0.45
@@ -6581,11 +6598,11 @@ snapshots:
 
   '@chevrotain/utils@11.1.1': {}
 
-  '@copilotkit/react-core@1.52.0(@ag-ui/core@0.0.45)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(graphql@16.13.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)':
+  '@copilotkit/react-core@1.52.0(@ag-ui/core@0.0.46)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(graphql@16.13.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)':
     dependencies:
       '@ag-ui/client': 0.0.45
-      '@copilotkit/runtime-client-gql': 1.52.0(@ag-ui/core@0.0.45)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(graphql@16.13.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@copilotkit/shared': 1.52.0(@ag-ui/core@0.0.45)
+      '@copilotkit/runtime-client-gql': 1.52.0(@ag-ui/core@0.0.46)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(graphql@16.13.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@copilotkit/shared': 1.52.0(@ag-ui/core@0.0.46)
       '@copilotkitnext/core': 1.52.0
       '@copilotkitnext/react': 1.52.0(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@scarf/scarf': 1.4.0
@@ -6621,11 +6638,11 @@ snapshots:
       - openai
       - supports-color
 
-  '@copilotkit/react-ui@1.52.0(@ag-ui/core@0.0.45)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(graphql@16.13.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)':
+  '@copilotkit/react-ui@1.52.0(@ag-ui/core@0.0.46)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(graphql@16.13.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)':
     dependencies:
-      '@copilotkit/react-core': 1.52.0(@ag-ui/core@0.0.45)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(graphql@16.13.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)
-      '@copilotkit/runtime-client-gql': 1.52.0(@ag-ui/core@0.0.45)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(graphql@16.13.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@copilotkit/shared': 1.52.0(@ag-ui/core@0.0.45)
+      '@copilotkit/react-core': 1.52.0(@ag-ui/core@0.0.46)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(graphql@16.13.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)
+      '@copilotkit/runtime-client-gql': 1.52.0(@ag-ui/core@0.0.46)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(graphql@16.13.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@copilotkit/shared': 1.52.0(@ag-ui/core@0.0.46)
       '@headlessui/react': 2.2.9(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       react: 19.2.4
       react-markdown: 10.1.0(@types/react@19.2.14)(react@19.2.4)
@@ -6662,10 +6679,10 @@ snapshots:
       - supports-color
       - zod
 
-  '@copilotkit/runtime-client-gql@1.52.0(@ag-ui/core@0.0.45)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(graphql@16.13.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@copilotkit/runtime-client-gql@1.52.0(@ag-ui/core@0.0.46)(@ag-ui/encoder@0.0.45)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(graphql@16.13.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
       '@copilotkit/runtime': 1.52.0(@ag-ui/encoder@0.0.45)(@cfworker/json-schema@4.1.1)(@copilotkitnext/shared@1.52.0)(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(@langchain/langgraph-sdk@0.1.10(@langchain/core@0.3.80(@opentelemetry/api@1.9.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@opentelemetry/api@1.9.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@copilotkit/shared': 1.52.0(@ag-ui/core@0.0.45)
+      '@copilotkit/shared': 1.52.0(@ag-ui/core@0.0.46)
       '@urql/core': 5.2.0(graphql@16.13.0)
       react: 19.2.4
       untruncate-json: 0.0.1
@@ -6735,6 +6752,17 @@ snapshots:
   '@copilotkit/shared@1.52.0(@ag-ui/core@0.0.45)':
     dependencies:
       '@ag-ui/core': 0.0.45
+      '@segment/analytics-node': 2.3.0
+      chalk: 4.1.2
+      graphql: 16.13.0
+      uuid: 10.0.0
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - encoding
+
+  '@copilotkit/shared@1.52.0(@ag-ui/core@0.0.46)':
+    dependencies:
+      '@ag-ui/core': 0.0.46
       '@segment/analytics-node': 2.3.0
       chalk: 4.1.2
       graphql: 16.13.0
@@ -12095,6 +12123,10 @@ snapshots:
   rw@1.3.3: {}
 
   rxjs@7.8.1:
+    dependencies:
+      tslib: 2.8.1
+
+  rxjs@7.8.2:
     dependencies:
       tslib: 2.8.1
 

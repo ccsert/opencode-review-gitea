@@ -371,11 +371,11 @@ async function handleTasksSend(
 
   const conversationMessages = previousMessages.map((m) => ({
     role: m.role as "user" | "assistant",
-    content: m.content,
+    content: m.content ?? "",
   }));
 
   // Execute agent
-  const agentResponse = await agent.generate(conversationMessages);
+  const agentResponse = await agent.generate(conversationMessages as any);
   const responseText =
     typeof agentResponse.text === "string"
       ? agentResponse.text
@@ -469,7 +469,7 @@ async function handleTasksGet(
   // Build history
   const history: A2AMessage[] = messages.map((m) => ({
     role: m.role === "user" ? ("user" as const) : ("agent" as const),
-    parts: [{ type: "text" as const, text: m.content }],
+    parts: [{ type: "text" as const, text: m.content ?? undefined }],
   }));
 
   // Last assistant message is the artifact
@@ -478,7 +478,7 @@ async function handleTasksGet(
     ? [
         {
           name: "response",
-          parts: [{ type: "text", text: lastAssistant.content }],
+          parts: [{ type: "text", text: lastAssistant.content ?? undefined }],
           index: 0,
         },
       ]

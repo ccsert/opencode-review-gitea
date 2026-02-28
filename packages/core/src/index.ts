@@ -18,5 +18,8 @@ export * from './templates'
 // AI Integration
 export * from './ai'
 
+// MCP Server
+export * from './mcp'
+
 // Types
 export * from './types'
