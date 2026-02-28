@@ -2,50 +2,32 @@
 
 ## Overview
 
-Zero-dependency TypeScript API client for the OpenCode Review platform REST API. Standalone package — no imports from core, server, or web. Used by external consumers to interact with the platform programmatically.
+Standalone TypeScript SDK for calling OpenCode Review platform REST APIs.
+No dependency on monorepo runtime packages (`core`, `server`, `web`).
 
 ## Structure
 
 ```
 src/
-  client.ts   → OpenCodeReviewClient class (235 lines — all API methods)
-  types.ts    → Request/response type definitions (mirrors server API shapes)
-  index.ts    → Re-exports client + types
-package.json  → Zero dependencies, dual ESM/CJS build via tsup
-tsconfig.json → Strict TypeScript, ES2020 target
+  client.ts   -> OpenCodeReviewClient implementation
+  types.ts    -> request/response types
+  index.ts    -> public exports
 ```
 
-## Key Patterns
+## Key Behavior
 
-### Client Architecture
+- Constructor supports `baseUrl` plus auth via `apiKey` or `token`.
+- Central request method handles headers, JSON serialization, and non-2xx errors.
+- API groups are exposed on the client for auth, repositories, reviews, templates, providers, system, and webhook operations.
 
-- Single class `OpenCodeReviewClient` with constructor `{ baseUrl, apiKey?, token? }`
-- Auth: API key via `X-API-Key` header OR JWT via `Authorization: Bearer` header
-- All methods return typed responses, throw on non-2xx
-- Internal `fetch` wrapper handles auth headers + JSON serialization
+## Scripts
 
-### API Coverage
+```bash
+pnpm --filter @opencode-review/sdk run build
+pnpm --filter @opencode-review/sdk run typecheck
+```
 
-- `auth.*` — login, refresh, me
-- `repositories.*` — CRUD, test connection, list
-- `reviews.*` — list, get, stats, retry
-- `templates.*` — CRUD, list
-- `aiProviders.*` — CRUD, test, list
-- `system.*` — health, info, models
-- `webhooks.*` — trigger
+## Notes
 
-## Where to Look
-
-| Task                       | File                                 |
-| -------------------------- | ------------------------------------ |
-| Add new API method         | `src/client.ts` → add method + types |
-| Add request/response types | `src/types.ts`                       |
-| Change auth behavior       | `src/client.ts` → `request()` method |
-| Change build config        | `package.json` → tsup config         |
-
-## Gotchas
-
-- No retry logic or request timeout — consumer must handle
-- Types are manually maintained — not auto-generated from server schema (can drift)
-- No validation on responses — trusts server contract
-- `token` vs `apiKey` auth: if both provided, API key takes precedence
+- Keep SDK types aligned with server response shapes.
+- Avoid importing server internals; SDK must remain transport-only.
