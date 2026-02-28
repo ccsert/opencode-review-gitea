@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Loader2,
   Shield,
+  RefreshCw,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -77,7 +78,7 @@ export function ApiKeysPage() {
   const [createdKey, setCreatedKey] = useState<CreatedApiKey | null>(null)
 
   // API Queries
-  const { data: keysData, isLoading } = useApiKeys()
+  const { data: keysData, isLoading, refetch, isFetching } = useApiKeys()
   const createMutation = useCreateApiKey()
   const deleteMutation = useDeleteApiKey()
 
@@ -176,6 +177,10 @@ export function ApiKeysPage() {
             {t('apiKeys.description')}
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching} title={t('common.refresh')}>
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+          </Button>
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -269,6 +274,7 @@ export function ApiKeysPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Info Card */}

@@ -9,6 +9,7 @@ import {
   Clock,
   ExternalLink,
   ArrowRight,
+  RefreshCw,
 } from 'lucide-react'
 import {
   Card,
@@ -20,6 +21,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useQueryClient } from '@tanstack/react-query'
 
 import { useReviewStats, useReviews, useRepositories } from '@/lib/hooks'
 import type { ReviewStatus, ReviewDecision } from '@/lib/types'
@@ -46,9 +48,17 @@ export function DashboardPage() {
   }
 
   // API Queries
-  const { data: statsData, isLoading: statsLoading } = useReviewStats()
+  const { data: statsData, isLoading: statsLoading, isFetching: statsFetching } = useReviewStats()
   const { data: reposData, isLoading: reposLoading } = useRepositories({ pageSize: 5 })
   const { data: reviewsData, isLoading: reviewsLoading } = useReviews({ limit: 5 })
+  const queryClient = useQueryClient()
+  const isRefreshing = statsFetching
+
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['reviewStats'] })
+    queryClient.invalidateQueries({ queryKey: ['reviews'] })
+    queryClient.invalidateQueries({ queryKey: ['repositories'] })
+  }
 
   const stats = statsData?.data
   const repos = reposData?.data?.items || []
@@ -70,9 +80,14 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">{t('dashboard.title')}</h1>
-        <p className="text-muted-foreground">{t('app.description')}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">{t('dashboard.title')}</h1>
+          <p className="text-muted-foreground">{t('app.description')}</p>
+        </div>
+        <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isRefreshing} title={t('common.refresh')}>
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
       {/* Stats Grid */}

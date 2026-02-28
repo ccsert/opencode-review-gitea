@@ -53,6 +53,7 @@ import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { AgentStateIndicator } from "./AgentStateIndicator";
 import { ConfirmAction } from "./ConfirmAction";
 import { useCopilotAvailable } from "./useCopilotAvailable";
+import { useAgentDataSync } from "./useAgentDataSync";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -211,6 +212,9 @@ function AgentChatContent({
     stopGeneration,
     reset,
   } = useCopilotChatInternal();
+
+  // Auto-sync: invalidate React Query caches when agent tool calls complete
+  useAgentDataSync();
 
   // Default suggestions
   useCopilotChatSuggestions({

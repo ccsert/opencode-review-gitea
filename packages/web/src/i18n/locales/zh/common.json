@@ -27,8 +27,9 @@
     "info": "提示",
     "unknownError": "未知错误",
     "operationFailed": "操作失败",
-    "copiedToClipboard": "已复制到剪贴板"
-
+    "copiedToClipboard": "已复制到剪贴板",
+    "refresh": "刷新",
+    "refreshing": "刷新中..."
   },
   "nav": {
     "dashboard": "仪表盘",

@@ -27,7 +27,9 @@
     "info": "Info",
     "unknownError": "Unknown error",
     "operationFailed": "Operation failed",
-    "copiedToClipboard": "Copied to clipboard"
+    "copiedToClipboard": "Copied to clipboard",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing..."
   },
   "nav": {
     "dashboard": "Dashboard",

@@ -19,6 +19,7 @@ import {
   TestTube2,
   Sparkles,
   Pencil,
+  RefreshCw,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -101,7 +102,7 @@ export function AiProvidersPage() {
   const [editTestResult, setEditTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
   // API Queries
-  const { data: providersData, isLoading } = useAiProviders()
+  const { data: providersData, isLoading, refetch, isFetching } = useAiProviders()
   const { data: presetsData } = useAiProviderPresets()
   const createMutation = useCreateAiProvider()
   const updateMutation = useUpdateAiProvider()
@@ -327,10 +328,15 @@ export function AiProvidersPage() {
             {t('aiProviders.description')}
           </p>
         </div>
-        <Button onClick={() => openAddDialog()}>
-          <Plus className="mr-2 h-4 w-4" />
-          {t('aiProviders.add')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching} title={t('common.refresh')}>
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button onClick={() => openAddDialog()}>
+            <Plus className="mr-2 h-4 w-4" />
+            {t('aiProviders.add')}
+          </Button>
+        </div>
       </div>
 
       {/* Quick Add Presets */}

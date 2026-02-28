@@ -113,7 +113,7 @@ export function RepositoriesPage() {
   const [selectedRepo, setSelectedRepo] = useState<RepositoryWithWebhook | null>(null)
 
   // API Queries
-  const { data: reposData, isLoading } = useRepositories({
+  const { data: reposData, isLoading, refetch, isFetching } = useRepositories({
     page,
     pageSize: 20,
     provider: providerFilter === ALL_PROVIDER_VALUE ? undefined : providerFilter,
@@ -221,6 +221,9 @@ export function RepositoriesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching} title={t('common.refresh')}>
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+          </Button>
           <Button variant="outline" onClick={() => navigate('/platforms')}>
             <Server className="mr-2 h-4 w-4" />
             {t('repositories.importFromPlatform')}

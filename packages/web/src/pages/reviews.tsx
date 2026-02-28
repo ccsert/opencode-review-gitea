@@ -13,6 +13,7 @@ import {
   Search,
   Calendar,
   X,
+  RefreshCw,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -90,7 +91,7 @@ export function ReviewsPage() {
   const [filterOpen, setFilterOpen] = useState(false)
 
   // API Queries
-  const { data: reviewsData, isLoading } = useReviews({
+  const { data: reviewsData, isLoading, refetch, isFetching } = useReviews({
     ...filters,
     page,
     limit: 20,
@@ -134,6 +135,9 @@ export function ReviewsPage() {
             {t('reviews.description')}
           </p>
         </div>
+        <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching} title={t('common.refresh')}>
+          <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
       {/* Filters */}

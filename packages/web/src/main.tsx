@@ -12,7 +12,7 @@ import { router } from './router'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
+      staleTime: 1000 * 60 * 2, // 2 minutes — shorter to better reflect AI agent changes
       retry: 1,
     },
   },

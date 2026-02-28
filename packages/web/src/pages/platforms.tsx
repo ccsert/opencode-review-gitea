@@ -100,7 +100,7 @@ export function PlatformsPage() {
   const [repoPage, setRepoPage] = useState(1)
 
   // API Queries
-  const { data: platformsData, isLoading } = usePlatforms()
+  const { data: platformsData, isLoading, refetch, isFetching } = usePlatforms()
   const createMutation = useCreatePlatform()
   const deleteMutation = useDeletePlatform()
   const importMutation = useImportRepositories()
@@ -255,10 +255,15 @@ export function PlatformsPage() {
             {t('platforms.description')}
           </p>
         </div>
-        <Button onClick={() => setAddDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          {t('platforms.addPlatform')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching} title={t('common.refresh')}>
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button onClick={() => setAddDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            {t('platforms.addPlatform')}
+          </Button>
+        </div>
       </div>
 
       {/* 平台列表 */}

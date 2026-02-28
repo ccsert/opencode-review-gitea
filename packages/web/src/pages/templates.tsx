@@ -14,6 +14,7 @@ import {
   Lock,
   Loader2,
   Star,
+  RefreshCw,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -74,7 +75,7 @@ export function TemplatesPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
 
   // API Queries
-  const { data: templatesData, isLoading } = useTemplates()
+  const { data: templatesData, isLoading, refetch, isFetching } = useTemplates()
   const createMutation = useCreateTemplate()
   const deleteMutation = useDeleteTemplate()
 
@@ -143,6 +144,10 @@ export function TemplatesPage() {
             {t('templates.description')}
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching} title={t('common.refresh')}>
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+          </Button>
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -228,6 +233,7 @@ export function TemplatesPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Tabs */}
