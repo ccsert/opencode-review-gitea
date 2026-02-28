@@ -9,7 +9,7 @@
  * it duplicates tool cards and swallows assistant text content.
  */
 
-import { useCallback, useState, Fragment } from "react";
+import { useCallback, useState } from "react";
 import { useCopilotChatInternal, useCopilotChatSuggestions } from "@copilotkit/react-core";
 import { nanoid } from "nanoid";
 import { useTranslation } from "react-i18next";
@@ -110,6 +110,40 @@ function mapToolStatus(complete: boolean): "input-available" | "output-available
 /** Parse JSON safely */
 function safeParseJSON(str: string): Record<string, unknown> {
   try { return JSON.parse(str); } catch { return {}; }
+}
+
+// ─── Auto-Collapsing Tool ─────────────────────────────────────────────────────
+
+/**
+ * Auto-collapsing Tool wrapper.
+ * - Starts open while the tool is running (isComplete=false)
+ * - Auto-collapses when the tool finishes (isComplete transitions to true)
+ * - User can still manually toggle open/close at any time
+ *
+ * Uses the "adjusting state when a prop changes" pattern recommended by React:
+ * https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+ */
+function AutoCollapsingTool({
+  isComplete,
+  children,
+  ...props
+}: { isComplete: boolean } & Omit<import("react").ComponentProps<typeof Tool>, 'open' | 'onOpenChange' | 'defaultOpen'>) {
+  const [isOpen, setIsOpen] = useState(!isComplete);
+  const [prevIsComplete, setPrevIsComplete] = useState(isComplete);
+
+  // Adjust state during render (not in useEffect) to auto-collapse on completion
+  if (isComplete !== prevIsComplete) {
+    setPrevIsComplete(isComplete);
+    if (isComplete) {
+      setIsOpen(false);
+    }
+  }
+
+  return (
+    <Tool open={isOpen} onOpenChange={setIsOpen} {...props}>
+      {children}
+    </Tool>
+  );
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -277,6 +311,16 @@ function AgentChatContent({
   );
   const hasMessages = renderMessages.length > 0;
 
+  // Find the last assistant message index that has text content (for copy button)
+  let lastAssistantTextIdx = -1;
+  for (let i = renderMessages.length - 1; i >= 0; i--) {
+    const m = renderMessages[i];
+    if (m.role === "assistant" && extractTextContent(m)) {
+      lastAssistantTextIdx = i;
+      break;
+    }
+  }
+
   return (
     <>
       {/* Messages */}
@@ -310,32 +354,24 @@ function AgentChatContent({
               </Suggestions>
             </div>
           ) : (
-            /* ── Message list ── */
+            /* ── Per-message rendering ── */
             renderMessages.map((msg, index) => {
-              const msgRole = msg.role;
-
-              // User messages
-              if (msgRole === "user") {
+              // ── User messages ──
+              if (msg.role === "user") {
                 const textContent = extractTextContent(msg);
                 if (!textContent) return null;
-
                 return (
-                  <Fragment key={msg.id}>
-                    <Message from="user">
-                      <MessageContent>
-                        <MessageResponse>{textContent}</MessageResponse>
-                      </MessageContent>
-                    </Message>
-                  </Fragment>
+                  <Message key={msg.id} from="user">
+                    <MessageContent>
+                      <MessageResponse>{textContent}</MessageResponse>
+                    </MessageContent>
+                  </Message>
                 );
               }
 
-              // Assistant messages
-              if (msgRole === "assistant") {
+              // ── Assistant messages ──
+              if (msg.role === "assistant") {
                 const textContent = extractTextContent(msg);
-                const isLastAssistant =
-                  index === renderMessages.length - 1 && !isLoading;
-
                 const toolCalls = msg.toolCalls;
                 const hasToolCalls = toolCalls && toolCalls.length > 0;
                 const hasText = !!textContent;
@@ -343,9 +379,19 @@ function AgentChatContent({
                 // Skip completely empty assistant messages
                 if (!hasText && !hasToolCalls) return null;
 
+                const showCopyAction =
+                  hasText && index === lastAssistantTextIdx && !isLoading;
+
                 return (
-                  <Fragment key={msg.id}>
-                    {/* Tool call cards (using ai-elements Tool) */}
+                  <Message key={msg.id} from="assistant">
+                    {/* Text content first */}
+                    {hasText && (
+                      <MessageContent>
+                        <MessageResponse>{textContent}</MessageResponse>
+                      </MessageContent>
+                    )}
+
+                    {/* Tool call cards — inside the same Message container */}
                     {hasToolCalls &&
                       toolCalls.map((tc) => {
                         const resultMsg = toolResultMap.get(tc.id);
@@ -362,9 +408,14 @@ function AgentChatContent({
                         const state = mapToolStatus(isComplete);
 
                         return (
-                          <Tool key={tc.id} defaultOpen={!isComplete}>
+                          <AutoCollapsingTool
+                            key={tc.id}
+                            isComplete={isComplete}
+                          >
                             <ToolHeader
-                              title={formatToolName(tc.function?.name || "Tool")}
+                              title={formatToolName(
+                                tc.function?.name || "Tool",
+                              )}
                               type="tool-invocation"
                               state={state}
                             />
@@ -372,42 +423,34 @@ function AgentChatContent({
                               <ToolContent>
                                 {hasArgs && <ToolInput input={args} />}
                                 {result != null && isComplete && (
-                                  <ToolOutput output={result} errorText={undefined} />
+                                  <ToolOutput
+                                    output={result}
+                                    errorText={undefined}
+                                  />
                                 )}
                               </ToolContent>
                             )}
-                          </Tool>
+                          </AutoCollapsingTool>
                         );
                       })}
 
-                    {/* Text content */}
-                    {hasText && (
-                      <Message from="assistant">
-                        <MessageContent>
-                          <MessageResponse>{textContent}</MessageResponse>
-                        </MessageContent>
-                        {isLastAssistant && (
-                          <MessageActions>
-                            <MessageAction
-                              tooltip={t("common.copy", "复制")}
-                              label="Copy"
-                              onClick={() =>
-                                navigator.clipboard.writeText(textContent)
-                              }
-                            >
-                              <Copy className="h-3 w-3" />
-                            </MessageAction>
-                          </MessageActions>
-                        )}
-                      </Message>
+                    {/* Copy action — only on the last assistant text */}
+                    {showCopyAction && (
+                      <MessageActions>
+                        <MessageAction
+                          tooltip={t("common.copy", "复制")}
+                          label="Copy"
+                          onClick={() =>
+                            navigator.clipboard.writeText(textContent!)
+                          }
+                        >
+                          <Copy className="h-3 w-3" />
+                        </MessageAction>
+                      </MessageActions>
                     )}
-                  </Fragment>
+                  </Message>
                 );
               }
-
-              // Tool result messages — already merged into assistant tool cards above.
-              // If we encounter one here (shouldn't happen due to filter), skip it.
-              if (msgRole === "tool") return null;
 
               return null;
             })
