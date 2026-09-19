@@ -12,7 +12,7 @@ LABEL org.opencontainers.image.licenses="MIT"
 
 # Install git and runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl bash nodejs \
+    git curl bash nodejs ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Check architecture - opencode-ai binary only supports x86_64/amd64
