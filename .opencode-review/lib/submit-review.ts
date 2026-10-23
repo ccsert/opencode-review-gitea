@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import { GiteaClient, GiteaError, PRChangedError, prPath, requireOpen, type PullRequest, type RepositoryPR, type Review } from "./gitea"
+import { GiteaClient, GiteaError, PRChangedError, prPath, pullRefHead, requireOpen, type PullRequest, type RepositoryPR, type Review } from "./gitea"
 import { parseDiff } from "./diff"
 import { formatCommentBody } from "./review-format"
 import { loadSnapshot, reviewMarker, stateDirectory, writeJSON, writeReceipt } from "./review-state"
@@ -42,7 +42,7 @@ export async function submitReview(args: ReviewInput, sessionID: string) {
   async function checkCurrent() {
     const latest = await api.json<PullRequest>(path)
     requireOpen(latest)
-    if (latest.head.sha !== snapshot!.head || latest.base.sha !== snapshot!.base) {
+    if (latest.head.sha !== snapshot!.head || latest.base.sha !== snapshot!.base || await pullRefHead(api, args) !== snapshot!.head) {
       throw new PRChangedError("The PR changed during publication. Start a new review run.")
     }
   }

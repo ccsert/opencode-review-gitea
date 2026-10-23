@@ -18,7 +18,12 @@ export interface ParsedFile {
 }
 
 function gitPath(value: string): string {
-  if (!value.startsWith('"')) return value
+  // Git appends a TAB delimiter to unquoted ---/+++ paths containing spaces.
+  // A real TAB in a filename is C-quoted, so decode it only inside the quotes.
+  if (!value.startsWith('"')) return value.split("\t", 1)[0]
+  const quoted = value.match(/^"(?:\\.|[^"])*"/)?.[0]
+  if (!quoted) throw new Error("Invalid Git-quoted file path")
+  value = quoted
   const bytes: number[] = []
   for (let i = 1; i < value.length - 1;) {
     if (value[i] === "\\") {
@@ -33,6 +38,11 @@ function gitPath(value: string): string {
     }
   }
   return Buffer.from(bytes).toString("utf8")
+}
+
+function quoteGitPath(value: string): string {
+  return `"${value.replace(/["\\\x00-\x1f\x7f]/g, char =>
+    char === '"' ? '\\"' : char === "\\" ? "\\\\" : `\\${char.charCodeAt(0).toString(8).padStart(3, "0")}`)}"`
 }
 
 export function parseDiff(diffText: string): ParsedFile[] {
@@ -163,9 +173,9 @@ export function formatAsRawDiff(files: ParsedFile[]): string {
   const parts: string[] = []
   
   for (const file of files) {
-    parts.push(`diff --git a/${file.path} b/${file.path}`)
-    parts.push(`--- ${file.status === "added" ? "/dev/null" : `a/${file.path}`}`)
-    parts.push(`+++ ${file.status === "deleted" ? "/dev/null" : `b/${file.path}`}`)
+    parts.push(`diff --git ${quoteGitPath(`a/${file.path}`)} ${quoteGitPath(`b/${file.path}`)}`)
+    parts.push(`--- ${file.status === "added" ? "/dev/null" : quoteGitPath(`a/${file.path}`)}`)
+    parts.push(`+++ ${file.status === "deleted" ? "/dev/null" : quoteGitPath(`b/${file.path}`)}`)
     
     for (const hunk of file.hunks) {
       const oldCount = hunk.changes.filter(change => change.type !== "add").length

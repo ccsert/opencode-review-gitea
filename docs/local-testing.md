@@ -36,10 +36,72 @@ API 集成测试覆盖固定提交、人工 review 不推进 bot 基准、push �
 
 CI 在发布镜像前运行上述测试；任何一步失败都不会进入镜像发布任务。旧的统计测试针对的是仓库中已不存在的实现，现已删除。
 
+## 可选：真实 Actions 与自定义模型验收
+
+这组验收实际注册仓库级 runner，由 PR 的 `opened`、`synchronize` 和 `/oc` 的 `issue_comment` 事件触发。使用真实模型推理，不使用协议桩，因此需要自行提供可用的模型网关；不作为默认 CI 的一部分。
+
+将单个自定义 provider 配置保存在被忽略的 `tests/integration/.local/provider.json`，例如：
+
+```json
+{
+  "provider": {
+    "review-gateway": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://host.docker.internal:3425/v1",
+        "apiKey": "<填写本地网关密钥>"
+      },
+      "models": {
+        "minimax-cn/MiniMax-M3.1-Flash": {
+          "name": "MiniMax M3.1 Flash",
+          "limit": { "context": 131072, "output": 8192 }
+        }
+      }
+    }
+  }
+}
+```
+
+容器通过 `host.docker.internal` 访问宿主机网关；直接在宿主机运行时使用 `127.0.0.1`。OpenCode 的 `MODEL` 为 `provider/模型ID`，此例是 `review-gateway/minimax-cn/MiniMax-M3.1-Flash`，发送给网关的模型 ID 仍是 `minimax-cn/MiniMax-M3.1-Flash`。
+
+```bash
+docker build -t opencode-review-reliability:local .
+REVIEW_LAB_CONFIG=tests/integration/.local/provider.json \
+REVIEW_LAB_MODEL=review-gateway/minimax-cn/MiniMax-M3.1-Flash \
+  bun tests/integration/actions-lab.ts
+bun tests/integration/actions-scenarios.ts create
+bun tests/integration/actions-scenarios.ts status
+```
+
+初始化会创建两个私有样例仓库，单独注册 Gitea act_runner 0.2.13 和 Forgejo runner 13.0.0，保存 runner 名称、仓库、模型及 PR 地址到 `.local/actions-lab.json`。仅将选定 provider 的配置和测试机器人 token 写入本地仓库 Actions Secrets；不改写用户全局 OpenCode 配置，也不提交凭据。需要 Docker socket 的是 runner，工作容器不挂载该 socket。
+
+初始场景包括多语言安全/逻辑问题、无阻塞重构、中文空格路径文档。初轮完成后可继续：
+
+```bash
+# 推送一笔修复提交，观察 synchronize 增量审查
+bun tests/integration/actions-scenarios.ts fix
+
+# 当前提交已有已完成审查后，用真实 /oc 评论触发重复审查
+bun tests/integration/actions-scenarios.ts repeat
+
+# 故意缺少进程凭据：预期 Actions 失败、零条 review
+bun tests/integration/actions-scenarios.ts error
+
+# 等上述任务结束后验收；尚在排队或运行时应失败，稍后重查
+bun tests/integration/actions-scenarios.ts verify
+bun tests/integration/actions-scenarios.ts snapshot
+```
+
+`verify` 同时检查每次验收步骤生成的唯一运行标记和同一运行的原生 Actions 成功状态，排除已作废或待提交 review。重复审查还必须匹配本次 `/oc` 评论 ID，并确认前后 review ID 不变。缺少凭据的负向场景保留红色失败记录，不应将它理解为环境整体故障。
+
+真实模型可能给出不同判断。应独立检查意见是否有充分证据；本组用例不以评论数量代表审查质量，也不自动应用模型建议。旧的失败样例可保留用于排障，不能混算为通过。
+
 ## 运行约定
 
 - Docker 入口及源码 workflow 通过 `run-review.ts` 执行审查。OpenCode 返回 0，但未提供已确认的 review 回执时，任务仍以失败结束。
 - diff 工具记录本次运行的 base/head。PR 在读取 diff 或提交前发生变更会报 `PR_CHANGED`，应启动新审查；同一运行不能覆盖快照后复用旧结论。
+- 取 diff 前后和发布前后还会校验实际的 `refs/pull/N/head`，避免 Forgejo 的 PR 元数据先更新、Git 引用后更新时把旧 diff 标成新提交。引用短时间未就绪会等待；持续未就绪则报 `PR_DIFF_NOT_READY`，不创建快照或发布。
+- Git 的空格路径分隔 TAB 与真实文件名中的转义字符分别处理；重建 raw diff 时使用 Git 引号，避免中文、空格、TAB、引号等路径产生虚构的行评论锚点。
 - `gitea-review` 要求先在同一运行获取 diff，并校验行评论是否属于该 diff。发布时明确指定捕获的 SHA，随后读回 review 和行评论。
 - 增量基准只接受当前 token 用户发布、带本工具版本标记、匹配 base、覆盖完整 PR 的已完成 review。旧版未带标记的 review 不作为基准，升级后首次运行会完整审查。
 - 重复触发会复用远端已确认的 review。同一状态目录中的并发提交还通过原子文件声明去重。网络超时/5xx 后只查询结果，不盲目重发 POST。

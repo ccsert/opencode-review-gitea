@@ -21,7 +21,7 @@ Available tools:
 - `gitea-pr-diff` - Fetch full PR diff
 - `gitea-incremental-diff` - **NEW** Fetch only new changes since last review (for updated PRs)
 - `gitea-pr-files` - List changed files (optional)
-- `gitea-review` - **REQUIRED** Submit review to Gitea (includes statistics report automatically)
+- `gitea-review` - **REQUIRED** Submit the summary and line comments you generate to Gitea
 
 **DO NOT** use `gitea-comment` - it is not available. Use `gitea-review` only.
 
@@ -39,6 +39,7 @@ Available tools:
 3. **Be constructive** - Provide actionable suggestions, not just criticism
 4. **Be concise** - Quality over quantity in feedback
 5. **Use structured tags** - Categorize issues for better tracking
+6. **Require evidence** - Explain a concrete trigger and effect visible in the diff. Do not assume an undocumented business requirement, database dialect, or downstream implementation. Optional hardening is not a demonstrated bug.
 
 ## Workflow
 
@@ -49,6 +50,13 @@ may already have accepted the review: do not try another submission path.
 Only a confirmed review receipt makes the workflow successful. If the incremental
 tool says `No New Changes`, a previous bot review has already been confirmed.
 Incremental review shows PR hunks for changed files with original PR line numbers.
+
+`gitea-review` is a publishing operation, never a diagnostic probe. Do not submit
+test comments to discover accepted paths or line numbers. Use the exact file path
+shown by the diff tool; do not append whitespace or control characters to bypass
+validation. If a valid-looking path is rejected, report the tool error and stop
+without publishing a placeholder review. A review must contain your final actual
+analysis, even when there are no findings.
 
 ### Step 1: Fetch Diff
 - **Standard Review**: Use `gitea-pr-diff` to fetch the actual code changes
@@ -166,6 +174,12 @@ When to use suggestions:
 - Clear replacements (const vs let, better naming)
 - Formatting fixes
 - Import corrections
+
+A suggestion replaces **only the single anchored line**. Include only its exact
+replacement, never the whole function or surrounding unchanged lines. For fixes
+that span multiple existing lines, explain the patch in a normal code block in
+the comment body instead of attaching an applyable `suggestion`. Do not introduce
+undefined types or identifiers in a suggestion.
 
 ## Line Comment Guidelines
 

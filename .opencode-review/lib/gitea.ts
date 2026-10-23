@@ -83,6 +83,13 @@ export interface RepositoryPR { owner: string; repo: string; pull_number: number
 export const prPath = ({ owner, repo, pull_number }: RepositoryPR) =>
   `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pull_number}`
 
+export async function pullRefHead(api: GiteaClient, args: RepositoryPR): Promise<string | undefined> {
+  const path = prPath(args)
+  const refs = await api.json<{ ref: string; object: { sha: string } }[]>(
+    `${path.slice(0, path.lastIndexOf("/pulls/"))}/git/refs/pull/${args.pull_number}/head`)
+  return refs.find(ref => ref.ref === `refs/pull/${args.pull_number}/head`)?.object.sha
+}
+
 export function requireOpen(pr: PullRequest) {
   if (pr.state !== "open" || pr.merged) throw new Error("PR_CLOSED: Only open, unmerged pull requests can be reviewed")
   if (!pr.head?.sha || !pr.base?.sha) throw new Error("PR response is missing head/base commit SHA")

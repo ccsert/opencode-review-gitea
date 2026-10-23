@@ -1,4 +1,4 @@
-import { GiteaClient, prPath, requireOpen, type PullRequest, type RepositoryPR, type Review } from "./gitea"
+import { GiteaClient, prPath, pullRefHead, requireOpen, type PullRequest, type RepositoryPR, type Review } from "./gitea"
 import { filterFilesByPatterns, formatAsRawDiff, formatDiffForReview, parseDiff } from "./diff"
 import { digest, saveSnapshot, writeReceipt } from "./review-state"
 import { findCommitsAfter, findLastReviewedCommit, isCompletedReview, orderCommits, type Commit } from "./reviews"
@@ -10,6 +10,17 @@ export async function fetchReviewDiff(args: RepositoryPR & {
   const path = prPath(args)
   const before = await api.json<PullRequest>(path)
   requireOpen(before)
+  // Gitea/Forgejo download .diff from refs/pull/N/head, which can lag the PR
+  // metadata after a push. Checking only PR.head.sha can certify an old diff.
+  for (let attempt = 0; await pullRefHead(api, args) !== before.head.sha; attempt++) {
+    const latest = await api.json<PullRequest>(path)
+    requireOpen(latest)
+    if (latest.head.sha !== before.head.sha || latest.base.sha !== before.base.sha) {
+      throw new Error("PR_CHANGED: The PR changed while waiting for its Git ref. Start a new review run.")
+    }
+    if (attempt >= 9) throw new Error("PR_DIFF_NOT_READY: The Git pull ref has not caught up with the PR head. Retry in a new run.")
+    await Bun.sleep(100)
+  }
   let previous: string | null = null
   let unchanged: Review | undefined
   let userId: number | undefined
@@ -56,7 +67,7 @@ export async function fetchReviewDiff(args: RepositoryPR & {
   const patterns = args.file_patterns?.filter(Boolean) ?? []
   files = filterFilesByPatterns(files, patterns)
   const after = await api.json<PullRequest>(path)
-  if (before.head.sha !== after.head.sha || before.base.sha !== after.base.sha) {
+  if (before.head.sha !== after.head.sha || before.base.sha !== after.base.sha || await pullRefHead(api, args) !== before.head.sha) {
     throw new Error("PR_CHANGED: The pull request changed while fetching the diff. Start a new review run.")
   }
   requireOpen(after)
@@ -73,7 +84,7 @@ export async function fetchReviewDiff(args: RepositoryPR & {
     }
     const latest = await api.json<PullRequest>(path)
     requireOpen(latest)
-    if (latest.head.sha !== before.head.sha || latest.base.sha !== before.base.sha) {
+    if (latest.head.sha !== before.head.sha || latest.base.sha !== before.base.sha || await pullRefHead(api, args) !== before.head.sha) {
       throw new Error("PR_CHANGED: The PR changed while confirming the previous review. Start a new run.")
     }
     await writeReceipt({ status: "unchanged", head: before.head.sha, reviewId: confirmed.id,

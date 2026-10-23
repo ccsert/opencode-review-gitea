@@ -21,6 +21,12 @@ let failReadback: boolean
 let pushDuringDiff: boolean
 let pushDuringReviewList: boolean
 let pushDuringPost: boolean
+let gitRefHead: string | undefined
+let refDelay: number
+let refReads: number
+let diffReads: number
+let pushRefDuringDiff: boolean
+let pushRefDuringPost: boolean
 let hideComments: boolean
 let base: string
 let publishedComments: { path: string; body: string }[]
@@ -38,12 +44,19 @@ beforeEach(() => {
   loseResponse = false; rejectPost = false; failReadback = false; pushDuringDiff = false
   rejectStatus = 503
   pushDuringReviewList = false; hideComments = false; pushDuringPost = false
+  gitRefHead = undefined; refDelay = 0; refReads = 0; diffReads = 0; pushRefDuringDiff = false; pushRefDuringPost = false
   server = Bun.serve({ port: 0, fetch: async request => {
     const path = new URL(request.url).pathname
     if (path === "/api/v1/user") return Response.json({ id: 7, login: "review-bot" })
     if (path.endsWith("/pulls/1")) return Response.json({ head: { sha: head }, base: { sha: base }, state: "open", merged: false })
+    if (path.endsWith("/git/refs/pull/1/head")) {
+      refReads++
+      return Response.json([{ ref: "refs/pull/1/head", object: { sha: refDelay-- > 0 ? "stale-head" : gitRefHead ?? head } }])
+    }
     if (path.endsWith(".diff")) {
+      diffReads++
       if (pushDuringDiff) head = "head-b"
+      if (pushRefDuringDiff) gitRefHead = "head-b"
       return new Response(diff)
     }
     if (/\/reviews\/\d+\/comments$/.test(path)) return Response.json(hideComments ? [] : publishedComments)
@@ -60,6 +73,7 @@ beforeEach(() => {
           commit_id: payload.commit_id, user: { id: 7, login: "review-bot" }, comments_count: publishedComments.length }
         if (!rejectPost) reviews.push(result)
         if (pushDuringPost) head = "head-b"
+        if (pushRefDuringPost) gitRefHead = "head-b"
         if (loseResponse || rejectPost) return new Response("lost response", { status: rejectStatus })
         return Response.json(result)
       }
@@ -109,10 +123,38 @@ test("detects pushes while fetching the diff", async () => {
   pushDuringDiff = true
   await expect(fetchDiff(context())).rejects.toThrow("PR_CHANGED")
 })
+test("waits for the Git pull ref before accepting a metadata head", async () => {
+  refDelay = 2
+  expect(await fetchDiff(context())).toContain("Head: head-a")
+  expect(refReads).toBeGreaterThanOrEqual(3)
+  expect(diffReads).toBe(1)
+})
+test("a persistently stale pull ref cannot create a snapshot", async () => {
+  gitRefHead = "stale-head"
+  const ctx = context()
+  await expect(fetchDiff(ctx)).rejects.toThrow("PR_DIFF_NOT_READY")
+  expect(diffReads).toBe(0)
+  expect(await loadSnapshot(server.url.origin, args, ctx.sessionID)).toBeUndefined()
+})
+test("detects a pull-ref push even when the PR metadata has not caught up", async () => {
+  pushRefDuringDiff = true
+  await expect(fetchDiff(context())).rejects.toThrow("PR_CHANGED")
+})
 test("rechecks the head immediately before publication", async () => {
   const ctx = context(); await fetchDiff(ctx); pushDuringReviewList = true
   await expect(submit(ctx)).rejects.toThrow("PR_CHANGED")
   expect(posts).toBe(0)
+})
+test("a Git ref ahead of PR metadata blocks publication", async () => {
+  const ctx = context(); await fetchDiff(ctx); gitRefHead = "head-b"
+  await expect(submit(ctx)).rejects.toThrow("PR_CHANGED")
+  expect(posts).toBe(0)
+})
+test("a ref-only push racing POST cannot produce a success receipt", async () => {
+  const ctx = context(); await fetchDiff(ctx); pushRefDuringPost = true
+  process.env.OPENCODE_REVIEW_RECEIPT_PATH = join(directory, "receipt.json")
+  await expect(submit(ctx)).rejects.toThrow("PR_CHANGED")
+  expect(await Bun.file(process.env.OPENCODE_REVIEW_RECEIPT_PATH).exists()).toBe(false)
 })
 test("base branch changes invalidate the captured review", async () => {
   const ctx = context(); await fetchDiff(ctx); base = "new-base"

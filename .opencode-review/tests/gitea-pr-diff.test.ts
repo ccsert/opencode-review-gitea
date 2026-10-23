@@ -25,6 +25,22 @@ test("Git-quoted UTF-8 and spaces retain the real path", () => {
     .replace("--- a/app.ts", '--- "a/lib/old file.ts"').replace("+++ b/app.ts", `+++ ${encoded}`)
   expect(parseDiff(value)[0].path).toBe("lib/测试 file.ts")
 })
+test("unquoted space paths exclude Git's trailing tab separator", () => {
+  const value = text.replaceAll("app.ts", "docs/接入 说明.md")
+    .replace("--- a/docs/接入 说明.md", "--- a/docs/接入 说明.md\t")
+    .replace("+++ b/docs/接入 说明.md", "+++ b/docs/接入 说明.md\t")
+  const files = parseDiff(value)
+  expect(files[0].path).toBe("docs/接入 说明.md")
+  expect(parseDiff(formatAsRawDiff(files))).toEqual(files)
+})
+test("quoted control characters remain in filenames while timestamp delimiters do not", () => {
+  const value = text.replace("diff --git a/app.ts b/app.ts", 'diff --git "a/tab\\tfile.ts" "b/tab\\tfile.ts"')
+    .replace("--- a/app.ts", '--- "a/tab\\tfile.ts"\t2026-10-23 00:00:00 +0000')
+    .replace("+++ b/app.ts", '+++ "b/tab\\tfile.ts"\t2026-10-23 00:00:00 +0000')
+  const files = parseDiff(value)
+  expect(files[0].path).toBe("tab\tfile.ts")
+  expect(parseDiff(formatAsRawDiff(files))).toEqual(files)
+})
 test("binary and rename-only files do not consume the next text file", () => {
   const files = parseDiff(`diff --git a/icon.png b/icon.png
 Binary files a/icon.png and b/icon.png differ

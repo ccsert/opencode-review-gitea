@@ -113,6 +113,30 @@ for (const lab of await labs()) {
         comments: [{ path: "lib/foo.ts", line: 1, body: "**[TEST:LOW]** Library fixture" }] }, next)).toContain("confirmed")
     }, 30000)
 
+    test("space and Unicode paths exclude Git's tab delimiter and reject phantom paths", async () => {
+      const f = await fixture(lab); configure(lab); const ctx = context()
+      const repoPath = f.path.slice(0, f.path.indexOf("/pulls/"))
+      const filename = "docs/接入 说明.md"
+      const created = await api(lab, `${repoPath}/contents/${encodeURI(filename)}`, { branch: "feature", message: "Add Unicode path fixture",
+        content: Buffer.from("# 本地接入\n配置机器人 token。\n").toString("base64") })
+      // Forgejo updates PR metadata asynchronously after a contents API commit.
+      for (let attempt = 0; attempt < 30; attempt++) {
+        if ((await api(lab, f.path)).head.sha === created.commit.sha) break
+        await Bun.sleep(100)
+      }
+      expect((await api(lab, f.path)).head.sha).toBe(created.commit.sha)
+      expect(await fetchDiff(f.args, ctx)).toContain(`## ${filename} (added)`)
+      await expect(reviewTool.execute({ ...f.args, summary: "Must reject a phantom tab-suffixed path", approval: "comment",
+        comments: [{ path: `${filename}\t`, line: 2, body: "Invalid path" }] }, ctx)).rejects.toThrow("INVALID_REVIEW_COMMENT")
+      expect(await api(lab, `${f.path}/reviews`)).toHaveLength(0)
+      expect(await reviewTool.execute({ ...f.args, summary: "Unicode path verified", approval: "comment",
+        comments: [{ path: filename, line: 2, body: "**[TEST:LOW]** Real filename anchor verified" }] }, ctx)).toContain("confirmed")
+      const reviews = await api(lab, `${f.path}/reviews`)
+      const comments = await api(lab, `${f.path}/reviews/${reviews[0].id}/comments`)
+      expect(comments[0].path).toBe(filename)
+      expect(await api(lab, `${repoPath}/contents/${encodeURI(comments[0].path)}?ref=feature`)).toHaveProperty("sha")
+    }, 30000)
+
     test("a push racing the POST does not generate a success receipt", async () => {
       const f = await fixture(lab); let pushed = false
       const url = proxyFor(lab, async (request, response) => {
