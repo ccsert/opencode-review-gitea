@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { api, labs } from "./lab"
 import { parseReviewMarker } from "../../.opencode-review/lib/review-state"
+import { nativeRuns } from "./native-actions"
 
 const manifestPath = join(import.meta.dir, ".local/actions-lab.json")
 interface Scenario { name: string; branch: string; number: number; head: string; url: string; expectedStatus?: "success" | "failure" }
@@ -144,6 +145,7 @@ for (const entry of manifest) {
     console.log(`${entry.name}: /oc issue_comment ${comment.id} recorded with head and existing review IDs`)
   } else if (command === "verify") {
     const target = (status: any) => new URL(status.target_url || "/", entry.url).pathname
+    const native = entry.repeat ? await nativeRuns(lab, entry.owner, entry.repo) : []
     for (const scenario of entry.scenarios) {
       const pr = await api(lab, `${entry.path}/pulls/${scenario.number}`)
       const reviews = await api(lab, `${entry.path}/pulls/${scenario.number}/reviews`)
@@ -165,7 +167,9 @@ for (const entry of manifest) {
         if (scenario === entry.scenarios[0] && entry.repeat) {
           const ids = reviews.map((review: any) => review.id).sort((a: number, b: number) => a - b)
           if (pr.head.sha !== entry.repeat.head || JSON.stringify(ids) !== JSON.stringify(entry.repeat.reviewIds) ||
-              !audited.some((item: any) => item.description.includes(`event=issue_comment comment=${entry.repeat!.commentId} `))) {
+              !statuses.some((item: any) => item.status === "success" && item.description.includes(`event=issue_comment comment=${entry.repeat!.commentId} `) &&
+                native.some(run => run.status === "success" && run.event === "issue_comment" && run.commentId === entry.repeat!.commentId &&
+                  item.context === `review-lab/run-${run.number}` && target(item) === `/${entry.owner}/${entry.repo}/actions/runs/${run.number}/jobs/0`))) {
             throw new Error(`${entry.name}: this specific /oc event has not completed successfully without adding a review`)
           }
         }
@@ -186,7 +190,7 @@ for (const entry of manifest) {
     if (!/^[a-z0-9-]+$/.test(label)) throw new Error("Snapshot label must contain only lowercase letters, digits and hyphens")
     await writeFile(join(import.meta.dir, `.local/actions-results-${entry.name}-${label}.json`),
       JSON.stringify({ server: entry.name, url: entry.url, repo: entry.repo, model: entry.model,
-        captured_at: new Date().toISOString(), repeat: entry.repeat, results }, null, 2), { mode: 0o600 })
+        captured_at: new Date().toISOString(), repeat: entry.repeat, native_runs: await nativeRuns(lab, entry.owner, entry.repo), results }, null, 2), { mode: 0o600 })
     console.log(`${entry.name}: captured actual review bodies, line comments and commit statuses`)
   } else if (command === "status") {
     for (const scenario of entry.scenarios) {

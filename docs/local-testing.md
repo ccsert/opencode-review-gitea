@@ -92,7 +92,7 @@ bun tests/integration/actions-scenarios.ts verify
 bun tests/integration/actions-scenarios.ts snapshot
 ```
 
-`verify` 同时检查每次验收步骤生成的唯一运行标记和同一运行的原生 Actions 成功状态，排除已作废或待提交 review。重复审查还必须匹配本次 `/oc` 评论 ID，并确认前后 review ID 不变。缺少凭据的负向场景保留红色失败记录，不应将它理解为环境整体故障。
+`verify` 同时检查每次验收步骤生成的唯一运行标记和同一运行的原生 Actions 成功状态，排除已作废或待提交 review。重复审查还必须匹配本次 `/oc` 评论 ID，并确认前后 review ID 不变。评论事件不产生 PR 提交上的原生状态，因此单独核对实际运行：Forgejo 使用 Actions API；固定版本的 Gitea 1.24.6 缺少运行状态 API，由无网络、只读容器读取本测试 Compose SQLite 卷中该仓库的运行记录，不改写数据库，也不用于远程实例。缺少凭据的负向场景保留红色失败记录，不应将它理解为环境整体故障。
 
 真实模型可能给出不同判断。应独立检查意见是否有充分证据；本组用例不以评论数量代表审查质量，也不自动应用模型建议。旧的失败样例可保留用于排障，不能混算为通过。
 
