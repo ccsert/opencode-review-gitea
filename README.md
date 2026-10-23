@@ -309,11 +309,22 @@ export GITEA_SERVER_URL="https://your-gitea.example.com"
 export OPENCODE_CONFIG_DIR="$(pwd)/.opencode-review"
 
 opencode models --refresh
-opencode run --agent code-review \
+bun .opencode-review/run-review.ts \
   "Please review PR #123 in owner/repo"
 ```
 
 ## 🔧 Customization (Source Installation)
+
+### Verified review execution and local tests
+
+The Docker entrypoint and source workflows use `run-review.ts`. A run succeeds only
+after its Gitea review and line comments have been read back. Reviews are bound to
+the captured base/head; changed PRs fail with `PR_CHANGED`. Repeated runs reuse a
+confirmed review. Ambiguous write outcomes are queried instead of blindly retried.
+
+See [local Gitea/Forgejo setup, tests, and retry/state requirements](docs/local-testing.md).
+That guide also explains the shared-state requirement for concurrent independent
+runners and the deterministic model fixture used in CI.
 
 ### Modify Review Style
 

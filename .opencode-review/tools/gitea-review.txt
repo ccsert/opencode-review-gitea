@@ -1,5 +1,11 @@
 Submit a code review on a Gitea/Forgejo pull request.
 
+First fetch the diff in this run. Submission uses that captured base/head snapshot,
+validates line anchors, and refuses a changed PR. Repeated submissions reuse the
+confirmed review. PR_CHANGED requires a new run. SUBMISSION_UNKNOWN must never be
+worked around with another write tool: publication may already have succeeded.
+Success means the review and its line comments have been read back from Gitea.
+
 This tool submits a review with:
 1. A summary/report (AI-generated, displayed as the main review body)
 2. Line-level comments attached to specific code lines

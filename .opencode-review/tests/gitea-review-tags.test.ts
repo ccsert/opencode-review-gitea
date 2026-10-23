@@ -1,48 +1,6 @@
-/**
- * 测试 gitea-review 中的结构化标签和 suggestion 功能
- * 运行: cd .opencode-review && bun test tests/gitea-review-tags.test.ts
- */
-
 import { describe, test, expect } from "bun:test"
+import { REVIEW_CATEGORIES, REVIEW_SEVERITIES, formatReviewTag, parseReviewTag, formatCommentBody } from "../lib/review-format"
 
-// 复制自 gitea-review.ts 的常量和函数
-const REVIEW_CATEGORIES = ["BUG", "SECURITY", "PERFORMANCE", "STYLE", "DOCS", "TEST"] as const
-const REVIEW_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const
-
-type ReviewCategory = typeof REVIEW_CATEGORIES[number]
-type ReviewSeverity = typeof REVIEW_SEVERITIES[number]
-
-function formatReviewTag(category: ReviewCategory, severity: ReviewSeverity): string {
-  return `**[${category}:${severity}]**`
-}
-
-function parseReviewTag(body: string): { category?: ReviewCategory; severity?: ReviewSeverity } | null {
-  const match = body.match(/\*?\*?\[([A-Z]+):([A-Z]+)\]\*?\*?/)
-  if (!match) return null
-  
-  const category = match[1] as ReviewCategory
-  const severity = match[2] as ReviewSeverity
-  
-  if (REVIEW_CATEGORIES.includes(category) && REVIEW_SEVERITIES.includes(severity)) {
-    return { category, severity }
-  }
-  return null
-}
-
-function formatCommentBody(body: string, suggestion?: string): string {
-  if (!suggestion) return body
-  
-  const trimmedBody = body.trimEnd()
-  
-  return `${trimmedBody}
-
-\`\`\`suggestion
-${suggestion}
-\`\`\`
-`
-}
-
-// 测试
 describe("Review Tags", () => {
   test("formatReviewTag generates correct format", () => {
     expect(formatReviewTag("BUG", "HIGH")).toBe("**[BUG:HIGH]**")

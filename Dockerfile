@@ -36,7 +36,7 @@ COPY .opencode-review/ /app/.opencode-review/
 
 # Install tool dependencies
 WORKDIR /app/.opencode-review
-RUN bun install --frozen-lockfile || bun install
+RUN bun install --frozen-lockfile
 
 # Set working directory for user code
 WORKDIR /workspace

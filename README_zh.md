@@ -307,11 +307,20 @@ export GITEA_SERVER_URL="https://your-gitea.example.com"
 export OPENCODE_CONFIG_DIR="$(pwd)/.opencode-review"
 
 opencode models --refresh
-opencode run --agent code-review \
+bun .opencode-review/run-review.ts \
   "Please review PR #123 in owner/repo"
 ```
 
 ## 🔧 自定义（源码安装）
+
+### 审查结果确认与本地测试
+
+Docker 入口及源码 workflow 使用 `run-review.ts`，只有读回确认 review 和行评论后才成功。
+审查绑定本次获取的 base/head，PR 变化时报 `PR_CHANGED`；重复运行复用已确认结果，
+写入结果不明确时先查询，不盲目重发。
+
+参见[本地 Gitea/Forgejo 环境、测试与状态恢复说明](docs/local-testing.md)，其中也说明了
+多个独立 runner 的共享状态要求，以及 CI 使用的确定性模型桩。
 
 ### 修改审查风格
 

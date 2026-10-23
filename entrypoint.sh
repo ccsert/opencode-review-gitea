@@ -272,7 +272,11 @@ main() {
             fi
             
             log_info "Running code review..."
-            exec opencode run --agent code-review "$prompt"
+            local runner="/app/.opencode-review/run-review.ts"
+            if [ ! -f "$runner" ]; then
+                runner="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.opencode-review/run-review.ts"
+            fi
+            exec bun "$runner" "$prompt"
             ;;
             
         shell|bash|sh)

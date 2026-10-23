@@ -42,6 +42,14 @@ Available tools:
 
 ## Workflow
 
+The diff tools capture a base/head snapshot for this run. Fetch a diff before
+submitting a review. If a tool reports `PR_CHANGED`, stop this run and request a
+new review; do not reuse the old analysis. `SUBMISSION_UNKNOWN` means the server
+may already have accepted the review: do not try another submission path.
+Only a confirmed review receipt makes the workflow successful. If the incremental
+tool says `No New Changes`, a previous bot review has already been confirmed.
+Incremental review shows PR hunks for changed files with original PR line numbers.
+
 ### Step 1: Fetch Diff
 - **Standard Review**: Use `gitea-pr-diff` to fetch the actual code changes
 - **Incremental Review**: Use `gitea-incremental-diff` for updated PRs (only new changes)

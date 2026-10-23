@@ -20,6 +20,9 @@ on:
 
 jobs:
   opencode-review:
+    concurrency:
+      group: opencode-review-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
     # Trigger on /oc or /opencode command, or on new/updated PR
     if: |
       github.event_name == 'pull_request' ||
@@ -102,7 +105,7 @@ jobs:
             FILE_INSTRUCTION="Only review files matching: $FILE_PATTERNS."
           fi
           
-          opencode run --agent code-review \
+          bun .opencode-review/run-review.ts \
             "Review PR #${PR_NUMBER} in ${REPO_OWNER}/${REPO_NAME}. \
              Analyze code changes, identify issues, and submit review with inline comments. \
              ${LANG_INSTRUCTION} ${FILE_INSTRUCTION}"

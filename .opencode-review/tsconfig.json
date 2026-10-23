@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["bun"]
+  },
+  "include": ["lib/**/*.ts", "run-review.ts", "tools/gitea-review.ts", "tools/gitea-pr-diff.ts", "tools/gitea-incremental-diff.ts", "env.d.ts"]
+}

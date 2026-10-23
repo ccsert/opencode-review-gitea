@@ -20,6 +20,9 @@ on:
 
 jobs:
   opencode-review:
+    concurrency:
+      group: opencode-review-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
     # Trigger on /oc or /opencode command, or on new/updated PR
     if: |
       github.event_name == 'pull_request' ||
@@ -48,6 +51,7 @@ jobs:
           # Model configuration (provider/model-id format)
           # Examples: deepseek/deepseek-chat, anthropic/claude-sonnet-4-5, openai/gpt-4o
           MODEL: deepseek/deepseek-chat
+          # OPENCODE_REVIEW_STATE_DIR: /persistent/review-state  # Shared durable volume, if configured
           # OPENCODE_REFRESH_MODELS: "false"  # Skip catalog refresh in offline environments
           
           # Review configuration

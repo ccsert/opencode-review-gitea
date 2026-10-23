@@ -17,16 +17,22 @@ function runReview(script: string[], options: {
   refresh?: string
   refreshStatus?: number
   runStatus?: number
+  receipt?: boolean
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "review-startup-"))
   temporaryDirectories.push(directory)
   const calls = join(directory, "calls.jsonl")
   writeFileSync(join(directory, "opencode"), `#!/usr/bin/env bun
-import { appendFileSync } from "node:fs"
+import { appendFileSync, writeFileSync } from "node:fs"
 const args = process.argv.slice(2)
 appendFileSync(process.env.TEST_CALLS, JSON.stringify({ args, config: process.env.OPENCODE_CONFIG_DIR }) + "\\n")
 if (args[0] === "models") process.exit(Number(process.env.TEST_REFRESH_STATUS))
-if (args[0] === "run") process.exit(Number(process.env.TEST_RUN_STATUS))
+if (args[0] === "run") {
+  if (process.env.TEST_WRITE_RECEIPT === "true" && process.env.OPENCODE_REVIEW_RECEIPT_PATH) {
+    writeFileSync(process.env.OPENCODE_REVIEW_RECEIPT_PATH, JSON.stringify({status:"submitted",head:"test-head",reviewId:1,url:"http://localhost/reviews/1"}))
+  }
+  process.exit(Number(process.env.TEST_RUN_STATUS))
+}
 `, { mode: 0o755 })
   // Avoid host architecture checks adding unrelated --version calls.
   writeFileSync(join(directory, "uname"), "#!/bin/sh\necho x86_64\n", { mode: 0o755 })
@@ -47,6 +53,8 @@ if (args[0] === "run") process.exit(Number(process.env.TEST_RUN_STATUS))
       TEST_CALLS: calls,
       TEST_REFRESH_STATUS: String(options.refreshStatus ?? 0),
       TEST_RUN_STATUS: String(options.runStatus ?? 0),
+      TEST_WRITE_RECEIPT: String(options.receipt ?? true),
+      OPENCODE_REVIEW_STATE_DIR: directory,
     },
   })
   const invocations = readFileSync(calls, "utf8").trim().split("\n").map(line => JSON.parse(line))
@@ -92,6 +100,12 @@ for (const { name, script } of scripts) {
     test("preserves the review command failure status", () => {
       const result = runReview(script, { runStatus: 23 })
       expect(result.status).toBe(23)
+    })
+
+    test("does not report success when OpenCode omits the review", () => {
+      const result = runReview(script, { receipt: false })
+      expect(result.status).toBe(1)
+      expect(result.stdout + result.stderr).toContain("REVIEW_NOT_CONFIRMED")
     })
   })
 }
