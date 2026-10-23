@@ -12,6 +12,13 @@ export interface ReviewInput extends RepositoryPR {
   summary: string; comments?: ReviewComment[]; approval?: "comment" | "approve" | "request_changes"
 }
 
+// Some models send a multi-line report with every line break JSON-escaped twice.
+// Only text without a single real line break is restored; otherwise "\n" is
+// literal content, such as a C string in a comment or suggestion.
+export function normalizeReviewText(text: string) {
+  return text.includes("\n") || !text.includes("\\n") ? text : text.replace(/\\n/g, "\n").replace(/\\t/g, "\t")
+}
+
 export async function submitReview(args: ReviewInput, sessionID: string) {
   const api = new GiteaClient()
   const path = prPath(args)
@@ -32,13 +39,13 @@ export async function submitReview(args: ReviewInput, sessionID: string) {
       throw new Error(`INVALID_REVIEW_COMMENT: ${comment.path}:${line} is not an unambiguous line in the reviewed diff`)
     }
     return { path: comment.path,
-      body: formatCommentBody(comment.body.replace(/\\n/g, "\n").replace(/\\t/g, "\t"), comment.suggestion?.replace(/\\n/g, "\n").replace(/\\t/g, "\t")),
+      body: formatCommentBody(comment.body, comment.suggestion),
       new_position: old ? 0 : line, old_position: old ? line : 0 }
   })
   const user = await api.json<{ id: number }>("/user")
   const key = submissionKey(api.baseURL, args.owner, args.repo, args.pull_number, user.id, snapshot.head, snapshot.base, snapshot.scope)
   const identity = { head: snapshot.head, base: snapshot.base, scope: snapshot.scope, key }
-  const summary = args.summary.replace(/\\n/g, "\n").replace(/\\t/g, "\t")
+  const summary = normalizeReviewText(args.summary)
   const marker = { ...identity, summaryDigest: digest(summary), commentsDigest: commentsDigest(comments) }
   const intent = join(stateDirectory(), `submission-${key}.json`)
 

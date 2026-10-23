@@ -144,21 +144,39 @@ export function formatDiffForReview(files: ParsedFile[]): string {
   return parts.join("\n")
 }
 
-export function matchPattern(filename: string, pattern: string): boolean {
-  // Convert glob pattern to regex
-  // Supports: *, **, ?, [abc], [!abc]
-  const regexPattern = pattern
-    .replace(/\./g, "\\.")
-    .replace(/\*\*/g, "{{GLOBSTAR}}")
-    .replace(/\*/g, "[^/]*")
-    .replace(/{{GLOBSTAR}}/g, ".*")
-    .replace(/\?/g, ".")
-  
-  const regex = new RegExp(`^${regexPattern}$`)
-  return regex.test(filename)
+function globSource(pattern: string): string {
+  let source = ""
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i]
+    if (char === "*" && pattern[i + 1] === "*") {
+      // `**/` also matches zero directories: src/**/*.ts includes src/a.ts.
+      const directory = pattern[i + 2] === "/"
+      source += directory ? "(?:.*/)?" : ".*"
+      i += directory ? 2 : 1
+    } else if (char === "*") source += "[^/]*"
+    else if (char === "?") source += "[^/]"
+    else if (char === "[" && pattern.indexOf("]", i + 2) > 0) {
+      const end = pattern.indexOf("]", i + 2)
+      const body = pattern.slice(i + 1, end)
+      const negated = body.startsWith("!") || body.startsWith("^")
+      const members = (negated ? body.slice(1) : body).replace(/\\/g, "\\\\")
+      source += negated ? `[^${members}/]` : `[${members}]`
+      i = end
+    } else source += char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  }
+  return source
 }
 
-export function filterFilesByPatterns(files: ParsedFile[], patterns: string[]): ParsedFile[] {
+export function matchPattern(filename: string, pattern: string): boolean {
+  // Glob semantics follow .gitignore: a pattern without "/" matches the file
+  // name at any depth, and one with "/" matches the full repository path.
+  // Supports: *, **, ?, [abc], [!abc]
+  pattern = pattern.trim().replace(/^\.?\//, "")
+  const target = pattern.includes("/") ? filename : filename.slice(filename.lastIndexOf("/") + 1)
+  return new RegExp(`^${globSource(pattern)}$`).test(target)
+}
+
+export function filterFilesByPatterns<T extends { path: string }>(files: T[], patterns: string[]): T[] {
   if (!patterns || patterns.length === 0) {
     return files
   }

@@ -1,5 +1,6 @@
 import { describe, test, expect } from "bun:test"
 import { REVIEW_CATEGORIES, REVIEW_SEVERITIES, formatReviewTag, parseReviewTag, formatCommentBody } from "../lib/review-format"
+import { normalizeReviewText } from "../lib/submit-review"
 
 describe("Review Tags", () => {
   test("formatReviewTag generates correct format", () => {
@@ -100,3 +101,13 @@ describe("Integration", () => {
 })
 
 console.log("✅ All tests passed!")
+
+describe("Review text normalization", () => {
+  test("keeps backslash escapes inside code", () => {
+    expect(normalizeReviewText('## Report\n\n`printf("a\\n");`')).toBe('## Report\n\n`printf("a\\n");`')
+    expect(normalizeReviewText("## Report\n\nUse `'\\t'` here")).toBe("## Report\n\nUse `'\\t'` here")
+  })
+  test("restores a summary that arrived with escaped line breaks only", () => {
+    expect(normalizeReviewText("## Report\\n\\n- item")).toBe("## Report\n\n- item")
+  })
+})

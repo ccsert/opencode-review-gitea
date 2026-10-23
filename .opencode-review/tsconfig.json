@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["lib/**/*.ts", "run-review.ts", "tools/gitea-review.ts", "tools/gitea-pr-diff.ts", "tools/gitea-incremental-diff.ts", "env.d.ts"]
+  "include": ["lib/**/*.ts", "run-review.ts", "tools/*.ts", "env.d.ts"]
 }

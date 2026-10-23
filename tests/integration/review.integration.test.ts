@@ -7,6 +7,7 @@ import { fixture } from "./fixtures"
 import diffTool from "../../.opencode-review/tools/gitea-pr-diff"
 import incrementalTool from "../../.opencode-review/tools/gitea-incremental-diff"
 import reviewTool from "../../.opencode-review/tools/gitea-review"
+import filesTool from "../../.opencode-review/tools/gitea-pr-files"
 
 const context = () => ({ sessionID: crypto.randomUUID(), messageID: "integration", agent: "code-review",
   abort: new AbortController().signal, metadata() {}, async ask() {} })
@@ -150,6 +151,33 @@ for (const lab of await labs()) {
       expect(comments[0].body).toBe(`${body}\n\n\`\`\`suggestion\n${suggestion}\n\`\`\`\n`)
       expect(await incrementalTool.execute({ ...f.args, format: "parsed" }, context())).toContain("No New Changes")
     }, 30000)
+
+    test("lists every file of a paginated PR, filters nested paths and keeps code escapes", async () => {
+      const f = await fixture(lab)
+      const repoPath = f.path.slice(0, f.path.lastIndexOf("/pulls/"))
+      const files = Array.from({ length: 60 }, (_, i) => ({ operation: "create", path: `gen/f${String(i).padStart(2, "0")}.txt`,
+        content: Buffer.from(`${i}\n`).toString("base64") }))
+      files.push({ operation: "create", path: "src/fmt.c", content: Buffer.from('#include <stdio.h>\nvoid f(void) { printf("a"); }\n').toString("base64") })
+      await api(lab, `${repoPath}/contents`, { branch: "feature", message: "Many files", files })
+      configure(lab)
+      // The diff tool waits for refs/pull/N/head; the file list is served from that ref.
+      const ctx = context()
+      const diff = await diffTool.execute({ ...f.args, format: "parsed", file_patterns: ["*.c"] }, ctx)
+      expect(diff).toContain("src/fmt.c")
+      expect(diff).not.toContain("gen/f00.txt")
+      const listing = await filesTool.execute({ ...f.args, file_patterns: undefined }, context())
+      expect(listing).toContain("**Total:** 62 file(s)")
+      expect(listing).toContain("`gen/f59.txt`")
+      expect(await filesTool.execute({ ...f.args, file_patterns: ["*.c"] }, context())).toContain("**Matched:** 1 of 62 files")
+      const body = "**[BUG:LOW]** Missing `\\n` in the output."
+      const suggestion = 'void f(void) { printf("a\\n"); }'
+      expect(await reviewTool.execute({ ...f.args, summary: "Escapes\n\nKeep `\\n` literal.", approval: "comment",
+        comments: [{ path: "src/fmt.c", line: 2, body, suggestion }] }, ctx)).toContain("confirmed")
+      const reviews = await api(lab, `${f.path}/reviews`)
+      expect(reviews[0].body.startsWith("Escapes\n\nKeep `\\n` literal.\n\n")).toBe(true)
+      const comments = await api(lab, `${f.path}/reviews/${reviews[0].id}/comments`)
+      expect(comments[0].body).toBe(`${body}\n\n\`\`\`suggestion\n${suggestion}\n\`\`\`\n`)
+    }, 60000)
 
     test("deleted-line comments retain their old-side positions", async () => {
       const f = await fixture(lab); configure(lab)
