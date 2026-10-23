@@ -2,7 +2,7 @@
 # 
 # This workflow uses the source-based installation method.
 # Files required in your repository:
-#   - .opencode-review/ (agents, tools, skills)
+#   - .opencode-review/ (agents, tools, skills), read from the PR base commit
 #   - .gitea/workflows/opencode-review.yaml (this file)
 #
 # Installation:
@@ -20,6 +20,9 @@ on:
 
 jobs:
   opencode-review:
+    concurrency:
+      group: opencode-review-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
     # Trigger on /oc or /opencode command, or on new/updated PR
     if: |
       github.event_name == 'pull_request' ||
@@ -29,9 +32,14 @@ jobs:
     container: catthehacker/ubuntu:act-latest
     
     steps:
-      - name: Checkout repository
+      - name: Checkout trusted review configuration
         uses: actions/checkout@v4
         with:
+          # The configuration defines the prompt, approval rules and executable
+          # tools, and runs with secrets: take it from the base commit, never
+          # from the PR. The review itself reads the PR through the Gitea API.
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          sparse-checkout: .opencode-review
           persist-credentials: false
 
       - name: Install Bun
@@ -49,7 +57,7 @@ jobs:
       - name: Run code review
         env:
           # OpenCode configuration
-          OPENCODE_CONFIG_DIR: ${{ github.workspace }}/.opencode-review
+          OPENCODE_CONFIG_DIR: ${{ github.workspace }}/.opencode-review  # Base-commit checkout above
           
           # Model configuration (provider/model-id format)
           # Examples: deepseek/deepseek-chat, anthropic/claude-sonnet-4-5, openai/gpt-4o
@@ -64,6 +72,8 @@ jobs:
           REVIEW_LANGUAGE: auto          # auto | en | zh-CN
           # REVIEW_STYLE: balanced       # concise | balanced | thorough | security
           # FILE_PATTERNS: ""            # Glob patterns to filter files (e.g., "*.ts,*.go,src/**")
+          # REVIEW_TEMPLATE: standard    # standard | concise | thorough | security | performance | compliance, or a path/URL
+          # REVIEW_RULES: ""             # Team standards: repo paths (read from the PR base), owner/repo:path@ref, or URLs
           
           # LLM API Keys (configure the one matching your MODEL)
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -102,7 +112,7 @@ jobs:
             FILE_INSTRUCTION="Only review files matching: $FILE_PATTERNS."
           fi
           
-          opencode run --agent code-review \
+          bun .opencode-review/run-review.ts \
             "Review PR #${PR_NUMBER} in ${REPO_OWNER}/${REPO_NAME}. \
              Analyze code changes, identify issues, and submit review with inline comments. \
              ${LANG_INSTRUCTION} ${FILE_INSTRUCTION}"

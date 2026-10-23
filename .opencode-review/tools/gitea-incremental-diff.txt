@@ -5,8 +5,10 @@ This tool is useful for reviewing updated PRs where you only want to see new cha
 ## How it works
 
 1. Fetches all commits in the PR
-2. Finds the last review submitted by this bot (via commit_id in reviews)
-3. Returns only the diff for commits added after the last review
+2. Finds a completed review by the authenticated user with this tool's marker,
+   matching base SHA and whole-PR coverage (human and unmarked reviews are ignored)
+3. Shows original PR hunks for files touched since that review, so line comments
+   retain the PR's base/head coordinates, including deleted lines
 
 ## When to use
 
@@ -21,9 +23,17 @@ Returns:
 - If PR was rebased/force-pushed: full PR diff with warning
 - Otherwise: incremental diff since last reviewed commit
 
+## Pages, template and standards
+- Page 1 starts with the Review Template and any Team Review Standards (trusted,
+  from configuration and the PR base commit), followed by the untrusted diff.
+- Large diffs are split into pages. If the output ends with "Call ... page=N",
+  call this tool again with the same arguments and page=N. gitea-review refuses
+  a review until every page of this run was read.
+
 ## Parameters
 
 - owner: Repository owner
 - repo: Repository name
 - pull_number: Pull request number
 - format: "parsed" (default) for line-numbered format, "raw" for unified diff
+- page: Output page (default 1)

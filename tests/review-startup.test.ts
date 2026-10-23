@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
@@ -17,16 +17,26 @@ function runReview(script: string[], options: {
   refresh?: string
   refreshStatus?: number
   runStatus?: number
+  receipt?: boolean
+  env?: Record<string, string | undefined>
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "review-startup-"))
   temporaryDirectories.push(directory)
   const calls = join(directory, "calls.jsonl")
   writeFileSync(join(directory, "opencode"), `#!/usr/bin/env bun
-import { appendFileSync } from "node:fs"
+import { appendFileSync, writeFileSync } from "node:fs"
 const args = process.argv.slice(2)
-appendFileSync(process.env.TEST_CALLS, JSON.stringify({ args, config: process.env.OPENCODE_CONFIG_DIR }) + "\\n")
+appendFileSync(process.env.TEST_CALLS, JSON.stringify({ args, config: process.env.OPENCODE_CONFIG_DIR, cwd:process.cwd(), disableProjectConfig:process.env.OPENCODE_DISABLE_PROJECT_CONFIG }) + "\\n")
 if (args[0] === "models") process.exit(Number(process.env.TEST_REFRESH_STATUS))
-if (args[0] === "run") process.exit(Number(process.env.TEST_RUN_STATUS))
+if (args[0] === "run") {
+  if (process.env.TEST_WRITE_RECEIPT === "true" && process.env.OPENCODE_REVIEW_RECEIPT_PATH) {
+    const target = JSON.parse(process.env.TEST_RECEIPT_TARGET || process.env.OPENCODE_REVIEW_TARGET || JSON.stringify({server:process.env.GITEA_SERVER_URL,owner:process.env.REPO_OWNER,repo:process.env.REPO_NAME,pull_number:Number(process.env.PR_NUMBER)}))
+    writeFileSync(process.env.OPENCODE_REVIEW_RECEIPT_PATH, JSON.stringify({
+      ...(process.env.TEST_LEGACY_RECEIPT === "true" ? {} : {target}),status:"submitted",head:"test-head",reviewId:1,
+      url:process.env.TEST_RECEIPT_URL || target.server + "/" + target.owner + "/" + target.repo + "/pulls/" + target.pull_number + "#pullreview-1"}))
+  }
+  process.exit(Number(process.env.TEST_RUN_STATUS))
+}
 `, { mode: 0o755 })
   // Avoid host architecture checks adding unrelated --version calls.
   writeFileSync(join(directory, "uname"), "#!/bin/sh\necho x86_64\n", { mode: 0o755 })
@@ -47,9 +57,12 @@ if (args[0] === "run") process.exit(Number(process.env.TEST_RUN_STATUS))
       TEST_CALLS: calls,
       TEST_REFRESH_STATUS: String(options.refreshStatus ?? 0),
       TEST_RUN_STATUS: String(options.runStatus ?? 0),
+      TEST_WRITE_RECEIPT: String(options.receipt ?? true),
+      OPENCODE_REVIEW_STATE_DIR: directory,
+      ...options.env,
     },
   })
-  const invocations = readFileSync(calls, "utf8").trim().split("\n").map(line => JSON.parse(line))
+  const invocations = existsSync(calls) ? readFileSync(calls, "utf8").trim().split("\n").map(line => JSON.parse(line)) : []
   return { ...result, invocations, directory }
 }
 
@@ -93,6 +106,12 @@ for (const { name, script } of scripts) {
       const result = runReview(script, { runStatus: 23 })
       expect(result.status).toBe(23)
     })
+
+    test("does not report success when OpenCode omits the review", () => {
+      const result = runReview(script, { receipt: false })
+      expect(result.status).toBe(1)
+      expect(result.stdout + result.stderr).toContain("REVIEW_NOT_CONFIRMED")
+    })
   })
 }
 
@@ -107,4 +126,104 @@ test("Docker version does not refresh models", () => {
   const result = runReview([join(root, "entrypoint.sh"), "version"])
   expect(result.status).toBe(0)
   expect(result.invocations.map(call => call.args)).toEqual([["--version"]])
+})
+
+describe("review receipt target", () => {
+  const target = { server: "https://gitea.example.com", owner: "owner", repo: "repo", pull_number: 42 }
+  for (const [field, value] of [["server", "https://other.example.com"], ["owner", "other"], ["repo", "other"], ["pull_number", 99]] as const) {
+    test(`rejects a successful receipt for another ${field}`, () => {
+      const result = runReview([join(root, "entrypoint.sh"), "review"], {
+        env: { TEST_RECEIPT_TARGET: JSON.stringify({ ...target, [field]: value }) },
+      })
+      expect(result.status).toBe(1)
+      expect(result.stdout + result.stderr).toContain("REVIEW_TARGET_MISMATCH")
+    })
+  }
+  test("rejects a legacy receipt without a target", () => {
+    const result = runReview([join(root, "entrypoint.sh"), "review"], { env: { TEST_LEGACY_RECEIPT: "true" } })
+    expect(result.status).toBe(1)
+    expect(result.stdout + result.stderr).toContain("REVIEW_TARGET_MISMATCH")
+  })
+  test("rejects a receipt URL that does not identify the verified review", () => {
+    const result = runReview([join(root, "entrypoint.sh"), "review"], { env: { TEST_RECEIPT_URL: "https://gitea.example.com/other/repo/pulls/99" } })
+    expect(result.status).toBe(1)
+    expect(result.stdout + result.stderr).toContain("REVIEW_TARGET_MISMATCH")
+  })
+  test("requires a fixed target before starting the model", () => {
+    const result = runReview(scripts[1].script, { env: { PR_NUMBER: undefined } })
+    expect(result.status).toBe(1)
+    expect(result.invocations.some(call => call.args[0] === "run")).toBe(false)
+    expect(result.stdout + result.stderr).toContain("REVIEW_TARGET_REQUIRED")
+  })
+  test("the model runs outside PR files with automatic project config disabled", () => {
+    const result = runReview([join(root, "entrypoint.sh"), "review"], { env: { OPENCODE_DISABLE_PROJECT_CONFIG: "false" } })
+    expect(result.status).toBe(0)
+    const call = result.invocations.find(call => call.args[0] === "run")
+    expect(call.cwd).not.toBe(root)
+    expect(call.cwd).toContain("opencode-review-run-")
+    expect(call.disableProjectConfig).toBe("true")
+    expect(existsSync(call.cwd)).toBe(false)
+  })
+})
+
+describe("workspace configuration", () => {
+  function workspace() {
+    const directory = mkdtempSync(join(tmpdir(), "review-workspace-"))
+    temporaryDirectories.push(directory)
+    mkdirSync(join(directory, ".opencode-review", "tools"), { recursive: true })
+    writeFileSync(join(directory, ".opencode-review", "tools", "added-by-pr.ts"), "throw new Error('PR code ran')\n")
+    return directory
+  }
+  const entrypoint = [join(root, "entrypoint.sh"), "review"]
+
+  test("ignores .opencode-review from the workspace by default", () => {
+    const ws = workspace()
+    const result = runReview(entrypoint, { env: { OPENCODE_CONFIG_DIR: undefined, OPENCODE_REVIEW_WORKSPACE: ws } })
+    expect(result.status).toBe(0)
+    expect(result.invocations.every(call => call.config === "/app/.opencode-review")).toBe(true)
+    expect(result.stdout + result.stderr).toContain(`Ignoring ${ws}/.opencode-review`)
+  })
+
+  test("finds the Actions checkout through GITHUB_WORKSPACE and still ignores it", () => {
+    const ws = workspace()
+    const result = runReview(entrypoint, { env: { OPENCODE_CONFIG_DIR: undefined, GITHUB_WORKSPACE: ws } })
+    expect(result.invocations.every(call => call.config === "/app/.opencode-review")).toBe(true)
+    expect(result.stdout + result.stderr).toContain(`Ignoring ${ws}/.opencode-review`)
+  })
+
+  test("an explicit config directory inside the workspace needs the trust opt-in, even via a symlink", () => {
+    const ws = workspace()
+    const link = join(mkdtempSync(join(tmpdir(), "review-link-")), "config")
+    temporaryDirectories.push(join(link, ".."))
+    symlinkSync(join(ws, ".opencode-review"), link)
+    for (const configDir of [join(ws, ".opencode-review"), link]) {
+      const result = runReview(entrypoint, { env: { OPENCODE_CONFIG_DIR: configDir, OPENCODE_REVIEW_WORKSPACE: ws } })
+      expect(result.invocations.every(call => call.config === "/app/.opencode-review")).toBe(true)
+      expect(result.stdout + result.stderr).toContain("Ignoring OPENCODE_CONFIG_DIR")
+    }
+  })
+
+  test("uses workspace configuration only when explicitly trusted", () => {
+    const ws = workspace()
+    const result = runReview(entrypoint, { env: { OPENCODE_CONFIG_DIR: undefined, OPENCODE_REVIEW_WORKSPACE: ws,
+      OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG: "true" } })
+    expect(result.status).toBe(0)
+    expect(result.invocations.every(call => call.config === join(ws, ".opencode-review"))).toBe(true)
+  })
+})
+
+describe("workflow templates keep PR code out of the review job", () => {
+  type Steps = { jobs: { "opencode-review": { steps: { name: string; uses?: string; with?: Record<string, string> }[] } } }
+  const steps = (path: string) => (Bun.YAML.parse(readFileSync(join(root, path), "utf8")) as Steps).jobs["opencode-review"].steps
+
+  test("the Docker workflow does not check out the repository", () => {
+    expect(steps("templates/workflow-docker.yaml").some(step => step.uses?.includes("actions/checkout"))).toBe(false)
+  })
+
+  test.each(["templates/workflow-source.yaml", ".gitea/workflows/opencode-review.yaml"])("%s checks out configuration from the base commit only", path => {
+    const checkouts = steps(path).filter(step => step.uses?.includes("actions/checkout"))
+    expect(checkouts).toHaveLength(1)
+    expect(checkouts[0].with?.ref).toBe("${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}")
+    expect(checkouts[0].with?.["sparse-checkout"]).toBe(".opencode-review")
+  })
 })

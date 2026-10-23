@@ -18,36 +18,56 @@ log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Check for user-mounted custom config
+# Actions container jobs check out to $GITHUB_WORKSPACE (/workspace/<owner>/<repo>);
+# local runs mount the project at /workspace.
+WORKSPACE_DIR="${OPENCODE_REVIEW_WORKSPACE:-${GITHUB_WORKSPACE:-/workspace}}"
+
+# The workspace may hold pull request code. Configuration there defines the
+# agent prompt, approval rules and executable tools, so it is used only when the
+# workflow explicitly trusts it (for example, a checkout of the base branch).
+trusts_workspace_config() {
+    [ "${OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG:-false}" = "true" ]
+}
+
+is_in_workspace() {
+    local path root resolved
+    path="$(cd "$1" 2>/dev/null && pwd -P)" || return 1
+    for root in "$WORKSPACE_DIR" /workspace "${GITHUB_WORKSPACE:-}"; do
+        [ -n "$root" ] || continue
+        resolved="$(cd "$root" 2>/dev/null && pwd -P)" || continue
+        [[ "$path" == "$resolved" || "$path" == "$resolved"/* ]] && return 0
+    done
+    return 1
+}
+
 setup_config() {
     # Honor pre-set OPENCODE_CONFIG_DIR (guard runs FIRST)
-    if [ -n "$OPENCODE_CONFIG_DIR" ] && [ -d "$OPENCODE_CONFIG_DIR" ]; then
-        # Exclude built-in paths to prevent loops/fallback to built-in as per plan AC
-        if [[ "$OPENCODE_CONFIG_DIR" != "/app/.opencode-review" && "$OPENCODE_CONFIG_DIR" != "/workspace/.opencode-review" ]]; then
+    if [ -n "$OPENCODE_CONFIG_DIR" ] && [ -d "$OPENCODE_CONFIG_DIR" ] && [ "$OPENCODE_CONFIG_DIR" != "/app/.opencode-review" ]; then
+        if ! is_in_workspace "$OPENCODE_CONFIG_DIR" || trusts_workspace_config; then
             log_info "Using OPENCODE_CONFIG_DIR=$OPENCODE_CONFIG_DIR (user-prescribed)"
             export OPENCODE_CONFIG_DIR
             return 0
         fi
+        log_warn "Ignoring OPENCODE_CONFIG_DIR=$OPENCODE_CONFIG_DIR inside the workspace; set OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true only for trusted checkouts"
     fi
-    
-    # Fall back to /workspace/.opencode-review for workspace-mounted config
-    if [ -d "/workspace/.opencode-review" ]; then
-        log_info "Using custom config from /workspace/.opencode-review"
-        export OPENCODE_CONFIG_DIR="/workspace/.opencode-review"
-        
-        # Install dependencies if package.json exists
-        if [ -f "/workspace/.opencode-review/package.json" ]; then
-            log_info "Installing custom tool dependencies..."
-            # Use subshell to avoid directory stack issues
-            (
-                cd /workspace/.opencode-review || exit 1
-                bun install 2>/dev/null || echo "[WARN] Failed to install custom dependencies"
-            )
+
+    if [ -d "$WORKSPACE_DIR/.opencode-review" ]; then
+        if trusts_workspace_config; then
+            log_info "Using trusted custom config from $WORKSPACE_DIR/.opencode-review"
+            export OPENCODE_CONFIG_DIR="$WORKSPACE_DIR/.opencode-review"
+            if [ -f "$OPENCODE_CONFIG_DIR/package.json" ]; then
+                log_info "Installing custom tool dependencies..."
+                (
+                    cd "$OPENCODE_CONFIG_DIR" || exit 1
+                    bun install 2>/dev/null || echo "[WARN] Failed to install custom dependencies"
+                )
+            fi
+            return 0
         fi
-        return 0
+        log_warn "Ignoring $WORKSPACE_DIR/.opencode-review: it may come from the pull request under review."
+        log_warn "Set OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true only when the workspace is a trusted checkout."
     fi
-    
-    # Fall back to built-in config
+
     log_info "Using built-in config from /app/.opencode-review"
     export OPENCODE_CONFIG_DIR="/app/.opencode-review"
 }
@@ -206,6 +226,8 @@ print_config() {
     log_info "Configuration:"
     echo "  Model:    ${MODEL:-deepseek/deepseek-chat}"
     echo "  Style:    ${REVIEW_STYLE:-balanced}"
+    echo "  Template: ${REVIEW_TEMPLATE:-from REVIEW_STYLE}"
+    echo "  Rules:    ${REVIEW_RULES:-auto (.gitea/review-rules*, .forgejo/review-rules*)}"
     echo "  Language: ${REVIEW_LANGUAGE:-auto}"
     echo "  Server:   ${GITEA_SERVER_URL:-${GITHUB_SERVER_URL:-}}"
     echo "  Config:   $OPENCODE_CONFIG_DIR"
@@ -221,19 +243,14 @@ print_config() {
 }
 
 check_architecture() {
-    local arch
-    arch=$(uname -m)
-    if [ "$arch" != "x86_64" ] && [ "$arch" != "amd64" ]; then
-        log_warn "Detected architecture: $arch (opencode-ai binary may not be supported)"
-        log_warn "If you encounter errors, please use the source installation method:"
-        log_warn "  https://github.com/ccsert/opencode-review-gitea#installation"
-        # Verify opencode binary actually works
-        if ! opencode --version >/dev/null 2>&1; then
-            log_error "opencode binary is not compatible with $arch architecture"
-            log_error "The pre-built Docker image only supports x86_64/amd64"
-            log_error "Please use the source installation method instead (--source)"
-            exit 1
-        fi
+    # The image is published for linux/amd64 and linux/arm64.
+    case "$(uname -m)" in
+        x86_64|amd64|aarch64|arm64) return 0 ;;
+    esac
+    if ! opencode --version >/dev/null 2>&1; then
+        log_error "The opencode binary does not run on $(uname -m)"
+        log_error "Use the source installation method instead: https://github.com/ccsert/opencode-review-gitea#installation"
+        exit 1
     fi
 }
 
@@ -272,7 +289,11 @@ main() {
             fi
             
             log_info "Running code review..."
-            exec opencode run --agent code-review "$prompt"
+            local runner="/app/.opencode-review/run-review.ts"
+            if [ ! -f "$runner" ]; then
+                runner="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.opencode-review/run-review.ts"
+            fi
+            exec bun "$runner" "$prompt"
             ;;
             
         shell|bash|sh)
@@ -311,8 +332,17 @@ main() {
             echo ""
             echo "  MODEL              AI model (default: deepseek/deepseek-chat)"
             echo "  OPENCODE_REFRESH_MODELS  Refresh model catalog before review (default: true; false to skip)"
+            echo "  OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG  Use .opencode-review from the workspace (default: false)."
+            echo "                     Enable only when the workspace is a trusted checkout, never PR code."
             echo "  REVIEW_LANGUAGE    auto|en|zh-CN (default: auto)"
             echo "  REVIEW_STYLE       concise|balanced|thorough|security (default: balanced)"
+            echo "  REVIEW_TEMPLATE    standard|concise|thorough|security|performance|compliance, or a path/URL"
+            echo "                     (default: derived from REVIEW_STYLE)"
+            echo "  REVIEW_RULES       Team standards, comma-separated: repository paths (read from the PR"
+            echo "                     base commit), owner/repo:path[@ref], or URLs; 'none' disables"
+            echo "                     (default: .gitea/review-rules[.md] and .forgejo/review-rules[.md])"
+            echo "  REVIEW_RULES_MAX_BYTES   Size limit of applicable standards (default: 30000)"
+            echo "  REVIEW_DIFF_PAGE_BYTES   Diff output page size (default: 40000)"
             echo "  FILE_PATTERNS      Glob patterns to filter files (e.g., '*.ts,*.go')"
             echo "  PR_NUMBER          PR number to review"
             echo "  REPO_OWNER         Repository owner"

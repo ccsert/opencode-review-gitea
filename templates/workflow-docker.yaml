@@ -20,6 +20,9 @@ on:
 
 jobs:
   opencode-review:
+    concurrency:
+      group: opencode-review-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
     # Trigger on /oc or /opencode command, or on new/updated PR
     if: |
       github.event_name == 'pull_request' ||
@@ -33,12 +36,9 @@ jobs:
       # Optional: pin to a published digest for reproducible reviews
       # image: ghcr.io/ccsert/opencode-review@sha256:<published-digest>
     
+    # No checkout: the review reads the PR through the Gitea API, and PR code
+    # never needs to run in a job that holds the token and model API keys.
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
       - name: Run code review
         env:
           # Gitea/Forgejo configuration
@@ -48,12 +48,15 @@ jobs:
           # Model configuration (provider/model-id format)
           # Examples: deepseek/deepseek-chat, anthropic/claude-sonnet-4-5, openai/gpt-4o
           MODEL: deepseek/deepseek-chat
+          # OPENCODE_REVIEW_STATE_DIR: /persistent/review-state  # Shared durable volume, if configured
           # OPENCODE_REFRESH_MODELS: "false"  # Skip catalog refresh in offline environments
           
           # Review configuration
           REVIEW_LANGUAGE: auto          # auto | en | zh-CN
           # REVIEW_STYLE: balanced       # concise | balanced | thorough | security
           # FILE_PATTERNS: ""            # Glob patterns to filter files (e.g., "*.ts,*.go,src/**")
+          # REVIEW_TEMPLATE: standard    # standard | concise | thorough | security | performance | compliance, or a path/URL
+          # REVIEW_RULES: ""             # Team standards: repo paths (read from the PR base), owner/repo:path@ref, or URLs
           
           # LLM API Keys (configure the one matching your MODEL)
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
