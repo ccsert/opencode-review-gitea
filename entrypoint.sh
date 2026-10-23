@@ -20,7 +20,17 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Check for user-mounted custom config
 setup_config() {
-    # If user mounted custom config at /workspace/.opencode-review, use it
+    # Honor pre-set OPENCODE_CONFIG_DIR (guard runs FIRST)
+    if [ -n "$OPENCODE_CONFIG_DIR" ] && [ -d "$OPENCODE_CONFIG_DIR" ]; then
+        # Exclude built-in paths to prevent loops/fallback to built-in as per plan AC
+        if [[ "$OPENCODE_CONFIG_DIR" != "/app/.opencode-review" && "$OPENCODE_CONFIG_DIR" != "/workspace/.opencode-review" ]]; then
+            log_info "Using OPENCODE_CONFIG_DIR=$OPENCODE_CONFIG_DIR (user-prescribed)"
+            export OPENCODE_CONFIG_DIR
+            return 0
+        fi
+    fi
+    
+    # Fall back to /workspace/.opencode-review for workspace-mounted config
     if [ -d "/workspace/.opencode-review" ]; then
         log_info "Using custom config from /workspace/.opencode-review"
         export OPENCODE_CONFIG_DIR="/workspace/.opencode-review"
@@ -34,10 +44,12 @@ setup_config() {
                 bun install 2>/dev/null || echo "[WARN] Failed to install custom dependencies"
             )
         fi
-    else
-        log_info "Using built-in config from /app/.opencode-review"
-        export OPENCODE_CONFIG_DIR="/app/.opencode-review"
+        return 0
     fi
+    
+    # Fall back to built-in config
+    log_info "Using built-in config from /app/.opencode-review"
+    export OPENCODE_CONFIG_DIR="/app/.opencode-review"
 }
 
 # Validate required environment variables
@@ -68,7 +80,7 @@ validate_env() {
        [ -z "$OPENROUTER_API_KEY" ] && [ -z "$OPENAI_BASE_URL" ]; then
         log_warn "No LLM API key detected (DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, LLM_API_KEY, OPENROUTER_API_KEY)"
         log_warn "If you are using a local model or custom gateway, you can ignore this warning"
-        log_warn "Set OPENAI_BASE_URL to use an OpenAI-compatible gateway (LiteLLM, OpenRouter, etc.)"
+        log_warn "For custom gateways (9router, LiteLLM, etc.), add a custom provider to .opencode-review/opencode.json; OPENAI_BASE_URL alone only works for OpenAI catalog models — use a custom provider for non-catalog model ids"
     fi
     
     log_success "Environment validated"

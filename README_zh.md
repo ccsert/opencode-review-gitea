@@ -79,30 +79,120 @@ env:
   # MODEL: openai/gpt-4o                # 需要 OPENAI_API_KEY
 ```
 
-### 3. 使用 LLM 网关（可选）
 
-你可以通过 OpenAI 兼容 API 使用 **LiteLLM**、**OpenRouter**、**Together AI**、**NVIDIA NIM** 等 LLM 网关：
+
+### 3. 自定义 / 自托管网关 (Custom / Self-Hosted Gateways)
+
+你可以通过在 `.opencode-review/opencode.json` 中定义自定义 provider 来使用自建或替代的 LLM 网关（9router、LiteLLM、Together AI 等）。与仅适用于预设 provider 的简单 `OPENAI_BASE_URL` 方法不同，自定义 provider 需要显式注册。
+
+**何时需要？** 仅当同时满足以下两个条件：
+- 使用 OpenAI 兼容网关（9router、LiteLLM、Together AI 等），且
+- 请求的模型 ID 不在 opencode 任何内置 provider 的目录中。
+
+LiteLLM、9router 等网关常以自定义名称暴露模型（聚合前缀、不带 provider 前缀、或自定义
+`model_name`），这些 ID opencode 目录并不认识。需要自定义 provider 的网关专属 ID 示例：
+`9router/deepseek-v4-pro`、`9router/qwen3`、`litellm/my-custom-alias`。如果网关提供的是
+目录中已有的模型 ID（如 `openai/gpt-4o`、`deepseek/deepseek-v4-pro`、`anthropic/claude-...`），
+则无需自定义 provider —— 直接设置 `OPENAI_BASE_URL` 并使用该 ID 即可。
+
+**为什么单独使用 `OPENAI_BASE_URL` 会失败**：OpenCode 的目录中仅包含预定义的 provider（OpenAI、DeepSeek、Anthropic 等）。没有 custom provider 名称的 `OPENAI_BASE_URL` 不会工作，因为 opencode 会按内置目录校验模型 ID 并通过已识别的 provider 路由请求，结果就是 `ProviderModelNotFoundError`。自定义 provider 需要通过 `@ai-sdk/openai-compatible` 显式注册。
+
+**何时需要自定义 provider？** 同时满足以下两个条件时需要：
+- 使用 OpenAI 兼容网关（9router、LiteLLM、Together AI 等），且
+- 请求的模型 ID 不在 opencode 任何内置 provider 的目录中。
+
+LiteLLM、9router 等网关常以自定义名称暴露模型（聚合前缀、不带 provider 前缀、或自定义
+`model_name`），这些 ID opencode 目录并不认识。需要自定义 provider 的网关专属 ID 示例：
+`9router/deepseek-v4-pro`、`9router/qwen3`、`litellm/my-custom-alias`。如果网关提供的是
+目录中已有的模型 ID（如 `openai/gpt-4o`、`deepseek/deepseek-v4-pro`、`anthropic/claude-...`），
+则无需自定义 provider —— 直接设置 `OPENAI_BASE_URL` 并使用该 ID 即可。
+
+**自定义 provider JSON**（添加到 `.opencode-review/opencode.json`）：
+
+```json
+{
+  "provider": {
+    "opencode-review-provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "opencode-review-provider",
+      "options": {
+        "baseURL": "{env:OPENAI_BASE_URL}",
+        "apiKey": "{env:OPENAI_API_KEY}"
+      },
+      "models": {
+        "my-model": { "name": "My Model" }
+      }
+    }
+  }
+}
+```
+
+> **调整个别模型参数：** `models` 中的每一项还可携带网关相关的属性。实用示例：重映射发送给网关
+> 的 ID（`modelID`）、设置推理级别（`settings.reasoningEffort`）、控制采样（`body`）。
+
+```json
+{
+  "provider": {
+    "opencode-review-provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
+      "models": {
+        "deepseek-v4-pro": {
+          "name": "DeepSeek V4 Pro",
+          "modelID": "your-gateway-deployment-id",
+          "settings": { "reasoningEffort": "high" },
+          "body": { "temperature": 0.2 }
+        }
+      }
+    }
+  }
+}
+```
+
+> 注意：数值型采样参数（如 `temperature`）应放在 `body` 中（模型顶层不接受数值型
+> `temperature`）。自定义 provider 暂不支持 `limit` / 令牌上限。
+
+### 每个模型的选项
+
+`models` 对象中的每一项都可以携带网关相关的属性：
+
+- `modelID`：重映射发送给网关的 ID（在模型名称与部署 ID 不同时很有用）
+- `settings.reasoningEffort`：设置推理努力级别（`low`、`medium`、`high`）
+- `body.temperature`：控制采样温度（0.0 到 1.0）
+
+```json
+{
+  "provider": {
+    "opencode-review-provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
+      "models": {
+        "deepseek-v4-pro": {
+          "name": "DeepSeek V4 Pro",
+          "modelID": "your-gateway-deployment-id",
+          "settings": { "reasoningEffort": "high" },
+          "body": { "temperature": 0.2 }
+        }
+      }
+    }
+  }
+}
+```
+
+**配置**（`.gitea/workflows/opencode-review.yaml`）：
 
 ```yaml
 env:
-  # 将 MODEL 指向 OpenAI 兼容的 provider
-  MODEL: openai/your-model-name
-  OPENAI_API_KEY: ${{ secrets.YOUR_API_KEY }}
-  # 设置网关 URL
-  OPENAI_BASE_URL: "https://openrouter.ai/api/v1"    # OpenRouter
-  # OPENAI_BASE_URL: "http://localhost:4000/v1"        # LiteLLM
-  # OPENAI_BASE_URL: "https://api.together.xyz/v1"     # Together AI
+  # 使用自定义 provider - model 格式：provider/model-name
+  MODEL: opencode-review-provider/my-model
+  # opencode.json 中 {env:...} 引用的 OpenAI 兼容网关地址和 API key
+  OPENAI_BASE_URL: "https://your-gateway.example.com/v1"
+  OPENAI_API_KEY: "your-gateway-api-key"
 ```
 
-| 网关 | OPENAI_BASE_URL | 备注 |
-|------|-----------------|------|
-| OpenRouter | `https://openrouter.ai/api/v1` | 使用 `OPENROUTER_API_KEY` |
-| LiteLLM | `http://localhost:4000/v1` | 自建代理 |
-| Together AI | `https://api.together.xyz/v1` | |
-| NVIDIA NIM | `https://integrate.api.nvidia.com/v1` | |
-| Ollama（本地） | `http://localhost:11434/v1` | 无需 API Key |
+**示例**：`MODEL=opencode-review-provider/my-model`
 
-> **注意**: 使用网关时，请将 `MODEL` 设置为 `openai/<模型名称>`，以便 opencode 通过 OpenAI 兼容 provider 路由请求。
+> **注意**：对于 catalog provider（OpenAI、DeepSeek、Anthropic），继续使用 `MODEL: openai/<model-name>` 配合 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，如 [模型配置](#2-configure-model) 章节所述。
 
 ### 4. 审查配置
 

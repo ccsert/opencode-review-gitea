@@ -1,0 +1,10 @@
+{
+  "provider": {
+    "opencode-review-provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "opencode-review-provider",
+      "options": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
+      "models": { "my-model": { "name": "My Model" } }
+    }
+  }
+}

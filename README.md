@@ -79,30 +79,122 @@ env:
   # MODEL: openai/gpt-4o                # Requires OPENAI_API_KEY
 ```
 
-### 3. Using LLM Gateways (Optional)
 
-You can use LLM gateways like **LiteLLM**, **OpenRouter**, **Together AI**, **NVIDIA NIM**, etc. via the OpenAI-compatible API:
+### 3. Custom / self-hosted gateways (advanced)
+
+You can use self-hosted or alternative LLM gateways (9router, LiteLLM, Together AI, etc.) by defining a custom provider in `.opencode-review/opencode.json`. Unlike the simple `OPENAI_BASE_URL` approach which only works for cataloged providers, custom providers require explicit registration.
+
+**When is this needed?** Only when BOTH are true:
+- you use an OpenAI-compatible gateway (9router, LiteLLM, Together AI, ...), AND
+- the model id you request is not known under any of opencode's built-in providers.
+
+Gateways like LiteLLM and 9router often expose models under their own names (aggregator
+prefixes, no provider prefix, or a custom `model_name`) that opencode's catalog does not know.
+Examples of gateway-only ids that need a custom provider: `9router/deepseek-v4-pro`,
+`9router/qwen3`, `litellm/my-custom-alias`. If instead the gateway serves a model id that the
+catalog already knows (e.g. `openai/gpt-4o`, `deepseek/deepseek-v4-pro`, `anthropic/claude-...`),
+no custom provider is required — set `OPENAI_BASE_URL` and use that id directly.
+
+**Why `OPENAI_BASE_URL` alone fails**: The OpenCode catalog contains only predefined providers (OpenAI, DeepSeek, Anthropic, etc.). Setting `OPENAI_BASE_URL` without a custom provider name won't work because opencode validates the model ID against its built-in catalog and routes requests through a recognized provider. The result is a `ProviderModelNotFoundError`. Custom providers require explicit registration via the `@ai-sdk/openai-compatible` package.
+
+**When is a custom provider required?** A custom provider is needed when BOTH are true:
+- you use an OpenAI-compatible gateway (9router, LiteLLM, Together AI, ...), AND
+- the model id you request is not known under any of opencode's built-in providers.
+
+Gateways like LiteLLM and 9router often expose models under their own names (aggregator
+prefixes, no provider prefix, or a custom `model_name`) that opencode's catalog does not know.
+Examples of gateway-only ids that need a custom provider: `9router/deepseek-v4-pro`,
+`9router/qwen3`, `litellm/my-custom-alias`. If instead the gateway serves a model id that the
+catalog already knows (e.g. `openai/gpt-4o`, `deepseek/deepseek-v4-pro`, `anthropic/claude-...`),
+no custom provider is required — set `OPENAI_BASE_URL` and use that id directly.
+
+**Custom provider JSON** (add to `.opencode-review/opencode.json`):
+
+```json
+{
+  "provider": {
+    "opencode-review-provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "opencode-review-provider",
+      "options": {
+        "baseURL": "{env:OPENAI_BASE_URL}",
+        "apiKey": "{env:OPENAI_API_KEY}"
+      },
+      "models": {
+        "my-model": { "name": "My Model" }
+      }
+    }
+  }
+}
+```
+
+> **Tune per-model options:** each entry in `models` can also carry gateway-facing attributes.
+> Useful examples: remap the id sent to the gateway (`modelID`), set the reasoning level
+> (`settings.reasoningEffort`), and control sampling (`body`).
+
+```json
+{
+  "provider": {
+    "opencode-review-provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
+      "models": {
+        "deepseek-v4-pro": {
+          "name": "DeepSeek V4 Pro",
+          "modelID": "your-gateway-deployment-id",
+          "settings": { "reasoningEffort": "high" },
+          "body": { "temperature": 0.2 }
+        }
+      }
+    }
+  }
+}
+```
+
+> Note: numeric sampling params like `temperature` go under `body` (a top-level numeric
+> `temperature` is not accepted). `limit`/token caps are not yet supported for custom providers.
+
+### Per-model options
+
+Each model entry in the `models` object can carry gateway-facing attributes:
+
+- `modelID`: remap the ID sent to the gateway (useful when the model name differs from the deployment ID)
+- `settings.reasoningEffort`: set the reasoning effort level (`low`, `medium`, `high`)
+- `body.temperature`: control sampling temperature (0.0 to 1.0)
+
+```json
+{
+  "provider": {
+    "opencode-review-provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
+      "models": {
+        "deepseek-v4-pro": {
+          "name": "DeepSeek V4 Pro",
+          "modelID": "your-gateway-deployment-id",
+          "settings": { "reasoningEffort": "high" },
+          "body": { "temperature": 0.2 }
+        }
+      }
+    }
+  }
+}
+```
+
+**Configuration** (`.gitea/workflows/opencode-review.yaml`):
 
 ```yaml
 env:
-  # Point MODEL to an OpenAI-compatible provider
-  MODEL: openai/your-model-name
-  OPENAI_API_KEY: ${{ secrets.YOUR_API_KEY }}
-  # Set the gateway URL
-  OPENAI_BASE_URL: "https://openrouter.ai/api/v1"    # OpenRouter
-  # OPENAI_BASE_URL: "http://localhost:4000/v1"        # LiteLLM
-  # OPENAI_BASE_URL: "https://api.together.xyz/v1"     # Together AI
+  # Custom provider - model format: provider/model-name
+  MODEL: opencode-review-provider/my-model
+  # OpenAI-compatible gateway base URL and API key referenced by {env:...} in opencode.json
+  OPENAI_BASE_URL: "https://your-gateway.example.com/v1"
+  OPENAI_API_KEY: "your-gateway-api-key"
 ```
 
-| Gateway | OPENAI_BASE_URL | Notes |
-|---------|-----------------|-------|
-| OpenRouter | `https://openrouter.ai/api/v1` | Use `OPENROUTER_API_KEY` |
-| LiteLLM | `http://localhost:4000/v1` | Self-hosted proxy |
-| Together AI | `https://api.together.xyz/v1` | |
-| NVIDIA NIM | `https://integrate.api.nvidia.com/v1` | |
-| Ollama (local) | `http://localhost:11434/v1` | No API key needed |
+**Example**: `MODEL=opencode-review-provider/my-model`
 
-> **Note**: When using gateways, set `MODEL` to `openai/<model-name>` so opencode routes through the OpenAI-compatible provider.
+> **Note**: For catalog providers (OpenAI, DeepSeek, Anthropic), continue using `MODEL: openai/<model-name>` with `OPENAI_API_KEY` and `OPENAI_BASE_URL` as described in the [Model Configuration](#2-configure-model) section.
 
 ### 4. Review Configuration
 
