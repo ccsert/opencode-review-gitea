@@ -237,6 +237,18 @@ check_architecture() {
     fi
 }
 
+# Refresh the catalog before selecting a model. Keep cached models usable offline.
+refresh_models() {
+    if [ "${OPENCODE_REFRESH_MODELS:-true}" = "false" ]; then
+        return 0
+    fi
+
+    log_info "Refreshing models cache..."
+    if ! opencode models --refresh >/dev/null; then
+        log_warn "Failed to refresh models; continuing with the cached model catalog"
+    fi
+}
+
 # Main entrypoint
 main() {
     local command="${1:-review}"
@@ -250,6 +262,7 @@ main() {
             normalize_repo_context
             validate_env
             print_config
+            refresh_models
             
             local prompt
             if [ -n "$1" ]; then
@@ -297,6 +310,7 @@ main() {
             echo "  OPENAI_BASE_URL    Custom API base URL (e.g., http://localhost:4000/v1)"
             echo ""
             echo "  MODEL              AI model (default: deepseek/deepseek-chat)"
+            echo "  OPENCODE_REFRESH_MODELS  Refresh model catalog before review (default: true; false to skip)"
             echo "  REVIEW_LANGUAGE    auto|en|zh-CN (default: auto)"
             echo "  REVIEW_STYLE       concise|balanced|thorough|security (default: balanced)"
             echo "  FILE_PATTERNS      Glob patterns to filter files (e.g., '*.ts,*.go')"

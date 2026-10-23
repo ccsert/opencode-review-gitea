@@ -21,7 +21,26 @@ An AI-powered **automatic code review tool for Gitea/Forgejo PRs**, built on the
 
 ## 📦 Installation
 
-### Interactive Installation (Recommended)
+### Docker Setup Without an Install Script (Recommended)
+
+Docker setup only needs **one workflow file**. You do not need to run `install.sh` or add `.opencode-review/` to your repository.
+
+1. Open the [Docker workflow template](templates/workflow-docker.yaml), inspect it, and save it as `.gitea/workflows/opencode-review.yaml` in your project. Alternatively, download the file without executing it:
+
+   ```bash
+   mkdir -p .gitea/workflows
+   curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/templates/workflow-docker.yaml \
+     -o .gitea/workflows/opencode-review.yaml
+   ```
+
+   If that workflow already exists, compare the template with your file before replacing it. For a reviewed release or commit, replace `main` in the URL with that tag or full commit SHA.
+
+2. Review the workflow, adjust `runs-on` for your Gitea/Forgejo runner, and choose your `MODEL` and API key. Configure `OPENCODE_GIT_TOKEN` and the matching model provider key in [repository secrets](#1-set-up-secrets). Enable Actions for the repository if needed.
+3. Commit the workflow to your default branch. Open a PR or comment `/oc` on a PR to trigger a review.
+
+The workflow uses `ghcr.io/ccsert/opencode-review:latest`, which includes the agents, tools, and runtime dependencies. See [Docker image updates](#docker-image-updates) for refresh and pinning options.
+
+### Optional Interactive Installer
 
 Run in your project root:
 
@@ -31,10 +50,10 @@ curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/i
 
 You'll see an interactive menu to choose your installation method.
 
-### Direct Installation Options
+### Optional Installer Options
 
 ```bash
-# Docker-based (Recommended) - Zero files added to repo
+# Docker-based - Adds one workflow file
 curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash -s -- --docker
 
 # Source-based - Full customization
@@ -51,8 +70,16 @@ curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/i
 | **Files added** | 1 workflow file | .opencode-review/ + workflow |
 | **CI speed** | Fast (cached image) | Slower (install deps each run) |
 | **Customization** | Environment variables | Full control over agents/tools |
-| **Updates** | Automatic with `:latest` | Manual update required |
+| **Updates** | Weekly rebuilds; pull `:latest` | Update copied files manually; CLI installed each CI run |
 | **Best for** | Quick setup, standard use | Custom prompts, advanced users |
+
+### Docker Image Updates
+
+The [Docker publishing workflow](.github/workflows/docker-publish.yaml) builds on relevant changes to `main` and version tags, and rebuilds every Monday at 04:23 UTC. Scheduled and manual builds bypass the build cache and pull the base image so that new OpenCode releases are installed even when this repository has not changed.
+
+Maintainers can also run **Docker Build & Publish** from GitHub Actions. The optional `opencode_version` input defaults to `latest` and can select an exact npm version for a manual build. For a local build, use `docker build --pull --no-cache --build-arg OPENCODE_VERSION=latest -t opencode-review:local .`.
+
+To update a local installation, run `docker pull ghcr.io/ccsert/opencode-review:latest`. Gitea/Forgejo runners must also pull the updated image rather than reuse a cached tag. For reproducible reviews, pin the workflow's `container.image` to a published digest (`ghcr.io/ccsert/opencode-review@sha256:<digest>`); update that digest explicitly when ready.
 
 ## ⚙️ Configuration
 
@@ -210,7 +237,12 @@ env:
   
   # File filtering (glob patterns, comma-separated)
   FILE_PATTERNS: ""          # e.g., "*.ts,*.go,src/**" (empty = all files)
+
+  # Refresh the model catalog before review (set to "false" to skip)
+  OPENCODE_REFRESH_MODELS: "true"
 ```
+
+Before each review, Docker and source workflows run [`opencode models --refresh`](https://opencode.ai/docs/cli/#models). If refreshing fails, a warning is logged and the review continues with the cached catalog. For offline or fully custom provider setups, set `OPENCODE_REFRESH_MODELS: "false"`. For local source runs, execute `opencode models --refresh` before `opencode run` as shown below.
 
 #### Language Options
 
@@ -276,6 +308,7 @@ export GITEA_TOKEN="your-token"
 export GITEA_SERVER_URL="https://your-gitea.example.com"
 export OPENCODE_CONFIG_DIR="$(pwd)/.opencode-review"
 
+opencode models --refresh
 opencode run --agent code-review \
   "Please review PR #123 in owner/repo"
 ```

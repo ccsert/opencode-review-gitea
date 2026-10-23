@@ -54,6 +54,7 @@ jobs:
           # Model configuration (provider/model-id format)
           # Examples: deepseek/deepseek-chat, anthropic/claude-sonnet-4-5, openai/gpt-4o
           MODEL: deepseek/deepseek-chat
+          # OPENCODE_REFRESH_MODELS: "false"  # Skip catalog refresh in offline environments
           
           # Gitea/Forgejo configuration
           GITEA_TOKEN: ${{ secrets.OPENCODE_GIT_TOKEN }}
@@ -80,6 +81,14 @@ jobs:
           # Logging
           OPENCODE_LOG_LEVEL: info
         run: |
+          # Refresh the model catalog; keep cached models usable if offline.
+          if [ "${OPENCODE_REFRESH_MODELS:-true}" != "false" ]; then
+            echo "Refreshing models cache..."
+            if ! opencode models --refresh >/dev/null; then
+              echo "[WARN] Failed to refresh models; continuing with the cached model catalog" >&2
+            fi
+          fi
+
           # Build language instruction
           LANG_INSTRUCTION=""
           case "${REVIEW_LANGUAGE:-auto}" in

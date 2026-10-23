@@ -21,7 +21,26 @@
 
 ## 📦 安装
 
-### 交互式安装（推荐）
+### 无需安装脚本的 Docker 接入（推荐）
+
+Docker 接入只需要 **一个 workflow 文件**，无需执行 `install.sh`，也无需向仓库添加 `.opencode-review/`。
+
+1. 打开并检查 [Docker workflow 模板](templates/workflow-docker.yaml)，将其保存为项目中的 `.gitea/workflows/opencode-review.yaml`。也可以仅下载文件，不执行下载的内容：
+
+   ```bash
+   mkdir -p .gitea/workflows
+   curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/templates/workflow-docker.yaml \
+     -o .gitea/workflows/opencode-review.yaml
+   ```
+
+   如果已有该 workflow，请先对比模板与现有文件，再决定是否替换。需要固定到已审核版本时，可将 URL 中的 `main` 换成对应 tag 或完整提交 SHA。
+
+2. 检查 workflow，根据 Gitea/Forgejo runner 调整 `runs-on`，选择 `MODEL` 和 API key。在[仓库 Secrets](#1-设置-secrets) 中配置 `OPENCODE_GIT_TOKEN` 和对应模型服务的密钥，并按需启用仓库 Actions。
+3. 将 workflow 提交到默认分支。创建 PR，或在 PR 中评论 `/oc`，即可触发审查。
+
+workflow 使用的 `ghcr.io/ccsert/opencode-review:latest` 已包含 agents、工具和运行依赖。刷新镜像和固定版本的方法见 [Docker 镜像更新](#docker-镜像更新)。
+
+### 可选：交互式安装脚本
 
 在你的项目根目录执行：
 
@@ -31,10 +50,10 @@ curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/i
 
 你将看到一个交互式菜单来选择安装方式。
 
-### 直接安装选项
+### 可选：安装脚本参数
 
 ```bash
-# Docker 方式（推荐）- 零文件添加
+# Docker 方式 - 添加一个 workflow 文件
 curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash -s -- --docker
 
 # 源码方式 - 完全可定制
@@ -51,8 +70,16 @@ curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/i
 | **添加的文件** | 1 个 workflow 文件 | .opencode-review/ + workflow |
 | **CI 速度** | 快（使用缓存镜像） | 较慢（每次安装依赖） |
 | **自定义能力** | 通过环境变量配置 | 完全控制 agents/tools |
-| **更新方式** | 使用 `:latest` 自动更新 | 需要手动更新 |
+| **更新方式** | 每周重建，拉取 `:latest` | 手动更新复制的文件；每次 CI 安装 CLI |
 | **适合场景** | 快速上手、标准使用 | 自定义提示词、高级用户 |
+
+### Docker 镜像更新
+
+[Docker 发布流程](.github/workflows/docker-publish.yaml) 会在 `main` 相关代码或版本 tag 变更时构建，并在每周一 UTC 04:23（北京时间 12:23）重建。定时和手动构建会跳过构建缓存并拉取基础镜像，确保本仓库没有代码变更时，也能安装新的 OpenCode 版本。
+
+维护者也可在 GitHub Actions 中手动运行 **Docker Build & Publish**。可选参数 `opencode_version` 默认为 `latest`，也可指定准确的 npm 版本。本地构建可运行 `docker build --pull --no-cache --build-arg OPENCODE_VERSION=latest -t opencode-review:local .`。
+
+本地更新请运行 `docker pull ghcr.io/ccsert/opencode-review:latest`。Gitea/Forgejo runner 也需要拉取更新后的镜像，避免复用已缓存的 tag。如需可重复的审查环境，可将 workflow 的 `container.image` 固定为已发布摘要（`ghcr.io/ccsert/opencode-review@sha256:<digest>`），并在准备更新时显式修改摘要。
 
 ## ⚙️ 配置
 
@@ -208,7 +235,12 @@ env:
   
   # 文件筛选（glob 模式，逗号分隔）
   FILE_PATTERNS: ""          # 例如：「*.ts,*.go,src/**」（空 = 全部文件）
+
+  # 审查前刷新模型目录（设为 "false" 可跳过）
+  OPENCODE_REFRESH_MODELS: "true"
 ```
+
+Docker 和源码 workflow 在每次审查前都会执行 [`opencode models --refresh`](https://opencode.ai/docs/cli/#models)。刷新失败时会输出警告，并使用已有模型缓存继续审查。离线环境或完全自定义 provider 可设置 `OPENCODE_REFRESH_MODELS: "false"`。本地源码运行时，请按下方示例在 `opencode run` 前执行 `opencode models --refresh`。
 
 #### 语言选项
 
@@ -274,6 +306,7 @@ export GITEA_TOKEN="your-token"
 export GITEA_SERVER_URL="https://your-gitea.example.com"
 export OPENCODE_CONFIG_DIR="$(pwd)/.opencode-review"
 
+opencode models --refresh
 opencode run --agent code-review \
   "Please review PR #123 in owner/repo"
 ```

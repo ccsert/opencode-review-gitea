@@ -26,6 +26,7 @@ services:
       
       # Configuration
       - MODEL=${MODEL:-deepseek/deepseek-chat}
+      - OPENCODE_REFRESH_MODELS=${OPENCODE_REFRESH_MODELS:-true}
       - REVIEW_LANGUAGE=${REVIEW_LANGUAGE:-auto}
       - REVIEW_STYLE=${REVIEW_STYLE:-balanced}
       
