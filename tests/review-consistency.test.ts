@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import diffTool from "../.opencode-review/tools/gitea-pr-diff"
 import reviewTool from "../.opencode-review/tools/gitea-review"
+import incrementalTool from "../.opencode-review/tools/gitea-incremental-diff"
 import type { Review } from "../.opencode-review/lib/gitea"
 import { loadSnapshot, saveSnapshot } from "../.opencode-review/lib/review-state"
 
@@ -27,6 +28,11 @@ let refReads: number
 let diffReads: number
 let pushRefDuringDiff: boolean
 let pushRefDuringPost: boolean
+let corruptComment: boolean
+let corruptSummary: boolean
+let dropComments: boolean
+let wrongPosition: boolean
+let lastPostWasASCII: boolean
 let hideComments: boolean
 let base: string
 let publishedComments: { path: string; body: string }[]
@@ -45,10 +51,12 @@ beforeEach(() => {
   rejectStatus = 503
   pushDuringReviewList = false; hideComments = false; pushDuringPost = false
   gitRefHead = undefined; refDelay = 0; refReads = 0; diffReads = 0; pushRefDuringDiff = false; pushRefDuringPost = false
+  corruptComment = false; corruptSummary = false; dropComments = false; wrongPosition = false; lastPostWasASCII = false
   server = Bun.serve({ port: 0, fetch: async request => {
     const path = new URL(request.url).pathname
     if (path === "/api/v1/user") return Response.json({ id: 7, login: "review-bot" })
     if (path.endsWith("/pulls/1")) return Response.json({ head: { sha: head }, base: { sha: base }, state: "open", merged: false })
+    if (path.endsWith("/pulls/1/commits")) return Response.json([{ sha: head }])
     if (path.endsWith("/git/refs/pull/1/head")) {
       refReads++
       return Response.json([{ ref: "refs/pull/1/head", object: { sha: refDelay-- > 0 ? "stale-head" : gitRefHead ?? head } }])
@@ -67,9 +75,13 @@ beforeEach(() => {
     if (path.endsWith("/reviews")) {
       if (request.method === "POST") {
         posts++
-        const payload = await request.json() as { body: string; event: string; commit_id: string; comments: { path: string; body: string }[] }
-        publishedComments = payload.comments ?? []
-        const result: Review = { id: reviews.length + 1, body: payload.body, state: payload.event,
+        const wire = await request.text()
+        lastPostWasASCII = !/[^\x00-\x7f]/.test(wire)
+        const payload = JSON.parse(wire) as { body: string; event: string; commit_id: string; comments: { path: string; body: string; new_position: number; old_position: number }[] }
+        publishedComments = dropComments ? [] : (payload.comments ?? []).map(comment => ({ path: comment.path,
+          body: corruptComment ? `${comment.body} CORRUPTED` : comment.body,
+          position: wrongPosition ? 99 : comment.new_position, original_position: comment.old_position }))
+        const result: Review = { id: reviews.length + 1, body: corruptSummary ? payload.body.replace("Review result", "Corrupted summary") : payload.body, state: payload.event,
           commit_id: payload.commit_id, user: { id: 7, login: "review-bot" }, comments_count: publishedComments.length }
         if (!rejectPost) reviews.push(result)
         if (pushDuringPost) head = "head-b"
@@ -212,4 +224,34 @@ test("missing line comments cannot produce a success receipt", async () => {
   hideComments = false
   expect(await submit(ctx)).toContain("already submitted")
   expect(posts).toBe(1)
+})
+test("large Unicode review payloads use ASCII JSON on the wire", async () => {
+  const ctx = context(); await fetchDiff(ctx)
+  expect(await reviewTool.execute({ ...args, summary: "中文总结".repeat(2000), approval: "comment",
+    comments: [{ path: "app.ts", line: 2, body: "注释来自用户输入。".repeat(2000) }] }, ctx)).toContain("confirmed")
+  expect(lastPostWasASCII).toBe(true)
+})
+test("an unchanged-head check cannot bypass corrupted comment read-back", async () => {
+  const ctx = context(); await fetchDiff(ctx); corruptComment = true
+  process.env.OPENCODE_REVIEW_RECEIPT_PATH = join(directory, "receipt.json")
+  await expect(submit(ctx)).rejects.toThrow("SUBMISSION_UNKNOWN")
+  const next = await incrementalTool.execute({ ...args, format: "parsed" }, ctx)
+  expect(next).not.toContain("No New Changes")
+  expect(await Bun.file(process.env.OPENCODE_REVIEW_RECEIPT_PATH).exists()).toBe(false)
+  await expect(submit(ctx)).rejects.toThrow("SUBMISSION_UNKNOWN")
+  expect(posts).toBe(1)
+})
+test("dropped comments cannot be certified by a later duplicate check", async () => {
+  const ctx = context(); await fetchDiff(ctx); dropComments = true
+  await expect(submit(ctx)).rejects.toThrow("SUBMISSION_UNKNOWN")
+  await expect(submit(ctx)).rejects.toThrow("SUBMISSION_UNKNOWN")
+  expect(posts).toBe(1)
+})
+test("corrupted summaries cannot produce a success receipt", async () => {
+  const ctx = context(); await fetchDiff(ctx); corruptSummary = true
+  await expect(submit(ctx)).rejects.toThrow("SUBMISSION_UNKNOWN")
+})
+test("line positions must also match the published review", async () => {
+  const ctx = context(); await fetchDiff(ctx); wrongPosition = true
+  await expect(submit(ctx)).rejects.toThrow("SUBMISSION_UNKNOWN")
 })

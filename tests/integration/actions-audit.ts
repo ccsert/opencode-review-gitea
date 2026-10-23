@@ -30,7 +30,8 @@ if (process.argv[2] === "capture") {
     const match = review.body.match(/<!-- opencode-review:v1 (.*?) -->/)
     if (!match || review.dismissed || review.user.id !== user.id || !["COMMENT", "APPROVED", "REQUEST_CHANGES"].includes(review.state)) return false
     const marker = JSON.parse(match[1])
-    return marker.head === captured.head && marker.base === captured.base && marker.scope === "all" && review.commit_id === captured.head
+    return marker.head === captured.head && marker.base === captured.base && marker.scope === "all" && review.commit_id === captured.head &&
+      [marker.summaryDigest, marker.commentsDigest].every(value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value))
   })
   if (completed.length !== 1) throw new Error("Expected exactly one completed review on the captured head")
   await request(`${path}/statuses/${captured.head}`, { state: "success", context: `review-lab/run-${env.LAB_RUN_NUMBER}`,

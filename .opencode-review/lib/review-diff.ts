@@ -2,6 +2,7 @@ import { GiteaClient, prPath, pullRefHead, requireOpen, type PullRequest, type R
 import { filterFilesByPatterns, formatAsRawDiff, formatDiffForReview, parseDiff } from "./diff"
 import { digest, saveSnapshot, writeReceipt } from "./review-state"
 import { findCommitsAfter, findLastReviewedCommit, isCompletedReview, orderCommits, type Commit } from "./reviews"
+import { confirmReviewContent } from "./review-confirmation"
 
 export async function fetchReviewDiff(args: RepositoryPR & {
   format?: "raw" | "parsed"; file_patterns?: string[]; incremental?: boolean
@@ -35,10 +36,18 @@ export async function fetchReviewDiff(args: RepositoryPR & {
       if (attempt < 4) await Bun.sleep(300)
     }
     commits = orderCommits(commits, before.head.sha)
-    const reviews = await api.list<Review>(`${path}/reviews`)
-    previous = findLastReviewedCommit(reviews, commits, user.id, before.base.sha)
-    if (previous === before.head.sha) {
-      unchanged = reviews.find(r => isCompletedReview(r, user.id, { head: previous!, base: before.base.sha, scope: "all" }))
+    let reviews = await api.list<Review>(`${path}/reviews`)
+    while ((previous = findLastReviewedCommit(reviews, commits, user.id, before.base.sha))) {
+      const candidate = reviews.find(r => isCompletedReview(r, user.id, { head: previous!, base: before.base.sha, scope: "all" }))!
+      try {
+        const confirmed = await confirmReviewContent(api, path, candidate, user.id, { head: previous, base: before.base.sha, scope: "all" })
+        if (previous === before.head.sha) unchanged = confirmed
+        break
+      } catch {
+        // An accepted POST is not a completed baseline until its actual content
+        // can be read back. Try an older review, or safely review the full PR.
+        reviews = reviews.filter(review => review.id !== candidate.id)
+      }
     }
   }
 
@@ -78,10 +87,7 @@ export async function fetchReviewDiff(args: RepositoryPR & {
   }, sessionID)
 
   if (unchanged) {
-    const confirmed = await api.json<Review>(`${path}/reviews/${unchanged.id}`)
-    if (!isCompletedReview(confirmed, userId!, { head: before.head.sha, base: before.base.sha, scope: "all" })) {
-      throw new Error("REVIEW_NOT_CONFIRMED: Previous review is no longer valid")
-    }
+    const confirmed = await confirmReviewContent(api, path, unchanged, userId!, { head: before.head.sha, base: before.base.sha, scope: "all" })
     const latest = await api.json<PullRequest>(path)
     requireOpen(latest)
     if (latest.head.sha !== before.head.sha || latest.base.sha !== before.base.sha || await pullRefHead(api, args) !== before.head.sha) {

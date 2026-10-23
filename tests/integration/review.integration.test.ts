@@ -137,6 +137,33 @@ for (const lab of await labs()) {
       expect(await api(lab, `${repoPath}/contents/${encodeURI(comments[0].path)}?ref=feature`)).toHaveProperty("sha")
     }, 30000)
 
+    test("large Chinese summaries and suggestions survive publication byte-for-byte", async () => {
+      const f = await fixture(lab); configure(lab); const ctx = context(); await fetchDiff(f.args, ctx)
+      const summary = "本次审查来自真实集成测试。".repeat(1500)
+      const body = "**[TEST:LOW]** 中文注释来自用户输入。".repeat(1500)
+      const suggestion = "export const b = 3"
+      expect(await reviewTool.execute({ ...f.args, summary, approval: "comment",
+        comments: [{ path: "app.ts", line: 2, body, suggestion }] }, ctx)).toContain("confirmed")
+      const reviews = await api(lab, `${f.path}/reviews`)
+      expect(reviews[0].body.startsWith(summary + "\n\n")).toBe(true)
+      const comments = await api(lab, `${f.path}/reviews/${reviews[0].id}/comments`)
+      expect(comments[0].body).toBe(`${body}\n\n\`\`\`suggestion\n${suggestion}\n\`\`\`\n`)
+      expect(await incrementalTool.execute({ ...f.args, format: "parsed" }, context())).toContain("No New Changes")
+    }, 30000)
+
+    test("deleted-line comments retain their old-side positions", async () => {
+      const f = await fixture(lab); configure(lab)
+      await f.push("export const b = 2\n")
+      const ctx = context()
+      expect(await fetchDiff(f.args, ctx)).toContain("[OLD:1] -export const a = 1")
+      expect(await reviewTool.execute({ ...f.args, summary: "Deleted line anchor verified", approval: "comment",
+        comments: [{ path: "app.ts", old_line: 1, body: "**[TEST:LOW]** Deleted-line regression" }] }, ctx)).toContain("confirmed")
+      const reviews = await api(lab, `${f.path}/reviews`)
+      const comments = await api(lab, `${f.path}/reviews/${reviews[0].id}/comments`)
+      expect(comments[0].original_position).toBe(1)
+      expect(comments[0].position).toBe(0)
+    }, 30000)
+
     test("a push racing the POST does not generate a success receipt", async () => {
       const f = await fixture(lab); let pushed = false
       const url = proxyFor(lab, async (request, response) => {

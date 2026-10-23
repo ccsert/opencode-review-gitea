@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { findCommitsAfter, findLastReviewedCommit, orderCommits } from "../lib/reviews"
-import { reviewMarker } from "../lib/review-state"
+import { digest, reviewMarker } from "../lib/review-state"
 import type { Review } from "../lib/gitea"
 
 const commits = [{ sha: "a" }, { sha: "b" }, { sha: "c" }]
 function review(id: number, head: string, userId = 7, base = "base", scope = "all"): Review {
   return { id, user: { id: userId, login: "bot" }, state: "COMMENT", commit_id: head,
-    body: reviewMarker({ head, base, scope, key: String(id) }) }
+    body: reviewMarker({ head, base, scope, key: String(id), summaryDigest: digest(""), commentsDigest: digest("[]") }) }
 }
 describe("incremental baseline", () => {
   test("normalizes either server's commit order", () => {
@@ -26,6 +26,10 @@ describe("incremental baseline", () => {
       { ...review(1, "a"), body: "ordinary comment" },
       { ...review(2, "b"), state: "PENDING" }, review(3, "c", 7, "old-base"),
     ], commits, 7, "base")).toBeNull()
+  })
+  test("legacy markers without content proofs cannot establish coverage", () => {
+    expect(findLastReviewedCommit([{ ...review(1, "a"),
+      body: '<!-- opencode-review:v1 {"head":"a","base":"base","scope":"all","key":"legacy"} -->' }], commits, 7, "base")).toBeNull()
   })
   test("filtered reviews cannot establish whole-PR coverage", () => {
     expect(findLastReviewedCommit([review(1, "a"), review(2, "c", 7, "base", "filtered")], commits, 7, "base")).toBe("a")

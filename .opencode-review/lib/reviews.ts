@@ -39,5 +39,5 @@ export function findCommitsAfter(commits: Commit[], after: string | null) {
 }
 
 export function submissionKey(server: string, owner: string, repo: string, number: number, userId: number, head: string, base: string, scope: string) {
-  return digest(JSON.stringify([server, owner, repo, number, userId, head, base, scope]))
+  return digest(JSON.stringify(["content-integrity-v1", server, owner, repo, number, userId, head, base, scope]))
 }

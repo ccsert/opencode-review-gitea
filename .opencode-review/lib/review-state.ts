@@ -78,7 +78,7 @@ export async function writeReceipt(receipt: Receipt) {
   if (path) await writeJSON(path, receipt)
 }
 
-export interface ReviewMarker { head: string; base: string; scope: string; key: string }
+export interface ReviewMarker { head: string; base: string; scope: string; key: string; summaryDigest: string; commentsDigest: string }
 export function reviewMarker(marker: ReviewMarker) {
   return `<!-- opencode-review:v1 ${JSON.stringify(marker)} -->`
 }
@@ -86,6 +86,7 @@ export function parseReviewMarker(body: string): ReviewMarker | undefined {
   const matches = [...body.matchAll(/<!-- opencode-review:v1 (\{[^\n]*\}) -->/g)]
   try {
     const marker = JSON.parse(matches.at(-1)?.[1] || "null")
-    if (marker && [marker.head, marker.base, marker.scope, marker.key].every(x => typeof x === "string" && x.length)) return marker
+    if (marker && [marker.head, marker.base, marker.scope, marker.key].every(x => typeof x === "string" && x.length) &&
+        [marker.summaryDigest, marker.commentsDigest].every(x => typeof x === "string" && /^[a-f0-9]{64}$/.test(x))) return marker
   } catch { /* Unrecognized user text is not a completed bot review. */ }
 }

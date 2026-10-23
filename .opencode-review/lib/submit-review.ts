@@ -3,8 +3,9 @@ import { join } from "node:path"
 import { GiteaClient, GiteaError, PRChangedError, prPath, pullRefHead, requireOpen, type PullRequest, type RepositoryPR, type Review } from "./gitea"
 import { parseDiff } from "./diff"
 import { formatCommentBody } from "./review-format"
-import { loadSnapshot, reviewMarker, stateDirectory, writeJSON, writeReceipt } from "./review-state"
+import { digest, loadSnapshot, reviewMarker, stateDirectory, writeJSON, writeReceipt } from "./review-state"
 import { isCompletedReview, submissionKey } from "./reviews"
+import { commentsDigest, confirmReviewContent } from "./review-confirmation"
 
 export interface ReviewComment { path: string; line?: number; old_line?: number; body: string; suggestion?: string }
 export interface ReviewInput extends RepositoryPR {
@@ -36,7 +37,9 @@ export async function submitReview(args: ReviewInput, sessionID: string) {
   })
   const user = await api.json<{ id: number }>("/user")
   const key = submissionKey(api.baseURL, args.owner, args.repo, args.pull_number, user.id, snapshot.head, snapshot.base, snapshot.scope)
-  const marker = { head: snapshot.head, base: snapshot.base, scope: snapshot.scope, key }
+  const identity = { head: snapshot.head, base: snapshot.base, scope: snapshot.scope, key }
+  const summary = args.summary.replace(/\\n/g, "\n").replace(/\\t/g, "\t")
+  const marker = { ...identity, summaryDigest: digest(summary), commentsDigest: commentsDigest(comments) }
   const intent = join(stateDirectory(), `submission-${key}.json`)
 
   async function checkCurrent() {
@@ -48,13 +51,7 @@ export async function submitReview(args: ReviewInput, sessionID: string) {
   }
 
   async function confirm(review: Review, duplicate: boolean) {
-    const result = await api.json<Review>(`${path}/reviews/${review.id}`)
-    if (!isCompletedReview(result, user.id, marker)) throw new Error("Review read-back does not match the submitted snapshot")
-    const published = await api.list<{ path: string; body: string }>(`${path}/reviews/${review.id}/comments`)
-    if ((result.comments_count !== undefined && published.length !== result.comments_count) ||
-        (!duplicate && comments.some(comment => !published.some(item => item.path === comment.path && item.body === comment.body)))) {
-      throw new Error("Review line comments could not be confirmed")
-    }
+    const result = await confirmReviewContent(api, path, review, user.id, duplicate ? identity : marker)
     // Read the server's review object, rather than trusting a successful POST status.
     const receipt = { status: duplicate ? "duplicate" as const : "submitted" as const,
       head: snapshot!.head, reviewId: result.id,
@@ -66,7 +63,7 @@ export async function submitReview(args: ReviewInput, sessionID: string) {
     await writeReceipt(receipt)
     return `${duplicate ? "Review already submitted" : "Review submitted and confirmed"}: ${receipt.url}\nCommit: ${receipt.head}`
   }
-  const existing = (await api.list<Review>(`${path}/reviews`)).find(review => isCompletedReview(review, user.id, marker))
+  const existing = (await api.list<Review>(`${path}/reviews`)).find(review => isCompletedReview(review, user.id, identity))
   await checkCurrent()
   if (existing) {
     try { return await confirm(existing, true) }
@@ -89,10 +86,11 @@ export async function submitReview(args: ReviewInput, sessionID: string) {
   if (claimed) {
     try {
       const result = await api.json<Review>(`${path}/reviews`, { method: "POST", body: JSON.stringify({
-        body: `${args.summary.replace(/\\n/g, "\n").replace(/\\t/g, "\t")}\n\n${reviewMarker(marker)}`,
+        body: `${summary}\n\n${reviewMarker(marker)}`,
         event: { comment: "COMMENT", approve: "APPROVED", request_changes: "REQUEST_CHANGES" }[args.approval ?? "comment"],
         commit_id: snapshot.head, comments: comments.length ? comments : undefined,
-      }) })
+      // ASCII JSON preserves Unicode across runtime/intermediary string encoders.
+      }).replace(/[\u007f-\uffff]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`) })
       postAccepted = true
       return await confirm(result, false)
     } catch (error) {
@@ -105,7 +103,7 @@ export async function submitReview(args: ReviewInput, sessionID: string) {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt) await Bun.sleep(200)
     try {
-      const recovered = (await api.list<Review>(`${path}/reviews`)).find(review => isCompletedReview(review, user.id, marker))
+      const recovered = (await api.list<Review>(`${path}/reviews`)).find(review => isCompletedReview(review, user.id, identity))
       if (recovered) return await confirm(recovered, !claimed)
     } catch (error) {
       if (error instanceof PRChangedError) throw error

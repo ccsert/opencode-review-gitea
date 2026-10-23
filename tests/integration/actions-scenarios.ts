@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { api, labs } from "./lab"
+import { parseReviewMarker } from "../../.opencode-review/lib/review-state"
 
 const manifestPath = join(import.meta.dir, ".local/actions-lab.json")
 interface Scenario { name: string; branch: string; number: number; head: string; url: string; expectedStatus?: "success" | "failure" }
@@ -155,7 +156,7 @@ for (const entry of manifest) {
       if (expected === "failure") {
         if (!["failure", "error"].includes(status.state) || reviews.length) throw new Error(`${entry.name} ${scenario.name}: expected failed workflow and zero reviews`)
       } else {
-        const current = reviews.filter((review: any) => review.commit_id === pr.head.sha && !review.dismissed &&
+        const current = reviews.filter((review: any) => parseReviewMarker(review.body) && review.commit_id === pr.head.sha && !review.dismissed &&
           ["COMMENT", "APPROVED", "REQUEST_CHANGES"].includes(review.state))
         if (status.state !== "success" || !audited.length || current.length !== 1 || current[0].user.login !== "review-bot" ||
             !current[0].body.includes(entry.model) || !current[0].body.includes("<!-- opencode-review:v1")) {
