@@ -83,7 +83,7 @@ jobs:
           printf '%s' "$PROVIDER_CONFIG" > /tmp/review-lab-provider.json
           export OPENCODE_CONFIG=/tmp/review-lab-provider.json
           trap 'rm -f /tmp/review-lab-provider.json' EXIT
-          /entrypoint.sh review "请审查 $REPO_OWNER/$REPO_NAME 的 PR #$PR_NUMBER。先调用 gitea-incremental-diff；若已确认无新变更则结束且不要重复发布。否则只基于实际 diff 判断问题并调用 gitea-review 提交。使用简体中文，写清触发条件、实际影响和修复建议，简单修复提供 suggestion。不必填满分类；没有问题可以 approve，不要编造问题。审查概述请附上本次 Actions 运行 /$REPO_OWNER/$REPO_NAME/actions/runs/\${{ github.run_number }} 和模型 ${model}，标明这是本地真实模型验收样例。"
+          /entrypoint.sh review "请审查 $REPO_OWNER/$REPO_NAME 的 PR #$PR_NUMBER。先调用 gitea-incremental-diff；若已确认无新变更则结束且不要重复发布。否则只基于实际 diff 判断问题并调用 gitea-review 提交。使用简体中文，写清触发条件、实际影响和修复建议，简单修复提供 suggestion。不必填满分类；没有问题可以 approve，不要编造问题。审查概述请原样使用本次 Actions 的完整运行链接 $LAB_RUN_URL（不要猜测或替换域名）和模型 ${model}，标明这是本地真实模型验收样例。"
       - name: 关联本次事件、运行与已确认 review
         run: bun .gitea/audit.ts success
 `
