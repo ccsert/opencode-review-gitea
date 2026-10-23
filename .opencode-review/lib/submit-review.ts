@@ -3,7 +3,7 @@ import { join } from "node:path"
 import { GiteaClient, GiteaError, PRChangedError, prPath, pullRefHead, requireOpen, type PullRequest, type RepositoryPR, type Review } from "./gitea"
 import { parseDiff } from "./diff"
 import { formatCommentBody } from "./review-format"
-import { digest, loadSnapshot, reviewMarker, stateDirectory, writeJSON, writeReceipt } from "./review-state"
+import { digest, loadSnapshot, reviewMarker, stateDirectory, unreadPages, writeJSON, writeReceipt } from "./review-state"
 import { isCompletedReview, submissionKey } from "./reviews"
 import { commentsDigest, confirmReviewContent } from "./review-confirmation"
 
@@ -24,6 +24,10 @@ export async function submitReview(args: ReviewInput, sessionID: string) {
   const path = prPath(args)
   const snapshot = await loadSnapshot(api.baseURL, args, sessionID)
   if (!snapshot) throw new Error("SNAPSHOT_REQUIRED: Fetch the PR diff in this run before submitting a review")
+  const unread = await unreadPages(api.baseURL, args, snapshot.pages ?? 0, sessionID)
+  if (unread.length) {
+    throw new Error(`REVIEW_INCOMPLETE: Read diff page(s) ${unread.join(", ")} of ${snapshot.pages} with the same diff tool before submitting`)
+  }
   const current = await api.json<PullRequest>(path)
   requireOpen(current)
   if (snapshot.head !== current.head.sha || snapshot.base !== current.base.sha) {

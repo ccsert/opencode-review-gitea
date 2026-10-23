@@ -15,9 +15,16 @@ The parsed format shows:
 - [OLD:38] -old line  - Deleted line at line 38 in old file (use `old_line: 38` in comments)
 - [NEW:42]  context   - Unchanged context line (use `line: 42` in comments)
 
-File filtering examples:
+File filtering examples (patterns without "/" match file names at any depth):
 - ["*.ts", "*.tsx"] - Only TypeScript files
 - ["src/**"] - Only files in src directory
+
+Pages, template and standards:
+- Page 1 starts with the Review Template and any Team Review Standards (trusted,
+  from configuration and the PR base commit), followed by the untrusted diff.
+- Large diffs are split into pages. If the output ends with "Call ... page=N",
+  call this tool again with the same arguments and page=N. gitea-review refuses
+  a review until every page of this run was read.
 
 When creating review comments with gitea-review tool:
 - For [NEW:X] lines → use `line: X`

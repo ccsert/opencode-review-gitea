@@ -14,53 +14,15 @@ This tool submits a review with:
 **IMPORTANT**: The `summary` parameter should contain a complete, well-formatted review report. 
 The tool does NOT auto-generate content - you control the entire output.
 
-## Summary Format (Recommended)
+## Summary Format
 
-Generate a summary organized by severity level:
+Write the summary in the format defined by the Review Template section at the start
+of the diff output, and decide `approval` by that template's decision rules. Omit
+sections without content and use real line breaks. Every diff page must have been
+read in this run (REVIEW_INCOMPLETE otherwise).
 
-\`\`\`markdown
-## Code Review Report
-
-### 📋 Overview
-[Brief summary of PR changes and overall code quality assessment]
-
-### 🔴 Critical Issues (CRITICAL)
-> Must fix before merge
-
-| Issue | File | Description |
-|:------|:-----|:------------|
-| Plaintext password logging | `login.post.ts:12` | Password printed to logs in plaintext, severe security violation |
-| Hardcoded JWT secret | `auth.ts:4`, `token.ts:4` | Secret key hardcoded, attackers can forge any token |
-
-### 🟠 High Priority (HIGH)
-> Should fix before merge
-
-| Issue | File | Description |
-|:------|:-----|:------------|
-| Privilege escalation | `user/index.put.ts:27` | Users can set their own `isAdmin` status |
-
-### 🟡 Medium Priority (MEDIUM)
-> Recommended to fix
-
-| Issue | File | Description |
-|:------|:-----|:------------|
-| Password bypass | `login.post.ts:39` | Plaintext password comparison used |
-
-### 🟢 Low Priority (LOW)
-> Optional improvements
-
-| Issue | File | Description |
-|:------|:-----|:------------|
-| Code style | `utils.ts:15` | Use const instead of let |
-
-### 💡 Suggestions
-[Overall recommendations and improvement directions]
-\`\`\`
-
-**Notes**:
-- Only include severity sections that have issues (omit empty sections)
-- File column should include path and line number
-- Description should briefly explain the issue and its impact
+Comment bodies and suggestions are published exactly as given: write code such as
+`printf("a\n")` as it should appear, without extra escaping.
 
 ## Line Comments
 

@@ -14,9 +14,11 @@ An AI-powered **automatic code review tool for Gitea/Forgejo PRs**, built on the
 - 📝 **Line-Level Comments** - Provides precise feedback on specific code lines
 - ✅ **Review Decisions** - Supports approve, request_changes, and comment states
 - 🔄 **Auto-Trigger** - Triggered by `/oc` or `/opencode` comments
-- � **Incremental Review** - Only reviews new changes since last review (for updated PRs)
+- 🔁 **Incremental Review** - Only reviews new changes since last review (for updated PRs)
 - 🏷️ **Structured Tags** - Categorizes issues by type (BUG, SECURITY, PERFORMANCE) and severity
-- �🐳 **Docker Support** - Zero-config installation with pre-built image
+- 📏 **Team Standards** - Checks PRs against your coding standards from the base branch, a shared repository or a URL
+- 🧩 **Review Templates & Skills** - Six built-in templates or your own, plus language checklists loaded on demand
+- 🐳 **Docker Support** - Zero-config installation with pre-built image
 - 🛡️ **Isolated Configuration** - Uses `.opencode-review/` directory, won't conflict with your existing `.opencode/` setup
 
 ## 📦 Installation
@@ -238,6 +240,12 @@ env:
   # File filtering (glob patterns, comma-separated)
   FILE_PATTERNS: ""          # e.g., "*.ts,*.go,src/**" (empty = all files)
 
+  # Review template: built-in name, or a path/URL (default: derived from REVIEW_STYLE)
+  REVIEW_TEMPLATE: ""        # standard | concise | thorough | security | performance | compliance
+
+  # Team review standards (default: .gitea/review-rules[.md] and .forgejo/review-rules[.md])
+  REVIEW_RULES: ""           # e.g., "docs/standards/, org/standards:backend@v2, https://example.com/api.md"
+
   # Refresh the model catalog before review (set to "false" to skip)
   OPENCODE_REFRESH_MODELS: "true"
 ```
@@ -266,6 +274,56 @@ FILE_PATTERNS: "*.py,*.js"
 
 # Note: currently only positive matching is supported (no leading '!').
 ```
+
+A pattern without `/` matches the file name at any depth (`*.ts` matches `src/a.ts`), like `.gitignore`. `**/` also matches zero directories (`src/**/*.ts` matches `src/a.ts`).
+
+#### Review Templates
+
+`REVIEW_TEMPLATE` selects the focus, summary format and approval rules of the review:
+
+| Template | Use for |
+|----------|---------|
+| `standard` | Bugs, security, performance and maintainability, grouped by severity (default) |
+| `concise` | Only blocking issues; short summary |
+| `thorough` | Adds error paths, concurrency, compatibility, test coverage and rollout risk |
+| `security` | Input → sink → impact analysis; never auto-approves auth, crypto or CI secret changes |
+| `performance` | Hot paths, N+1 queries, unbounded memory, blocking I/O, with the data size that matters |
+| `compliance` | A checklist of every applicable team standard: complies / violates / not affected |
+
+When unset, `REVIEW_STYLE` maps to `concise`, `thorough`, `security` or `standard`. A custom template is a Markdown file given as a repository path (read from the PR base commit), `owner/repo:path[@ref]`, or URL. Start from one of the [built-in templates](.opencode-review/review-templates/); keep a `**Decision**` section so the model knows when to approve.
+
+#### Team Review Standards
+
+Point `REVIEW_RULES` at your coding standards and the reviewer checks the diff against them, citing `Standard: <source>` on each violation. Sources are comma- or newline-separated:
+
+| Source | Example | Read from |
+|--------|---------|-----------|
+| Repository path (file or directory of `.md`/`.txt`) | `docs/standards/` | The PR's **base commit**, so a PR cannot relax the standards it is reviewed against |
+| Shared repository | `org/standards:backend/go.md@v2` | That repository on the same Gitea server (the token needs read access); `@ref` is optional |
+| URL | `https://wiki.example.com/api-rules.md` | HTTP(S); the Gitea token is sent only to the Gitea server's own origin |
+
+Without `REVIEW_RULES`, `.gitea/review-rules.md`, `.gitea/review-rules/`, `.forgejo/review-rules.md` and `.forgejo/review-rules/` are loaded when they exist. A configured source that cannot be read stops the run before any review is published. `REVIEW_RULES: none` disables standards.
+
+A standards file can limit itself to some files with frontmatter, so large rule sets only cost tokens when relevant:
+
+```markdown
+---
+title: Go error handling
+paths: ["*.go"]
+---
+- Errors MUST be wrapped with `%w` and context: `fmt.Errorf("load user %d: %w", id, err)`.
+- Never ignore the error returned by `Close` on writers.
+```
+
+Applicable standards are limited to `REVIEW_RULES_MAX_BYTES` (default 30000); split large sets with `paths:`. Combine with `REVIEW_TEMPLATE: compliance` for a rule-by-rule checklist.
+
+#### Review Skills
+
+The reviewer loads built-in checklists on demand for the languages and areas in the diff: `review-security`, `review-typescript`, `review-python`, `review-go`, `review-java` (Java/Kotlin), `review-sql` (queries and migrations), `review-frontend`, `review-infra` (Docker, Kubernetes, Terraform, CI) and `review-tests`. They live in [`.opencode-review/skills/`](.opencode-review/skills/). Team-specific checklists belong in `REVIEW_RULES`, which is pinned to the base commit.
+
+#### Large PRs
+
+OpenCode truncates tool output above 2000 lines or 50 KiB. The diff tools therefore return large diffs in pages (`REVIEW_DIFF_PAGE_BYTES`, default 40000), and a review is refused until every page of the run has been read.
 
 ## 🚀 Usage
 
@@ -328,7 +386,7 @@ runners and the deterministic model fixture used in CI.
 
 ### Modify Review Style
 
-Edit `.opencode-review/agents/code-review.md`:
+For the review focus and summary format, prefer a custom `REVIEW_TEMPLATE` and `REVIEW_RULES` (see [Review Configuration](#4-review-configuration)); they work with the Docker image too. To change the agent itself, edit `.opencode-review/agents/code-review.md`:
 
 ```markdown
 ---
@@ -383,8 +441,10 @@ export default tool({
     │   ├── gitea-incremental-diff.ts # Get incremental diff (new changes only)
     │   ├── gitea-review.ts         # Submit review with comments
     │   └── gitea-comment.ts        # Post comments on issues/PRs
+    ├── lib/                        # Diff, snapshot, standards and publication logic
+    ├── review-templates/           # Built-in review templates (REVIEW_TEMPLATE)
     ├── skills/
-    │   └── pr-review/SKILL.md      # Reusable review skill
+    │   └── review-*/SKILL.md       # Language and domain checklists loaded on demand
     └── package.json                # Dependencies
 ```
 

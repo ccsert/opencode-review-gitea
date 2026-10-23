@@ -48,6 +48,15 @@ export class GiteaClient {
     return (await this.request(endpoint, { headers: { Accept: "text/plain" } })).text()
   }
 
+  // Fetch a document by URL; the token is sent only to this Gitea origin.
+  async fetchURL(url: string): Promise<string> {
+    const headers = new Headers({ Accept: "text/markdown, text/plain;q=0.9, */*;q=0.1" })
+    if (new URL(url).origin === new URL(this.baseURL).origin) headers.set("Authorization", `token ${this.token}`)
+    const response = await fetch(url, { headers, redirect: "error", signal: AbortSignal.timeout(timeoutMs()) })
+    if (!response.ok) throw new GiteaError(`HTTP ${response.status} for ${url}`, response.status)
+    return response.text()
+  }
+
   async list<T>(endpoint: string): Promise<T[]> {
     const result: T[] = []
     for (let page = 1; page <= 1000; page++) {

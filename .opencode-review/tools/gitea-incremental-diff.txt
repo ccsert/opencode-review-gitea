@@ -23,9 +23,17 @@ Returns:
 - If PR was rebased/force-pushed: full PR diff with warning
 - Otherwise: incremental diff since last reviewed commit
 
+## Pages, template and standards
+- Page 1 starts with the Review Template and any Team Review Standards (trusted,
+  from configuration and the PR base commit), followed by the untrusted diff.
+- Large diffs are split into pages. If the output ends with "Call ... page=N",
+  call this tool again with the same arguments and page=N. gitea-review refuses
+  a review until every page of this run was read.
+
 ## Parameters
 
 - owner: Repository owner
 - repo: Repository name
 - pull_number: Pull request number
 - format: "parsed" (default) for line-numbered format, "raw" for unified diff
+- page: Output page (default 1)

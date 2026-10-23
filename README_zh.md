@@ -14,9 +14,11 @@
 - 📝 **行级评论** - 在具体代码行上提供精确反馈
 - ✅ **审查决策** - 支持 approve、request_changes、comment 三种审查状态
 - 🔄 **自动触发** - 通过 `/oc` 或 `/opencode` 评论触发审查
-- � **增量审查** - 仅审查上次审查后的新变更（适用于 PR 更新）
+- 🔁 **增量审查** - 仅审查上次审查后的新变更（适用于 PR 更新）
 - 🏷️ **结构化标签** - 按类型（BUG、SECURITY、PERFORMANCE）和严重程度分类问题
-- �🐳 **Docker 支持** - 预构建镜像，零配置安装
+- 📏 **团队规范** - 按 base 分支、共享仓库或 URL 中的编码规范检查 PR
+- 🧩 **审查模板与技能** - 6 个内置模板或自定义模板，按需加载语言检查清单
+- 🐳 **Docker 支持** - 预构建镜像，零配置安装
 - 🛡️ **隔离配置** - 使用独立的 `.opencode-review/` 目录，不会与你现有的 `.opencode/` 配置冲突
 
 ## 📦 安装
@@ -236,6 +238,12 @@ env:
   # 文件筛选（glob 模式，逗号分隔）
   FILE_PATTERNS: ""          # 例如：「*.ts,*.go,src/**」（空 = 全部文件）
 
+  # 审查模板：内置名称，或路径/URL（默认由 REVIEW_STYLE 推导）
+  REVIEW_TEMPLATE: ""        # standard | concise | thorough | security | performance | compliance
+
+  # 团队审查规范（默认读取 .gitea/review-rules[.md] 和 .forgejo/review-rules[.md]）
+  REVIEW_RULES: ""           # 例如："docs/standards/, org/standards:backend@v2, https://example.com/api.md"
+
   # 审查前刷新模型目录（设为 "false" 可跳过）
   OPENCODE_REFRESH_MODELS: "true"
 ```
@@ -264,6 +272,56 @@ FILE_PATTERNS: "*.py,*.js"
 
 # 说明：目前仅支持正向匹配（不支持以 '!' 开头的排除模式）
 ```
+
+与 `.gitignore` 一致，不含 `/` 的模式匹配任意层级的文件名（`*.ts` 匹配 `src/a.ts`）；`**/` 也匹配零层目录（`src/**/*.ts` 匹配 `src/a.ts`）。
+
+#### 审查模板
+
+`REVIEW_TEMPLATE` 决定审查重点、总结格式和审批规则：
+
+| 模板 | 适用场景 |
+|------|----------|
+| `standard` | 缺陷、安全、性能、可维护性，按严重程度分组（默认） |
+| `concise` | 只报阻塞问题，总结简短 |
+| `thorough` | 额外检查错误路径、并发、兼容性、测试覆盖和上线风险 |
+| `security` | 按「输入 → 汇点 → 影响」分析；涉及认证、加密、CI 密钥的改动不会自动 approve |
+| `performance` | 热路径、N+1 查询、无界内存、阻塞 I/O，并说明问题在什么数据规模下显现 |
+| `compliance` | 逐条核对适用的团队规范：符合 / 违反 / 不涉及 |
+
+未设置时，`REVIEW_STYLE` 映射为 `concise`、`thorough`、`security` 或 `standard`。自定义模板是一个 Markdown 文件，可写为仓库路径（从 PR 的 base commit 读取）、`owner/repo:path[@ref]` 或 URL。建议从[内置模板](.opencode-review/review-templates/)复制修改，并保留 `**Decision**` 一节，让模型知道何时 approve。
+
+#### 团队审查规范
+
+将 `REVIEW_RULES` 指向你们的编码规范，审查会对照规范检查 diff，并在每条违规评论中注明 `Standard: <来源>`。多个来源用逗号或换行分隔：
+
+| 来源 | 示例 | 读取位置 |
+|------|------|----------|
+| 仓库路径（文件，或含 `.md`/`.txt` 的目录） | `docs/standards/` | PR 的 **base commit**，PR 无法放宽用于审查它自己的规范 |
+| 共享仓库 | `org/standards:backend/go.md@v2` | 同一 Gitea 服务器上的该仓库（token 需有读权限），`@ref` 可选 |
+| URL | `https://wiki.example.com/api-rules.md` | HTTP(S)；Gitea token 只会发送给 Gitea 服务器自身的源 |
+
+未设置 `REVIEW_RULES` 时，若存在则自动加载 `.gitea/review-rules.md`、`.gitea/review-rules/`、`.forgejo/review-rules.md`、`.forgejo/review-rules/`。显式配置的来源读取失败时，运行会在发布任何审查前失败。`REVIEW_RULES: none` 关闭规范加载。
+
+规范文件可用 frontmatter 限定适用文件，规则集较大时只在相关时消耗 token：
+
+```markdown
+---
+title: Go 错误处理
+paths: ["*.go"]
+---
+- 错误必须用 `%w` 包装并带上下文：`fmt.Errorf("load user %d: %w", id, err)`。
+- 不得忽略写入对象 `Close` 返回的错误。
+```
+
+适用规范的总大小受 `REVIEW_RULES_MAX_BYTES` 限制（默认 30000），超出时请用 `paths:` 拆分。与 `REVIEW_TEMPLATE: compliance` 配合可得到逐条核对清单。
+
+#### 审查技能（Skills）
+
+审查会按 diff 涉及的语言和领域按需加载内置检查清单：`review-security`、`review-typescript`、`review-python`、`review-go`、`review-java`（Java/Kotlin）、`review-sql`（查询与迁移）、`review-frontend`、`review-infra`（Docker、Kubernetes、Terraform、CI）和 `review-tests`，位于 [`.opencode-review/skills/`](.opencode-review/skills/)。团队自有的检查项请放入 `REVIEW_RULES`，它固定从 base commit 读取。
+
+#### 大型 PR
+
+OpenCode 会截断超过 2000 行或 50 KiB 的工具输出。因此 diff 工具会分页返回大 diff（`REVIEW_DIFF_PAGE_BYTES`，默认 40000），本次运行未读完所有页之前，提交审查会被拒绝。
 
 ## 🚀 使用方法
 
@@ -324,7 +382,7 @@ Docker 入口及源码 workflow 使用 `run-review.ts`，只有读回确认 revi
 
 ### 修改审查风格
 
-编辑 `.opencode-review/agents/code-review.md`：
+审查重点和总结格式优先通过自定义 `REVIEW_TEMPLATE` 和 `REVIEW_RULES` 调整（见[审查配置](#4-审查配置)），Docker 镜像同样适用。如需修改 agent 本身，编辑 `.opencode-review/agents/code-review.md`：
 
 ```markdown
 ---
@@ -379,8 +437,10 @@ export default tool({
     │   ├── gitea-incremental-diff.ts # 获取增量 Diff（仅新变更）
     │   ├── gitea-review.ts         # 提交审查和评论
     │   └── gitea-comment.ts        # 在 issue/PR 上发表评论
+    ├── lib/                        # diff、快照、规范加载与发布逻辑
+    ├── review-templates/           # 内置审查模板（REVIEW_TEMPLATE）
     ├── skills/
-    │   └── pr-review/SKILL.md      # 可复用的审查技能
+    │   └── review-*/SKILL.md       # 按需加载的语言与领域检查清单
     └── package.json                # 依赖
 ```
 

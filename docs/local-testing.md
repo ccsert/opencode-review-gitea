@@ -30,7 +30,7 @@ docker build -t opencode-review-reliability:local .
 bun tests/integration/model-smoke.ts
 ```
 
-API 集成测试覆盖固定提交、人工 review 不推进 bot 基准、push 后拒绝旧结果、并发与重复提交、POST 响应超时恢复、发布后读回失败及恢复。增量审查按新提交触及的文件筛选原始 PR hunks，保留 PR base/head 行号，不拼接不同提交的 diff。
+API 集成测试覆盖固定提交、超过 30 个文件的分页列表、大 diff 分页与未读完拒绝提交、规范从 base commit/共享仓库/URL 加载、人工 review 不推进 bot 基准、push 后拒绝旧结果、并发与重复提交、POST 响应超时恢复、发布后读回失败及恢复。增量审查按新提交触及的文件筛选原始 PR hunks，保留 PR base/head 行号，不拼接不同提交的 diff。
 
 模型测试使用**真实 OpenCode CLI 和项目 Docker 入口**，由本地 OpenAI 兼容协议桩产生确定性 tool calls，再调用生产工具发布真实 review、读回行评论并检查回执。它不访问商业模型，不代表真实模型审查质量或真实模型服务兼容性。日志保存在 `.local/model-gitea.log`、`.local/model-forgejo.log`。
 
@@ -110,6 +110,9 @@ bun tests/integration/actions-scenarios.ts snapshot
 - 模板的 `concurrency` 对同一 PR 排队且不取消运行。Gitea 1.24 不支持此语法；旧版应使用单个专用 runner、串行执行审查，或升级到支持并发组的版本。
 - `SUBMISSION_UNKNOWN` 表示服务器可能已接受写入。保留状态文件；恢复服务后重试只会查询已有 review。若持续没有结果，先核实服务器 review 列表和日志，再由维护者决定是否清除错误中给出的那一个提交意图文件。不要批量删除状态后自动重发。
 - `GITEA_API_TIMEOUT_MS` 控制单次 API 超时，默认 30000。
+- OpenCode 在工具输出超过 2000 行或 50 KiB 时会截断，并提示改用 Read/Grep，而审查 agent 没有这两个工具。diff 工具因此按 `REVIEW_DIFF_PAGE_BYTES`（默认 40000）分页；同一运行未读完所有页时，`gitea-review` 返回 `REVIEW_INCOMPLETE`。
+- 审查模板和团队规范放在 diff 第 1 页开头。仓库内路径从 PR base commit 读取，PR 中对规范文件的修改只作为待审 diff 出现。显式配置的来源读取失败时报 `RULES_UNAVAILABLE`，不发布审查；运行期间模板或规范变化时报 `REVIEW_CONTEXT_CHANGED`。
+- code-review agent 只能加载 `review-*` skill，其他 skill（包括 OpenCode 内置的）由权限规则拒绝。
 
 ## 保留或停止环境
 

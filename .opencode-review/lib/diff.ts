@@ -116,32 +116,67 @@ export function parseDiff(diffText: string): ParsedFile[] {
   return files
 }
 
-export function formatDiffForReview(files: ParsedFile[]): string {
-  const parts: string[] = []
+// A line of review output. `header` is repeated when a page starts at this line,
+// so a continued hunk keeps its file and line-number context.
+export interface StreamLine { text: string; header?: string[] }
 
+export function reviewStream(files: ParsedFile[]): StreamLine[] {
+  const lines: StreamLine[] = []
   for (const file of files) {
-    parts.push(`\n## ${file.path} (${file.status})\n`)
-
+    const fileHeader = `## ${file.path} (${file.status})`
+    lines.push({ text: "" }, { text: fileHeader }, { text: "" })
     for (const hunk of file.hunks) {
-      parts.push(`@@ starting at line ${hunk.newStart} (old: ${hunk.oldStart}) @@`)
-
+      const hunkHeader = `@@ starting at line ${hunk.newStart} (old: ${hunk.oldStart}) @@`
+      const header = [`${fileHeader} (continued)`, hunkHeader]
+      lines.push({ text: hunkHeader, header: [`${fileHeader} (continued)`] })
       for (const change of hunk.changes) {
-        if (change.type === "add") {
-          // New line: [NEW:行号] +内容
-          parts.push(`[NEW:${change.newLine}] +${change.content}`)
-        } else if (change.type === "del") {
-          // Deleted line: [OLD:行号] -内容 (用于 old_position 评论)
-          parts.push(`[OLD:${change.oldLine}] -${change.content}`)
-        } else {
-          // Context line: [NEW:行号] 内容
-          parts.push(`[NEW:${change.newLine}]  ${change.content}`)
-        }
+        // [NEW:n] marks added/context lines (use `line`), [OLD:n] deleted lines (use `old_line`).
+        const text = change.type === "add" ? `[NEW:${change.newLine}] +${change.content}`
+          : change.type === "del" ? `[OLD:${change.oldLine}] -${change.content}`
+          : `[NEW:${change.newLine}]  ${change.content}`
+        lines.push({ text, header })
       }
-      parts.push("")
+      lines.push({ text: "" })
     }
   }
+  return lines
+}
 
-  return parts.join("\n")
+export function formatDiffForReview(files: ParsedFile[]): string {
+  return reviewStream(files).map(line => line.text).join("\n")
+}
+
+export function rawStream(diff: string): StreamLine[] {
+  let fileHeader: string[] = []
+  let hunkHeader: string[] = []
+  return diff.split("\n").map(text => {
+    if (text.startsWith("diff --git ")) { fileHeader = [text]; hunkHeader = []; return { text } }
+    if (!hunkHeader.length && (text.startsWith("--- ") || text.startsWith("+++ "))) { fileHeader.push(text); return { text } }
+    if (text.startsWith("@@")) { hunkHeader = [text]; return { text, header: [...fileHeader] } }
+    return { text, header: [...fileHeader, ...hunkHeader] }
+  })
+}
+
+export interface PageLimits { bytes: number; lines: number }
+
+// OpenCode truncates tool output above 2000 lines or 50 KiB and points the model
+// to Read/Grep, which the review agent does not have. Split before that limit.
+export function paginate(lines: StreamLine[], limits: PageLimits): string[][] {
+  const pages: string[][] = []
+  let page: string[] = []
+  let bytes = 0
+  for (const line of lines) {
+    const size = Buffer.byteLength(line.text) + 1
+    if (page.length && (bytes + size > limits.bytes || page.length + 1 > limits.lines)) {
+      pages.push(page)
+      page = [...(line.header ?? [])]
+      bytes = page.reduce((sum, text) => sum + Buffer.byteLength(text) + 1, 0)
+    }
+    page.push(line.text)
+    bytes += size
+  }
+  if (page.length || !pages.length) pages.push(page)
+  return pages
 }
 
 function globSource(pattern: string): string {

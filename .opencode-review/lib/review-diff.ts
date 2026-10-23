@@ -1,11 +1,12 @@
 import { GiteaClient, prPath, pullRefHead, requireOpen, type PullRequest, type RepositoryPR, type Review } from "./gitea"
-import { filterFilesByPatterns, formatAsRawDiff, formatDiffForReview, parseDiff } from "./diff"
-import { digest, saveSnapshot, writeReceipt } from "./review-state"
+import { filterFilesByPatterns, formatAsRawDiff, paginate, parseDiff, rawStream, reviewStream } from "./diff"
+import { digest, markPageRead, saveSnapshot, writeReceipt } from "./review-state"
+import { formatReviewContext, loadReviewContext } from "./review-context"
 import { findCommitsAfter, findLastReviewedCommit, isCompletedReview, orderCommits, type Commit } from "./reviews"
 import { confirmReviewContent } from "./review-confirmation"
 
 export async function fetchReviewDiff(args: RepositoryPR & {
-  format?: "raw" | "parsed"; file_patterns?: string[]; incremental?: boolean
+  format?: "raw" | "parsed"; file_patterns?: string[]; incremental?: boolean; page?: number
 }, sessionID: string) {
   const api = new GiteaClient()
   const path = prPath(args)
@@ -75,15 +76,22 @@ export async function fetchReviewDiff(args: RepositoryPR & {
   }
   const patterns = args.file_patterns?.filter(Boolean) ?? []
   files = filterFilesByPatterns(files, patterns)
+  // Standards follow the base commit, so they are covered by the base check below.
+  const context = unchanged ? [] : formatReviewContext(await loadReviewContext(api, args, before.base.sha, files.map(file => file.path)), before.base.sha)
   const after = await api.json<PullRequest>(path)
   if (before.head.sha !== after.head.sha || before.base.sha !== after.base.sha || await pullRefHead(api, args) !== before.head.sha) {
     throw new Error("PR_CHANGED: The pull request changed while fetching the diff. Start a new review run.")
   }
   requireOpen(after)
+  const reviewDiff = formatAsRawDiff(files)
+  const body = args.format === "raw"
+    ? rawStream(patterns.length || previous ? reviewDiff : fullDiff)
+    : [...files.map(file => ({ text: `- ${file.path} (${file.status})` })), ...reviewStream(files)]
+  const pages = paginate([...context.map(text => ({ text })), ...body], pageLimits())
   await saveSnapshot(api.baseURL, args, {
     head: before.head.sha, base: before.base.sha,
     scope: patterns.length ? digest(JSON.stringify([...patterns].sort())) : "all",
-    diff: fullDiff, reviewDiff: formatAsRawDiff(files),
+    diff: fullDiff, reviewDiff, pages: unchanged ? 0 : pages.length, context: digest(context.join("\n")),
   }, sessionID)
 
   if (unchanged) {
@@ -97,7 +105,23 @@ export async function fetchReviewDiff(args: RepositoryPR & {
       url: `${api.baseURL}/${args.owner}/${args.repo}/pulls/${args.pull_number}#pullreview-${confirmed.id}` })
     return `No New Changes: ${before.head.sha} already has a confirmed bot review. No new review needed.`
   }
-  if (args.format === "raw") return patterns.length || previous ? formatAsRawDiff(files) : fullDiff
-  const summary = files.map(file => `- ${file.path} (${file.status})`).join("\n")
-  return `# PR #${args.pull_number} Diff\n\nHead: ${before.head.sha}\nBase: ${before.base.sha}\n${note}\n\n${summary}\n\n${formatDiffForReview(files)}`
+  const page = args.page ?? 1
+  if (!Number.isInteger(page) || page < 1 || page > pages.length) {
+    throw new Error(`PAGE_OUT_OF_RANGE: page must be between 1 and ${pages.length}`)
+  }
+  await markPageRead(api.baseURL, args, page, sessionID)
+  const tool = args.incremental ? "gitea-incremental-diff" : "gitea-pr-diff"
+  const header = [`# PR #${args.pull_number} Diff (page ${page}/${pages.length})`, "",
+    `Head: ${before.head.sha}`, `Base: ${before.base.sha}`, note, ""]
+  const footer = page < pages.length
+    ? ["", `--- Page ${page}/${pages.length}. Call ${tool} again with the same arguments and page=${page + 1}. A review is refused until every page has been read. ---`]
+    : []
+  return [...header, ...pages[page - 1], ...footer].join("\n")
+}
+
+function pageLimits() {
+  const bytes = Number(process.env.REVIEW_DIFF_PAGE_BYTES ?? 40000)
+  if (!Number.isInteger(bytes) || bytes < 4000) throw new Error("REVIEW_DIFF_PAGE_BYTES must be an integer of at least 4000")
+  // Leave room under OpenCode's 2000-line/50 KiB limit for the page header and footer.
+  return { bytes, lines: 1500 }
 }

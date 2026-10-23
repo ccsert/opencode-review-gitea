@@ -13,6 +13,10 @@ export interface Snapshot {
   scope: string
   diff: string
   reviewDiff: string
+  // Output pages the model must read before submitting, and the digest of the
+  // template/standards delivered with them. Absent in snapshots without pages.
+  pages?: number
+  context?: string
 }
 export interface Receipt {
   status: "submitted" | "duplicate" | "unchanged"
@@ -68,9 +72,31 @@ export async function saveSnapshot(server: string, pr: RepositoryPR, snapshot: S
     if (previous.scope !== snapshot.scope || previous.reviewDiff !== snapshot.reviewDiff) {
       throw new Error("SNAPSHOT_SCOPE_CHANGED: Use one diff scope per review run; start a new run for another scope")
     }
+    if (previous.pages !== snapshot.pages || previous.context !== snapshot.context) {
+      throw new Error("REVIEW_CONTEXT_CHANGED: The review template or standards changed during this run. Start a new review run.")
+    }
   } finally {
     await rm(temporary, { force: true })
   }
+}
+
+const pagePath = (server: string, pr: RepositoryPR, page: number, sessionID?: string) =>
+  snapshotPath(server, pr, sessionID).replace(/\.json$/, `.page-${page}`)
+
+export async function markPageRead(server: string, pr: RepositoryPR, page: number, sessionID?: string) {
+  await writeFile(pagePath(server, pr, page, sessionID), "", { mode: 0o600 })
+}
+
+export async function unreadPages(server: string, pr: RepositoryPR, pages: number, sessionID?: string) {
+  const unread: number[] = []
+  for (let page = 1; page <= pages; page++) {
+    try { await readFile(pagePath(server, pr, page, sessionID)) }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+      unread.push(page)
+    }
+  }
+  return unread
 }
 
 export async function writeReceipt(receipt: Receipt) {

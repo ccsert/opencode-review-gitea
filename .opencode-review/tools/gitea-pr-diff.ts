@@ -13,6 +13,10 @@ export default tool({
       .optional()
       .default("parsed")
       .describe("Output format: 'raw' for unified diff, 'parsed' for line-numbered format"),
+    page: tool.schema
+      .number()
+      .optional()
+      .describe("Output page (default 1). Large diffs are split into pages; read every page before submitting a review."),
     file_patterns: tool.schema
       .array(tool.schema.string())
       .optional()
