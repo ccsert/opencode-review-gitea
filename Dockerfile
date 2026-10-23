@@ -25,7 +25,8 @@ RUN ARCH=$(uname -m) && \
     fi
 
 # Install opencode CLI globally
-RUN bun add -g opencode-ai
+ARG OPENCODE_VERSION=latest
+RUN bun add -g "opencode-ai@${OPENCODE_VERSION}" && opencode --version
 
 # Create app directory for built-in config
 WORKDIR /app

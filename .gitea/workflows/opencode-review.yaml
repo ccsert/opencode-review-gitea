@@ -44,6 +44,7 @@ jobs:
           # Model configuration - use format: provider/model-id
           # Examples: deepseek/deepseek-chat, anthropic/claude-sonnet-4-5, openai/gpt-4o
           MODEL: deepseek/deepseek-chat
+          # OPENCODE_REFRESH_MODELS: "false"  # Skip catalog refresh in offline environments
           # Gitea API configuration
           GITEA_TOKEN: ${{ secrets.OPENCODE_GIT_TOKEN }}
           GITEA_SERVER_URL: ${{ gitea.server_url }}
@@ -58,6 +59,14 @@ jobs:
           # Debug (optional)
           OPENCODE_LOG_LEVEL: info
         run: |
+          # Refresh the model catalog; keep cached models usable if offline.
+          if [ "${OPENCODE_REFRESH_MODELS:-true}" != "false" ]; then
+            echo "Refreshing models cache..."
+            if ! opencode models --refresh >/dev/null; then
+              echo "[WARN] Failed to refresh models; continuing with the cached model catalog" >&2
+            fi
+          fi
+
           opencode run --agent code-review \
             "Please review PR #${PR_NUMBER} in ${REPO_OWNER}/${REPO_NAME}. \
              Fetch the diff, analyze the code changes, and submit a detailed review \

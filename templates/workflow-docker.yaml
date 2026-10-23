@@ -4,7 +4,9 @@
 # No additional files required - just this workflow file!
 #
 # Installation:
-#   curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/install.sh | bash -s -- --docker
+#   Copy this file to .gitea/workflows/opencode-review.yaml in your repository.
+#   Configure OPENCODE_GIT_TOKEN and your model provider's API key in repository secrets.
+#   See README.md for optional installer-based setup.
 
 name: OpenCode Review
 
@@ -28,8 +30,8 @@ jobs:
     # Use pre-built Docker image with all dependencies
     container:
       image: ghcr.io/ccsert/opencode-review:latest
-      # Optional: pin to specific version for stability
-      # image: ghcr.io/ccsert/opencode-review:v1.0.0
+      # Optional: pin to a published digest for reproducible reviews
+      # image: ghcr.io/ccsert/opencode-review@sha256:<published-digest>
     
     steps:
       - name: Checkout repository
@@ -46,6 +48,7 @@ jobs:
           # Model configuration (provider/model-id format)
           # Examples: deepseek/deepseek-chat, anthropic/claude-sonnet-4-5, openai/gpt-4o
           MODEL: deepseek/deepseek-chat
+          # OPENCODE_REFRESH_MODELS: "false"  # Skip catalog refresh in offline environments
           
           # Review configuration
           REVIEW_LANGUAGE: auto          # auto | en | zh-CN
