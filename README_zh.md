@@ -319,6 +319,14 @@ paths: ["*.go"]
 
 审查会按 diff 涉及的语言和领域按需加载内置检查清单：`review-security`、`review-typescript`、`review-python`、`review-go`、`review-java`（Java/Kotlin）、`review-sql`（查询与迁移）、`review-frontend`、`review-infra`（Docker、Kubernetes、Terraform、CI）和 `review-tests`，位于 [`.opencode-review/skills/`](.opencode-review/skills/)。团队自有的检查项请放入 `REVIEW_RULES`，它固定从 base commit 读取。
 
+#### 配置信任与 Fork PR
+
+审查通过 Gitea API 读取 PR，从不需要 PR 的代码，因此 workflow 不会把 PR 代码放进持有 token 和模型 key 的任务：
+
+- Docker workflow 不 checkout 仓库。镜像默认忽略工作区（`/workspace` 或 `$GITHUB_WORKSPACE`）中的 `.opencode-review/`，除非设置 `OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true`；仅在工作区是可信 checkout 时开启。自定义 Docker 配置请挂载到 `/app/.opencode-review`，或将 `OPENCODE_CONFIG_DIR` 指向工作区之外的路径。
+- 源码 workflow 只从 PR 的 base commit（`/oc` 评论时为默认分支）checkout `.opencode-review/`。PR 对 `.opencode-review/` 的修改在合并后才生效，因此首次添加 `.opencode-review/` 的 PR 无法审查自身：先合并它，再在下一个 PR 上触发。
+- Gitea 和 Forgejo 不会把仓库 secrets 传给 fork 发起的 `pull_request` workflow，因此这些模板不会审查 fork PR。`pull_request_target` 以 base 分支的 workflow 运行并可读取 secrets；这些模板在其中不会运行 fork 代码，但 fork 的 diff 仍会交给一个有权 approve 的模型。只有在你接受这种审批策略时才使用它。
+
 #### 大型 PR
 
 OpenCode 会截断超过 2000 行或 50 KiB 的工具输出。因此 diff 工具会分页返回大 diff（`REVIEW_DIFF_PAGE_BYTES`，默认 40000），本次运行未读完所有页之前，提交审查会被拒绝。
@@ -355,7 +363,7 @@ docker run --rm \
 
 `REPO_NAME` 既可以传 `repo`，也可以传 `owner/repo`（entrypoint 会自动规范化）。
 
-> **注意**: Docker 镜像目前仅支持 **x86_64/amd64** 架构。ARM 设备（树莓派等）请使用[源码安装](#本地测试源码)方式。
+镜像发布了 `linux/amd64` 和 `linux/arm64` 两种架构。挂载的项目目录仅用于推断 `GITEA_SERVER_URL`；除非设置 `OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true`，其中的 `.opencode-review/` 会被忽略。
 
 ### 本地测试（源码）
 

@@ -2,7 +2,7 @@
 # 
 # This workflow uses the source-based installation method.
 # Files required in your repository:
-#   - .opencode-review/ (agents, tools, skills)
+#   - .opencode-review/ (agents, tools, skills), read from the PR base commit
 #   - .gitea/workflows/opencode-review.yaml (this file)
 #
 # Installation:
@@ -32,9 +32,14 @@ jobs:
     container: catthehacker/ubuntu:act-latest
     
     steps:
-      - name: Checkout repository
+      - name: Checkout trusted review configuration
         uses: actions/checkout@v4
         with:
+          # The configuration defines the prompt, approval rules and executable
+          # tools, and runs with secrets: take it from the base commit, never
+          # from the PR. The review itself reads the PR through the Gitea API.
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          sparse-checkout: .opencode-review
           persist-credentials: false
 
       - name: Install Bun
@@ -52,7 +57,7 @@ jobs:
       - name: Run code review
         env:
           # OpenCode configuration
-          OPENCODE_CONFIG_DIR: ${{ github.workspace }}/.opencode-review
+          OPENCODE_CONFIG_DIR: ${{ github.workspace }}/.opencode-review  # Base-commit checkout above
           
           # Model configuration (provider/model-id format)
           # Examples: deepseek/deepseek-chat, anthropic/claude-sonnet-4-5, openai/gpt-4o

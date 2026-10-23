@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
@@ -18,6 +18,7 @@ function runReview(script: string[], options: {
   refreshStatus?: number
   runStatus?: number
   receipt?: boolean
+  env?: Record<string, string | undefined>
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "review-startup-"))
   temporaryDirectories.push(directory)
@@ -55,6 +56,7 @@ if (args[0] === "run") {
       TEST_RUN_STATUS: String(options.runStatus ?? 0),
       TEST_WRITE_RECEIPT: String(options.receipt ?? true),
       OPENCODE_REVIEW_STATE_DIR: directory,
+      ...options.env,
     },
   })
   const invocations = readFileSync(calls, "utf8").trim().split("\n").map(line => JSON.parse(line))
@@ -121,4 +123,66 @@ test("Docker version does not refresh models", () => {
   const result = runReview([join(root, "entrypoint.sh"), "version"])
   expect(result.status).toBe(0)
   expect(result.invocations.map(call => call.args)).toEqual([["--version"]])
+})
+
+describe("workspace configuration", () => {
+  function workspace() {
+    const directory = mkdtempSync(join(tmpdir(), "review-workspace-"))
+    temporaryDirectories.push(directory)
+    mkdirSync(join(directory, ".opencode-review", "tools"), { recursive: true })
+    writeFileSync(join(directory, ".opencode-review", "tools", "added-by-pr.ts"), "throw new Error('PR code ran')\n")
+    return directory
+  }
+  const entrypoint = [join(root, "entrypoint.sh"), "review"]
+
+  test("ignores .opencode-review from the workspace by default", () => {
+    const ws = workspace()
+    const result = runReview(entrypoint, { env: { OPENCODE_CONFIG_DIR: undefined, OPENCODE_REVIEW_WORKSPACE: ws } })
+    expect(result.status).toBe(0)
+    expect(result.invocations.every(call => call.config === "/app/.opencode-review")).toBe(true)
+    expect(result.stdout + result.stderr).toContain(`Ignoring ${ws}/.opencode-review`)
+  })
+
+  test("finds the Actions checkout through GITHUB_WORKSPACE and still ignores it", () => {
+    const ws = workspace()
+    const result = runReview(entrypoint, { env: { OPENCODE_CONFIG_DIR: undefined, GITHUB_WORKSPACE: ws } })
+    expect(result.invocations.every(call => call.config === "/app/.opencode-review")).toBe(true)
+    expect(result.stdout + result.stderr).toContain(`Ignoring ${ws}/.opencode-review`)
+  })
+
+  test("an explicit config directory inside the workspace needs the trust opt-in, even via a symlink", () => {
+    const ws = workspace()
+    const link = join(mkdtempSync(join(tmpdir(), "review-link-")), "config")
+    temporaryDirectories.push(join(link, ".."))
+    symlinkSync(join(ws, ".opencode-review"), link)
+    for (const configDir of [join(ws, ".opencode-review"), link]) {
+      const result = runReview(entrypoint, { env: { OPENCODE_CONFIG_DIR: configDir, OPENCODE_REVIEW_WORKSPACE: ws } })
+      expect(result.invocations.every(call => call.config === "/app/.opencode-review")).toBe(true)
+      expect(result.stdout + result.stderr).toContain("Ignoring OPENCODE_CONFIG_DIR")
+    }
+  })
+
+  test("uses workspace configuration only when explicitly trusted", () => {
+    const ws = workspace()
+    const result = runReview(entrypoint, { env: { OPENCODE_CONFIG_DIR: undefined, OPENCODE_REVIEW_WORKSPACE: ws,
+      OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG: "true" } })
+    expect(result.status).toBe(0)
+    expect(result.invocations.every(call => call.config === join(ws, ".opencode-review"))).toBe(true)
+  })
+})
+
+describe("workflow templates keep PR code out of the review job", () => {
+  type Steps = { jobs: { "opencode-review": { steps: { name: string; uses?: string; with?: Record<string, string> }[] } } }
+  const steps = (path: string) => (Bun.YAML.parse(readFileSync(join(root, path), "utf8")) as Steps).jobs["opencode-review"].steps
+
+  test("the Docker workflow does not check out the repository", () => {
+    expect(steps("templates/workflow-docker.yaml").some(step => step.uses?.includes("actions/checkout"))).toBe(false)
+  })
+
+  test.each(["templates/workflow-source.yaml", ".gitea/workflows/opencode-review.yaml"])("%s checks out configuration from the base commit only", path => {
+    const checkouts = steps(path).filter(step => step.uses?.includes("actions/checkout"))
+    expect(checkouts).toHaveLength(1)
+    expect(checkouts[0].with?.ref).toBe("${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}")
+    expect(checkouts[0].with?.["sparse-checkout"]).toBe(".opencode-review")
+  })
 })

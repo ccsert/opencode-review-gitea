@@ -36,12 +36,9 @@ jobs:
       # Optional: pin to a published digest for reproducible reviews
       # image: ghcr.io/ccsert/opencode-review@sha256:<published-digest>
     
+    # No checkout: the review reads the PR through the Gitea API, and PR code
+    # never needs to run in a job that holds the token and model API keys.
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
       - name: Run code review
         env:
           # Gitea/Forgejo configuration

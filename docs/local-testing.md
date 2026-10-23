@@ -113,6 +113,7 @@ bun tests/integration/actions-scenarios.ts snapshot
 - OpenCode 在工具输出超过 2000 行或 50 KiB 时会截断，并提示改用 Read/Grep，而审查 agent 没有这两个工具。diff 工具因此按 `REVIEW_DIFF_PAGE_BYTES`（默认 40000）分页；同一运行未读完所有页时，`gitea-review` 返回 `REVIEW_INCOMPLETE`。
 - 审查模板和团队规范放在 diff 第 1 页开头。仓库内路径从 PR base commit 读取，PR 中对规范文件的修改只作为待审 diff 出现。显式配置的来源读取失败时报 `RULES_UNAVAILABLE`，不发布审查；运行期间模板或规范变化时报 `REVIEW_CONTEXT_CHANGED`。
 - code-review agent 只能加载 `review-*` skill，其他 skill（包括 OpenCode 内置的）由权限规则拒绝。
+- Docker workflow 不 checkout PR 代码，源码 workflow 只从 base commit 稀疏 checkout `.opencode-review/`。镜像默认忽略工作区中的 `.opencode-review/`（`OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true` 才使用）。Actions 容器任务的工作区是 `/workspace/<owner>/<repo>`，即 `$GITHUB_WORKSPACE`。
 
 ## 保留或停止环境
 

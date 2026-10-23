@@ -12,7 +12,9 @@ services:
     volumes:
       # Mount current directory as workspace
       - .:/workspace:ro
-      # Optional: Mount custom config to override built-in
+      # Optional: Mount custom config to override built-in. A .opencode-review
+      # directory inside /workspace is ignored unless
+      # OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true.
       # - ./.opencode-review:/app/.opencode-review:ro
     environment:
       # Required

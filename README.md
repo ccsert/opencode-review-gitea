@@ -321,6 +321,14 @@ Applicable standards are limited to `REVIEW_RULES_MAX_BYTES` (default 30000); sp
 
 The reviewer loads built-in checklists on demand for the languages and areas in the diff: `review-security`, `review-typescript`, `review-python`, `review-go`, `review-java` (Java/Kotlin), `review-sql` (queries and migrations), `review-frontend`, `review-infra` (Docker, Kubernetes, Terraform, CI) and `review-tests`. They live in [`.opencode-review/skills/`](.opencode-review/skills/). Team-specific checklists belong in `REVIEW_RULES`, which is pinned to the base commit.
 
+#### Configuration Trust and Fork PRs
+
+The review reads the PR through the Gitea API and never needs the PR's code, so the workflows keep it out of the job that holds the token and model keys:
+
+- The Docker workflow does not check out the repository. The image ignores `.opencode-review/` in the workspace (`/workspace` or `$GITHUB_WORKSPACE`) unless `OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true`; enable that only for a trusted checkout. To customize the Docker image, mount your configuration at `/app/.opencode-review` or set `OPENCODE_CONFIG_DIR` to a path outside the workspace.
+- The source workflow checks out only `.opencode-review/` from the PR's base commit (the default branch for `/oc` comments). Changes a PR makes to `.opencode-review/` take effect after it is merged, so the PR that first adds `.opencode-review/` cannot review itself: merge it, then open or comment on the next PR.
+- Gitea and Forgejo do not pass repository secrets to `pull_request` workflows from forks, so fork PRs are not reviewed with these templates. `pull_request_target` runs the base branch's workflow with secrets; these templates never run fork code there, but the fork's diff still reaches a model that can approve. Use it only with an approval policy you accept.
+
 #### Large PRs
 
 OpenCode truncates tool output above 2000 lines or 50 KiB. The diff tools therefore return large diffs in pages (`REVIEW_DIFF_PAGE_BYTES`, default 40000), and a review is refused until every page of the run has been read.
@@ -357,7 +365,7 @@ docker run --rm \
 
 `REPO_NAME` can be either `repo` or `owner/repo` (entrypoint will normalize it).
 
-> **Note**: The Docker image currently only supports **x86_64/amd64** architecture. ARM devices (Raspberry Pi, etc.) should use the [Source installation](#local-testing-source) method instead.
+The image is published for `linux/amd64` and `linux/arm64`. A mounted project is used only for inferring `GITEA_SERVER_URL`; its `.opencode-review/` is ignored unless `OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true`.
 
 ### Local Testing (Source)
 
