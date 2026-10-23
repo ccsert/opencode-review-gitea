@@ -367,10 +367,15 @@ docker run --rm \
 
 ### 本地测试（源码）
 
+审查目标由环境变量固定，提示词不能将任务转向另一条 PR。
+
 ```bash
 export GITEA_TOKEN="your-token"
 export GITEA_SERVER_URL="https://your-gitea.example.com"
 export OPENCODE_CONFIG_DIR="$(pwd)/.opencode-review"
+export REPO_OWNER="owner"
+export REPO_NAME="repo"
+export PR_NUMBER=123
 
 opencode models --refresh
 bun .opencode-review/run-review.ts \

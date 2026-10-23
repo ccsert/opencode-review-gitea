@@ -96,6 +96,10 @@ beforeEach(() => {
   } })
   process.env.GITEA_SERVER_URL = server.url.origin
   process.env.GITEA_TOKEN = "test-token"
+  process.env.REPO_OWNER = args.owner
+  process.env.REPO_NAME = args.repo
+  process.env.PR_NUMBER = String(args.pull_number)
+  delete process.env.OPENCODE_REVIEW_TARGET
   process.env.OPENCODE_REVIEW_STATE_DIR = directory
   delete process.env.OPENCODE_REVIEW_RUN_ID
   delete process.env.OPENCODE_REVIEW_RECEIPT_PATH
@@ -110,6 +114,52 @@ afterEach(() => {
 const fetchDiff = (ctx: ReturnType<typeof context>) => diffTool.execute({ ...args, format: "parsed", file_patterns: undefined }, ctx)
 const submit = (ctx: ReturnType<typeof context>, line = 2) => reviewTool.execute({ ...args, summary: "Review result",
   approval: "comment", comments: [{ path: "app.ts", line, body: "**[BUG:HIGH]** Example finding" }] }, ctx)
+
+test("refuses to fetch a different PR from the configured target", async () => {
+  process.env.PR_NUMBER = "99"
+  await expect(fetchDiff(context())).rejects.toThrow("REVIEW_TARGET_MISMATCH")
+  expect(diffReads).toBe(0)
+  expect(posts).toBe(0)
+})
+test("refuses publishing a snapshot for another target", async () => {
+  const ctx = context(); await fetchDiff(ctx)
+  process.env.REPO_NAME = "other"
+  await expect(submit(ctx)).rejects.toThrow("REVIEW_TARGET_MISMATCH")
+  expect(posts).toBe(0)
+})
+test("refuses another server when the runner has frozen its target", async () => {
+  process.env.OPENCODE_REVIEW_TARGET = JSON.stringify({ server: "https://other.example.com", ...args })
+  await expect(fetchDiff(context())).rejects.toThrow("REVIEW_TARGET_MISMATCH")
+  expect(diffReads).toBe(0)
+})
+test("a run cannot mix raw and parsed delivery pages", async () => {
+  const ctx = context(); await fetchDiff(ctx)
+  await expect(diffTool.execute({ ...args, format: "raw", file_patterns: undefined }, ctx)).rejects.toThrow("REVIEW_PAGES_CHANGED")
+})
+test("changing review requirements does not reuse the earlier verdict", async () => {
+  const first = context(); await fetchDiff(first); await submit(first)
+  process.env.REVIEW_TEMPLATE = "security"
+  const next = context()
+  expect(await incrementalTool.execute({ ...args, format: "parsed" }, next)).not.toContain("No New Changes")
+  expect(await submit(next)).toContain("submitted and confirmed")
+  expect(posts).toBe(2)
+  expect(await incrementalTool.execute({ ...args, format: "parsed" }, context())).toContain("No New Changes")
+})
+test("newly configured unavailable requirements cannot be bypassed by an old review", async () => {
+  const first = context(); await fetchDiff(first); await submit(first)
+  process.env.REVIEW_RULES = "docs/unavailable.md"
+  await expect(incrementalTool.execute({ ...args, format: "parsed" }, context())).rejects.toThrow("RULES_UNAVAILABLE")
+  expect(posts).toBe(1)
+})
+test("submitted, duplicate and unchanged receipts carry the same target", async () => {
+  const receiptPath = join(directory, "receipt.json")
+  process.env.OPENCODE_REVIEW_RECEIPT_PATH = receiptPath
+  const ctx = context(); await fetchDiff(ctx)
+  for (const action of [() => submit(ctx), () => submit(ctx), () => incrementalTool.execute({ ...args, format: "parsed" }, context())]) {
+    await action()
+    expect((await Bun.file(receiptPath).json()).target).toEqual({ server: server.url.origin, ...args })
+  }
+})
 
 test("refuses submission without fetching a snapshot", async () => {
   await expect(submit(context())).rejects.toThrow("SNAPSHOT_REQUIRED")

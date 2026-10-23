@@ -5,6 +5,53 @@ export class PRChangedError extends Error {
   constructor(detail: string) { super(`PR_CHANGED: ${detail}`) }
 }
 
+export interface ReviewTarget extends RepositoryPR { server: string }
+export const normalizeServerURL = (url: string) => url.replace(/\/+$/, "").replace(/\/api\/v1$/, "")
+
+function validTarget(value: unknown): value is ReviewTarget {
+  const target = value as ReviewTarget | undefined
+  return Boolean(target && typeof target.server === "string" && target.server &&
+    typeof target.owner === "string" && target.owner && typeof target.repo === "string" && target.repo &&
+    Number.isSafeInteger(target.pull_number) && target.pull_number > 0)
+}
+
+export function configuredReviewTarget(required = false): ReviewTarget | undefined {
+  const { REPO_OWNER: owner, REPO_NAME: repo, PR_NUMBER: number } = process.env
+  if (!owner && !repo && !number && !required) return undefined
+  const target = { owner, repo, pull_number: Number(number),
+    server: normalizeServerURL(process.env.GITEA_SERVER_URL || process.env.GITHUB_SERVER_URL || "") }
+  if (!validTarget(target)) throw new Error("REVIEW_TARGET_REQUIRED: Configure server, REPO_OWNER, REPO_NAME and a positive PR_NUMBER before reviewing")
+  return target
+}
+
+function activeReviewTarget() {
+  if (!process.env.OPENCODE_REVIEW_TARGET) return configuredReviewTarget(Boolean(process.env.OPENCODE_REVIEW_RUN_ID))
+  let target: unknown
+  try { target = JSON.parse(process.env.OPENCODE_REVIEW_TARGET) } catch { /* Reject malformed frozen targets. */ }
+  if (!validTarget(target)) throw new Error("REVIEW_TARGET_REQUIRED: Invalid frozen review target")
+  return target
+}
+
+export function matchesReviewTarget(actual: unknown, expected: ReviewTarget): actual is ReviewTarget {
+  return validTarget(actual) && actual.server === expected.server && actual.owner === expected.owner &&
+    actual.repo === expected.repo && actual.pull_number === expected.pull_number
+}
+
+export function requireReviewTarget(pr: RepositoryPR) {
+  const target = activeReviewTarget()
+  if (target && (target.owner !== pr.owner || target.repo !== pr.repo || target.pull_number !== pr.pull_number)) {
+    throw new Error("REVIEW_TARGET_MISMATCH: Tool arguments do not match this run's fixed repository and PR")
+  }
+}
+
+export function receiptTarget(server: string, pr: RepositoryPR): ReviewTarget {
+  return { server, owner: pr.owner, repo: pr.repo, pull_number: pr.pull_number }
+}
+
+export function reviewURL(target: ReviewTarget, reviewId: number) {
+  return `${target.server}/${target.owner}/${target.repo}/pulls/${target.pull_number}#pullreview-${reviewId}`
+}
+
 export function timeoutMs() {
   const value = Number(process.env.GITEA_API_TIMEOUT_MS ?? 30000)
   if (!Number.isInteger(value) || value < 1) throw new Error("GITEA_API_TIMEOUT_MS must be a positive integer")
@@ -20,7 +67,9 @@ export class GiteaClient {
     const token = process.env.GITEA_TOKEN || process.env.GITHUB_TOKEN
     if (!url) throw new Error("GITEA_SERVER_URL environment variable is required")
     if (!token) throw new Error("GITEA_TOKEN environment variable is required")
-    this.baseURL = url.replace(/\/+$/, "").replace(/\/api\/v1$/, "")
+    this.baseURL = normalizeServerURL(url)
+    const target = activeReviewTarget()
+    if (target && target.server !== this.baseURL) throw new Error("REVIEW_TARGET_MISMATCH: API server does not match this run's fixed target")
     this.token = token
   }
 
@@ -89,8 +138,10 @@ export interface Review {
   comments_count?: number
 }
 export interface RepositoryPR { owner: string; repo: string; pull_number: number }
-export const prPath = ({ owner, repo, pull_number }: RepositoryPR) =>
-  `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pull_number}`
+export function prPath(pr: RepositoryPR) {
+  requireReviewTarget(pr)
+  return `/repos/${encodeURIComponent(pr.owner)}/${encodeURIComponent(pr.repo)}/pulls/${pr.pull_number}`
+}
 
 export async function pullRefHead(api: GiteaClient, args: RepositoryPR): Promise<string | undefined> {
   const path = prPath(args)

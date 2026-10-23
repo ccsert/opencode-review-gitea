@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
-import type { RepositoryPR } from "./gitea"
+import type { RepositoryPR, ReviewTarget } from "./gitea"
 
 export const digest = (value: string) => createHash("sha256").update(value).digest("hex")
 export const stateDirectory = () => process.env.OPENCODE_REVIEW_STATE_DIR || join(tmpdir(), "opencode-review-state")
@@ -17,8 +17,10 @@ export interface Snapshot {
   // template/standards delivered with them. Absent in snapshots without pages.
   pages?: number
   context?: string
+  pageDigest?: string
 }
 export interface Receipt {
+  target: ReviewTarget
   status: "submitted" | "duplicate" | "unchanged"
   head: string
   reviewId: number
@@ -75,6 +77,9 @@ export async function saveSnapshot(server: string, pr: RepositoryPR, snapshot: S
     if (previous.pages !== snapshot.pages || previous.context !== snapshot.context) {
       throw new Error("REVIEW_CONTEXT_CHANGED: The review template or standards changed during this run. Start a new review run.")
     }
+    if (previous.pageDigest !== snapshot.pageDigest) {
+      throw new Error("REVIEW_PAGES_CHANGED: Diff format or page boundaries changed during this run. Start a new review run.")
+    }
   } finally {
     await rm(temporary, { force: true })
   }
@@ -104,7 +109,7 @@ export async function writeReceipt(receipt: Receipt) {
   if (path) await writeJSON(path, receipt)
 }
 
-export interface ReviewMarker { head: string; base: string; scope: string; key: string; summaryDigest: string; commentsDigest: string }
+export interface ReviewMarker { head: string; base: string; scope: string; key: string; context?: string; summaryDigest: string; commentsDigest: string }
 export function reviewMarker(marker: ReviewMarker) {
   return `<!-- opencode-review:v1 ${JSON.stringify(marker)} -->`
 }
@@ -113,6 +118,7 @@ export function parseReviewMarker(body: string): ReviewMarker | undefined {
   try {
     const marker = JSON.parse(matches.at(-1)?.[1] || "null")
     if (marker && [marker.head, marker.base, marker.scope, marker.key].every(x => typeof x === "string" && x.length) &&
-        [marker.summaryDigest, marker.commentsDigest].every(x => typeof x === "string" && /^[a-f0-9]{64}$/.test(x))) return marker
+        [marker.summaryDigest, marker.commentsDigest].every(x => typeof x === "string" && /^[a-f0-9]{64}$/.test(x)) &&
+        (marker.context === undefined || typeof marker.context === "string" && /^[a-f0-9]{64}$/.test(marker.context))) return marker
   } catch { /* Unrecognized user text is not a completed bot review. */ }
 }

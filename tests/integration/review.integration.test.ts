@@ -246,6 +246,56 @@ for (const lab of await labs()) {
       expect(await submit(f.args, ctx)).toContain("confirmed")
     }, 60000)
 
+    test("the configured PR target is enforced before publishing", async () => {
+      const f = await fixture(lab); configure(lab)
+      process.env.OPENCODE_REVIEW_TARGET = JSON.stringify({ server: lab.url, ...f.args })
+      await expect(fetchDiff({ ...f.args, repo: "another-repository" }, context())).rejects.toThrow("REVIEW_TARGET_MISMATCH")
+      expect(await api(lab, `${f.path}/reviews`)).toHaveLength(0)
+      const ctx = context(); await fetchDiff(f.args, ctx)
+      const receipt = join(state!, "receipt.json")
+      process.env.OPENCODE_REVIEW_RECEIPT_PATH = receipt
+      await submit(f.args, ctx)
+      expect((await Bun.file(receipt).json()).target).toEqual({ server: lab.url, ...f.args })
+    }, 30000)
+
+    test("mixed diff formats cannot satisfy the page-read requirement", async () => {
+      const f = await fixture(lab)
+      const repoPath = f.path.slice(0, f.path.lastIndexOf("/pulls/"))
+      const content = Array.from({ length: 600 }, (_, i) => `// ${"x".repeat(90)} ${i}`).join("\n") + "\n"
+      await api(lab, `${repoPath}/contents`, { branch: "feature", message: "Page boundary fixture", files: [
+        { operation: "create", path: "pages.ts", content: Buffer.from(content).toString("base64") }] })
+      configure(lab)
+      const ctx = context()
+      const first = await fetchDiff(f.args, ctx)
+      expect(first).toContain("(page 1/2)")
+      await expect(diffTool.execute({ ...f.args, format: "raw", file_patterns: undefined, page: 2 }, ctx)).rejects.toThrow("REVIEW_PAGES_CHANGED")
+      await expect(submit(f.args, ctx)).rejects.toThrow("REVIEW_INCOMPLETE")
+      expect(await api(lab, `${f.path}/reviews`)).toHaveLength(0)
+      await diffTool.execute({ ...f.args, format: "parsed", file_patterns: undefined, page: 2 }, ctx)
+      expect(await submit(f.args, ctx)).toContain("confirmed")
+    }, 60000)
+
+    test("multi-line standards fit real output limits and oversized source lines stop review", async () => {
+      const f = await fixture(lab); configure(lab)
+      const rules = Bun.serve({ port: 0, fetch: () => new Response("RULE\n".repeat(3000)) })
+      proxies.push(rules)
+      process.env.REVIEW_RULES = rules.url.toString()
+      const ctx = context()
+      const first = await fetchDiff(f.args, ctx)
+      const total = Number(first.match(/\(page 1\/(\d+)\)/)![1])
+      expect(total).toBeGreaterThan(2)
+      await expect(submit(f.args, ctx)).rejects.toThrow("REVIEW_INCOMPLETE")
+      for (let page = 1; page <= total; page++) {
+        const output = await diffTool.execute({ ...f.args, format: "parsed", file_patterns: undefined, page }, ctx)
+        expect(output.split("\n").length).toBeLessThan(2000)
+        expect(Buffer.byteLength(output)).toBeLessThan(51200)
+      }
+      expect(await submit(f.args, ctx)).toContain("confirmed")
+      await f.push("export const huge = \"" + "x".repeat(60000) + "\"\n")
+      await expect(fetchDiff(f.args, context())).rejects.toThrow("REVIEW_LINE_TOO_LARGE")
+      expect(await api(lab, `${f.path}/reviews`)).toHaveLength(1)
+    }, 60000)
+
     test("deleted-line comments retain their old-side positions", async () => {
       const f = await fixture(lab); configure(lab)
       await f.push("export const b = 2\n")

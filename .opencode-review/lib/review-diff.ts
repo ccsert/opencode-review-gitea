@@ -1,4 +1,4 @@
-import { GiteaClient, prPath, pullRefHead, requireOpen, type PullRequest, type RepositoryPR, type Review } from "./gitea"
+import { GiteaClient, prPath, pullRefHead, receiptTarget, requireOpen, reviewURL, type PullRequest, type RepositoryPR, type Review } from "./gitea"
 import { filterFilesByPatterns, formatAsRawDiff, paginate, parseDiff, rawStream, reviewStream } from "./diff"
 import { digest, markPageRead, saveSnapshot, writeReceipt } from "./review-state"
 import { formatReviewContext, loadReviewContext } from "./review-context"
@@ -23,6 +23,14 @@ export async function fetchReviewDiff(args: RepositoryPR & {
     if (attempt >= 9) throw new Error("PR_DIFF_NOT_READY: The Git pull ref has not caught up with the PR head. Retry in a new run.")
     await Bun.sleep(100)
   }
+  const fullDiff = await api.text(`${path}.diff`)
+  let files = parseDiff(fullDiff)
+  const patterns = args.file_patterns?.filter(Boolean) ?? []
+  // Bind coverage to the effective requirements for the full selected PR,
+  // before incremental filtering can remove files whose rules still apply.
+  const context = formatReviewContext(await loadReviewContext(api, args, before.base.sha,
+    filterFilesByPatterns(files, patterns).map(file => file.path)), before.base.sha)
+  const contextDigest = digest(context.join("\n"))
   let previous: string | null = null
   let unchanged: Review | undefined
   let userId: number | undefined
@@ -38,10 +46,10 @@ export async function fetchReviewDiff(args: RepositoryPR & {
     }
     commits = orderCommits(commits, before.head.sha)
     let reviews = await api.list<Review>(`${path}/reviews`)
-    while ((previous = findLastReviewedCommit(reviews, commits, user.id, before.base.sha))) {
-      const candidate = reviews.find(r => isCompletedReview(r, user.id, { head: previous!, base: before.base.sha, scope: "all" }))!
+    while ((previous = findLastReviewedCommit(reviews, commits, user.id, before.base.sha, contextDigest))) {
+      const candidate = reviews.find(r => isCompletedReview(r, user.id, { head: previous!, base: before.base.sha, scope: "all", context: contextDigest }))!
       try {
-        const confirmed = await confirmReviewContent(api, path, candidate, user.id, { head: previous, base: before.base.sha, scope: "all" })
+        const confirmed = await confirmReviewContent(api, path, candidate, user.id, { head: previous, base: before.base.sha, scope: "all", context: contextDigest })
         if (previous === before.head.sha) unchanged = confirmed
         break
       } catch {
@@ -52,8 +60,6 @@ export async function fetchReviewDiff(args: RepositoryPR & {
     }
   }
 
-  const fullDiff = await api.text(`${path}.diff`)
-  let files = parseDiff(fullDiff)
   let note = "Full PR review"
   if (previous && !unchanged) {
     try {
@@ -74,10 +80,7 @@ export async function fetchReviewDiff(args: RepositoryPR & {
       note = "Full PR review (incremental file list unavailable)"
     }
   }
-  const patterns = args.file_patterns?.filter(Boolean) ?? []
   files = filterFilesByPatterns(files, patterns)
-  // Standards follow the base commit, so they are covered by the base check below.
-  const context = unchanged ? [] : formatReviewContext(await loadReviewContext(api, args, before.base.sha, files.map(file => file.path)), before.base.sha)
   const after = await api.json<PullRequest>(path)
   if (before.head.sha !== after.head.sha || before.base.sha !== after.base.sha || await pullRefHead(api, args) !== before.head.sha) {
     throw new Error("PR_CHANGED: The pull request changed while fetching the diff. Start a new review run.")
@@ -91,37 +94,42 @@ export async function fetchReviewDiff(args: RepositoryPR & {
   await saveSnapshot(api.baseURL, args, {
     head: before.head.sha, base: before.base.sha,
     scope: patterns.length ? digest(JSON.stringify([...patterns].sort())) : "all",
-    diff: fullDiff, reviewDiff, pages: unchanged ? 0 : pages.length, context: digest(context.join("\n")),
+    diff: fullDiff, reviewDiff, pages: unchanged ? 0 : pages.length, context: contextDigest,
+    pageDigest: unchanged ? undefined : digest(JSON.stringify(pages)),
   }, sessionID)
 
   if (unchanged) {
-    const confirmed = await confirmReviewContent(api, path, unchanged, userId!, { head: before.head.sha, base: before.base.sha, scope: "all" })
+    const confirmed = await confirmReviewContent(api, path, unchanged, userId!, { head: before.head.sha, base: before.base.sha, scope: "all", context: contextDigest })
     const latest = await api.json<PullRequest>(path)
     requireOpen(latest)
     if (latest.head.sha !== before.head.sha || latest.base.sha !== before.base.sha || await pullRefHead(api, args) !== before.head.sha) {
       throw new Error("PR_CHANGED: The PR changed while confirming the previous review. Start a new run.")
     }
-    await writeReceipt({ status: "unchanged", head: before.head.sha, reviewId: confirmed.id,
-      url: `${api.baseURL}/${args.owner}/${args.repo}/pulls/${args.pull_number}#pullreview-${confirmed.id}` })
+    await writeReceipt({ status: "unchanged", target: receiptTarget(api.baseURL, args), head: before.head.sha, reviewId: confirmed.id,
+      url: reviewURL(receiptTarget(api.baseURL, args), confirmed.id) })
     return `No New Changes: ${before.head.sha} already has a confirmed bot review. No new review needed.`
   }
   const page = args.page ?? 1
   if (!Number.isInteger(page) || page < 1 || page > pages.length) {
     throw new Error(`PAGE_OUT_OF_RANGE: page must be between 1 and ${pages.length}`)
   }
-  await markPageRead(api.baseURL, args, page, sessionID)
   const tool = args.incremental ? "gitea-incremental-diff" : "gitea-pr-diff"
   const header = [`# PR #${args.pull_number} Diff (page ${page}/${pages.length})`, "",
     `Head: ${before.head.sha}`, `Base: ${before.base.sha}`, note, ""]
   const footer = page < pages.length
     ? ["", `--- Page ${page}/${pages.length}. Call ${tool} again with the same arguments and page=${page + 1}. A review is refused until every page has been read. ---`]
     : []
-  return [...header, ...pages[page - 1], ...footer].join("\n")
+  const output = [...header, ...pages[page - 1], ...footer].join("\n")
+  if (Buffer.byteLength(output) >= 51200 || output.split("\n").length >= 2000) {
+    throw new Error("REVIEW_PAGE_TOO_LARGE: Final tool output exceeds the safe delivery budget")
+  }
+  await markPageRead(api.baseURL, args, page, sessionID)
+  return output
 }
 
 function pageLimits() {
   const bytes = Number(process.env.REVIEW_DIFF_PAGE_BYTES ?? 40000)
-  if (!Number.isInteger(bytes) || bytes < 4000) throw new Error("REVIEW_DIFF_PAGE_BYTES must be an integer of at least 4000")
+  if (!Number.isInteger(bytes) || bytes < 4000 || bytes > 40000) throw new Error("REVIEW_DIFF_PAGE_BYTES must be an integer between 4000 and 40000")
   // Leave room under OpenCode's 2000-line/50 KiB limit for the page header and footer.
   return { bytes, lines: 1500 }
 }

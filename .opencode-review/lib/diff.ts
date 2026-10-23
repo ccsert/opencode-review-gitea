@@ -165,12 +165,18 @@ export function paginate(lines: StreamLine[], limits: PageLimits): string[][] {
   const pages: string[][] = []
   let page: string[] = []
   let bytes = 0
-  for (const line of lines) {
+  // A rule/template body is one StreamLine but can contain thousands of actual
+  // lines. Count exactly what OpenCode will receive, including continuations.
+  for (const line of lines.flatMap(line => line.text.split("\n").map(text => ({ text, header: line.header })))) {
     const size = Buffer.byteLength(line.text) + 1
+    if (size > limits.bytes) throw new Error("REVIEW_LINE_TOO_LARGE: A diff or instruction line exceeds the safe tool-output budget")
     if (page.length && (bytes + size > limits.bytes || page.length + 1 > limits.lines)) {
       pages.push(page)
-      page = [...(line.header ?? [])]
+      page = (line.header ?? []).flatMap(text => text.split("\n"))
       bytes = page.reduce((sum, text) => sum + Buffer.byteLength(text) + 1, 0)
+    }
+    if (bytes + size > limits.bytes || page.length + 1 > limits.lines) {
+      throw new Error("REVIEW_LINE_TOO_LARGE: A line and its continuation context cannot fit safely on one page")
     }
     page.push(line.text)
     bytes += size

@@ -369,10 +369,15 @@ The image is published for `linux/amd64` and `linux/arm64`. A mounted project is
 
 ### Local Testing (Source)
 
+The environment fixes the review target; the prompt cannot redirect it to another PR.
+
 ```bash
 export GITEA_TOKEN="your-token"
 export GITEA_SERVER_URL="https://your-gitea.example.com"
 export OPENCODE_CONFIG_DIR="$(pwd)/.opencode-review"
+export REPO_OWNER="owner"
+export REPO_NAME="repo"
+export PR_NUMBER=123
 
 opencode models --refresh
 bun .opencode-review/run-review.ts \

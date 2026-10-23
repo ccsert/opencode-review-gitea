@@ -17,8 +17,8 @@ export function orderCommits(commits: Commit[], head: string) {
   throw new Error("PR_CHANGED: Commit list does not contain the captured PR head at either end")
 }
 
-export function findLastReviewedCommit(reviews: Review[], commits: Commit[], userId: number, base: string) {
-  const reviewed = new Set(reviews.filter(r => isCompletedReview(r, userId, { base, scope: "all" })).map(r => r.commit_id))
+export function findLastReviewedCommit(reviews: Review[], commits: Commit[], userId: number, base: string, context?: string) {
+  const reviewed = new Set(reviews.filter(r => isCompletedReview(r, userId, { base, scope: "all", ...(context ? { context } : {}) })).map(r => r.commit_id))
   return [...commits].reverse().find(c => reviewed.has(c.sha))?.sha ?? null
 }
 
@@ -38,6 +38,6 @@ export function findCommitsAfter(commits: Commit[], after: string | null) {
   return commits.slice(index + 1)
 }
 
-export function submissionKey(server: string, owner: string, repo: string, number: number, userId: number, head: string, base: string, scope: string) {
-  return digest(JSON.stringify(["content-integrity-v1", server, owner, repo, number, userId, head, base, scope]))
+export function submissionKey(server: string, owner: string, repo: string, number: number, userId: number, head: string, base: string, scope: string, context = "") {
+  return digest(JSON.stringify(["content-integrity-context-v1", server, owner, repo, number, userId, head, base, scope, context]))
 }

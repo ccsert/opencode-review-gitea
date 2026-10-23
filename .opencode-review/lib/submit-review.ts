@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import { GiteaClient, GiteaError, PRChangedError, prPath, pullRefHead, requireOpen, type PullRequest, type RepositoryPR, type Review } from "./gitea"
+import { GiteaClient, GiteaError, PRChangedError, prPath, pullRefHead, receiptTarget, requireOpen, reviewURL, type PullRequest, type RepositoryPR, type Review } from "./gitea"
 import { parseDiff } from "./diff"
 import { formatCommentBody } from "./review-format"
 import { digest, loadSnapshot, reviewMarker, stateDirectory, unreadPages, writeJSON, writeReceipt } from "./review-state"
@@ -47,8 +47,8 @@ export async function submitReview(args: ReviewInput, sessionID: string) {
       new_position: old ? 0 : line, old_position: old ? line : 0 }
   })
   const user = await api.json<{ id: number }>("/user")
-  const key = submissionKey(api.baseURL, args.owner, args.repo, args.pull_number, user.id, snapshot.head, snapshot.base, snapshot.scope)
-  const identity = { head: snapshot.head, base: snapshot.base, scope: snapshot.scope, key }
+  const key = submissionKey(api.baseURL, args.owner, args.repo, args.pull_number, user.id, snapshot.head, snapshot.base, snapshot.scope, snapshot.context)
+  const identity = { head: snapshot.head, base: snapshot.base, scope: snapshot.scope, key, context: snapshot.context }
   const summary = normalizeReviewText(args.summary)
   const marker = { ...identity, summaryDigest: digest(summary), commentsDigest: commentsDigest(comments) }
   const intent = join(stateDirectory(), `submission-${key}.json`)
@@ -65,8 +65,9 @@ export async function submitReview(args: ReviewInput, sessionID: string) {
     const result = await confirmReviewContent(api, path, review, user.id, duplicate ? identity : marker)
     // Read the server's review object, rather than trusting a successful POST status.
     const receipt = { status: duplicate ? "duplicate" as const : "submitted" as const,
+      target: receiptTarget(api.baseURL, args),
       head: snapshot!.head, reviewId: result.id,
-      url: `${api.baseURL}/${args.owner}/${args.repo}/pulls/${args.pull_number}#pullreview-${result.id}` }
+      url: reviewURL(receiptTarget(api.baseURL, args), result.id) }
     await writeJSON(intent, receipt)
     // A push may race the final preflight GET. The review stays attached to its
     // original commit, but it cannot certify the current PR or complete this run.

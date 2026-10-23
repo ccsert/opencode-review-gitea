@@ -17,6 +17,7 @@ export async function nativeRuns(lab: Lab, owner: string, repo: string): Promise
   // StatusSuccess=1: go-gitea/gitea v1.24.6 models/actions/status.go.
   const source = `import { Database } from "bun:sqlite";
 const db = new Database("/data/gitea/gitea.db", { readonly: true });
+db.exec("PRAGMA busy_timeout=5000");
 const rows = db.query('SELECT a."index" AS number, a.status, a.trigger_event AS event, a.event_payload FROM action_run a JOIN repository r ON r.id=a.repo_id JOIN user u ON u.id=r.owner_id WHERE u.name=? AND r.name=? LIMIT 101').all(process.argv[1], process.argv[2]);
 if (rows.length >= 100) throw new Error("Native Actions run pagination limit exceeded");
 console.log(JSON.stringify(rows.map(row => ({ number: row.number, status: row.status === 1 ? "success" : "not-success", event: row.event, commentId: JSON.parse(row.event_payload).comment?.id }))));`

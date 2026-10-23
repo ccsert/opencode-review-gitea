@@ -98,19 +98,20 @@ bun tests/integration/actions-scenarios.ts snapshot
 
 ## 运行约定
 
-- Docker 入口及源码 workflow 通过 `run-review.ts` 执行审查。OpenCode 返回 0，但未提供已确认的 review 回执时，任务仍以失败结束。
+- Docker 入口及源码 workflow 通过 `run-review.ts` 执行审查。运行开始即固定服务器、仓库及 PR 编号，工具不能改审其他目标；成功回执也必须包含相同目标及规范的 review URL。OpenCode 返回 0，但没有对应目标的已确认回执时，任务仍失败。
+- OpenCode 子进程在临时空目录中运行，并禁用项目配置自动发现。显式可信配置路径先转换为绝对路径，避免工作区中的 `opencode.json`、`.opencode/`、`AGENTS.md` 等进入审查配置；临时目录在任务结束后清理。
 - diff 工具记录本次运行的 base/head。PR 在读取 diff 或提交前发生变更会报 `PR_CHANGED`，应启动新审查；同一运行不能覆盖快照后复用旧结论。
 - 取 diff 前后和发布前后还会校验实际的 `refs/pull/N/head`，避免 Forgejo 的 PR 元数据先更新、Git 引用后更新时把旧 diff 标成新提交。引用短时间未就绪会等待；持续未就绪则报 `PR_DIFF_NOT_READY`，不创建快照或发布。
 - Git 的空格路径分隔 TAB 与真实文件名中的转义字符分别处理；重建 raw diff 时使用 Git 引号，避免中文、空格、TAB、引号等路径产生虚构的行评论锚点。
 - `gitea-review` 要求先在同一运行获取 diff，并校验行评论是否属于该 diff。发布时明确指定捕获的 SHA，随后读回 review 和行评论。
 - 发布标记同时携带总结正文和行评论（含文件路径、新旧侧行号）的完整性摘要。首次提交、重复提交、增量基准及 `No New Changes` 使用同一读回校验，不能借“无新变更”绕过正文损坏、评论丢失或行号错误。HTTP 写入采用 ASCII JSON 转义传输 Unicode，避免多字节字符在字符串编码边界受损。
-- 增量基准只接受当前 token 用户发布、带本工具版本内容校验信息、匹配 base、覆盖完整 PR 的已完成 review。未带标记或缺少内容校验信息的旧审查不作为基准，升级后首次运行会完整审查；旧提交意图保留在原格式命名空间。
+- 增量基准只接受当前 token 用户发布、带内容校验信息、匹配 base 和有效模板/规范摘要、覆盖完整 PR 的已完成 review。切换模板或有效规范会重新审查，不能借旧结论跳过新要求。旧标记缺少规范摘要时首次重新完整审查；旧提交意图保留在原格式命名空间。
 - 重复触发会复用远端已确认的 review。同一状态目录中的并发提交还通过原子文件声明去重。网络超时/5xx 后只查询结果，不盲目重发 POST。
 - `OPENCODE_REVIEW_STATE_DIR` 默认使用容器临时目录；需要跨容器重启保留提交意图时，将它设为持久卷中的目录。多个独立 runner 应使用同一个共享持久目录并串行处理同一 PR；仅凭远端“查询后提交”不能保证跨机器原子去重。
 - 模板的 `concurrency` 对同一 PR 排队且不取消运行。Gitea 1.24 不支持此语法；旧版应使用单个专用 runner、串行执行审查，或升级到支持并发组的版本。
 - `SUBMISSION_UNKNOWN` 表示服务器可能已接受写入。保留状态文件；恢复服务后重试只会查询已有 review。若持续没有结果，先核实服务器 review 列表和日志，再由维护者决定是否清除错误中给出的那一个提交意图文件。不要批量删除状态后自动重发。
 - `GITEA_API_TIMEOUT_MS` 控制单次 API 超时，默认 30000。
-- OpenCode 在工具输出超过 2000 行或 50 KiB 时会截断，并提示改用 Read/Grep，而审查 agent 没有这两个工具。diff 工具因此按 `REVIEW_DIFF_PAGE_BYTES`（默认 40000）分页；同一运行未读完所有页时，`gitea-review` 返回 `REVIEW_INCOMPLETE`。
+- OpenCode 在工具输出超过 2000 行或 50 KiB 时会截断。diff 工具按 `REVIEW_DIFF_PAGE_BYTES`（默认 40000，可设 4000–40000）和实际物理行数分页，并检查最终含头尾的输出。同一运行固定分页内容和边界，不能混用 raw/parsed 页；未读完所有页时返回 `REVIEW_INCOMPLETE`。超长单行不能安全装入一页时明确返回 `REVIEW_LINE_TOO_LARGE`，不标记已读或发布审查。
 - 审查模板和团队规范放在 diff 第 1 页开头。仓库内路径从 PR base commit 读取，PR 中对规范文件的修改只作为待审 diff 出现。显式配置的来源读取失败时报 `RULES_UNAVAILABLE`，不发布审查；运行期间模板或规范变化时报 `REVIEW_CONTEXT_CHANGED`。
 - code-review agent 只能加载 `review-*` skill，其他 skill（包括 OpenCode 内置的）由权限规则拒绝。
 - Docker workflow 不 checkout PR 代码，源码 workflow 只从 base commit 稀疏 checkout `.opencode-review/`。镜像默认忽略工作区中的 `.opencode-review/`（`OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true` 才使用）。Actions 容器任务的工作区是 `/workspace/<owner>/<repo>`，即 `$GITHUB_WORKSPACE`。
