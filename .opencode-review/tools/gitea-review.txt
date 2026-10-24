@@ -6,7 +6,14 @@ confirmed review. PR_CHANGED requires a new run. SUBMISSION_UNKNOWN must never b
 worked around with another write tool: publication may already have succeeded.
 Success means the review and its line comments have been read back from Gitea.
 
-This tool submits a review with:
+Runtime REVIEW_MODE controls delivery. In draft mode this tool saves a PENDING
+review and exports a local Markdown summary. It never approves or publishes.
+The reviewer must use the same account, copy the exported summary into the native
+review form, edit the pending comments and manually submit. Stop after a verified
+draft result, including a reused or already manually submitted draft. Conflicts
+and manual edits must be resolved by the human; never try another write path.
+
+In the default submit mode this tool submits a review with:
 1. A summary/report (AI-generated, displayed as the main review body)
 2. Line-level comments attached to specific code lines
 3. An approval decision (approve/comment/request_changes)

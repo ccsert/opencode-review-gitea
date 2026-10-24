@@ -31,6 +31,9 @@ function configure(lab: Lab, url = lab.url) {
   process.env.OPENCODE_REVIEW_STATE_DIR = state
   delete process.env.OPENCODE_REVIEW_RUN_ID
   delete process.env.OPENCODE_REVIEW_RECEIPT_PATH
+  delete process.env.REVIEW_MODE
+  delete process.env.OPENCODE_REVIEW_MODE
+  delete process.env.REVIEW_OUTPUT_DIR
 }
 const fetchDiff = (args: Awaited<ReturnType<typeof fixture>>["args"], ctx: ReturnType<typeof context>) =>
   diffTool.execute({ ...args, format: "parsed", file_patterns: undefined }, ctx)
@@ -62,6 +65,108 @@ function proxyFor(lab: Lab, fault: (request: Request, response: Response) => Pro
 
 for (const lab of await labs()) {
   describe(lab.name, () => {
+    test("draft exports private summary, hides line comments and reuses the same pending review", async () => {
+      const f = await fixture(lab); configure(lab)
+      process.env.REVIEW_MODE = "draft"; process.env.REVIEW_OUTPUT_DIR = join(state!, "output")
+      const receiptPath = join(state!, "receipt.json"); process.env.OPENCODE_REVIEW_RECEIPT_PATH = receiptPath
+      const ctx = context(); await fetchDiff(f.args, ctx)
+      expect(await submit(f.args, ctx)).toContain("not published")
+      const receipt = await Bun.file(receiptPath).json()
+      const actor = { ...lab, adminToken: lab.botToken }
+      const reviews = await api(actor, `${f.path}/reviews`)
+      expect(reviews).toHaveLength(1)
+      expect(reviews[0].state).toBe("PENDING")
+      expect(reviews[0].body).not.toContain("Local integration review")
+      expect(await Bun.file(receipt.artifacts.markdown).text()).toBe("Local integration review\n")
+      expect((await Bun.file(receipt.artifacts.json).json()).comments).toHaveLength(1)
+      const other = { ...lab, adminToken: lab.humanToken }
+      await expect(api(other, `${f.path}/reviews/${reviews[0].id}`)).rejects.toThrow("404")
+      await expect(api(other, `${f.path}/reviews/${reviews[0].id}/comments`)).rejects.toThrow("404")
+      const timeline = await api(other, `${f.path.replace("/pulls/", "/issues/")}/timeline`)
+      expect(JSON.stringify(timeline)).not.toContain("Local integration review")
+      expect(JSON.stringify(timeline)).not.toContain("Integration finding")
+      if (lab.name === "gitea") expect(timeline.filter((entry: any) => entry.review_id === reviews[0].id)).toHaveLength(0)
+      else expect(receipt.warnings.join("\n")).toContain("PENDING_TIMELINE_RETAINED")
+      const next = context()
+      expect(await incrementalTool.execute({ ...f.args, format: "parsed" }, next)).not.toContain("No New Changes")
+      await submit(f.args, next)
+      expect((await Bun.file(receiptPath).json()).status).toBe("draft_reused")
+      expect(await api(actor, `${f.path}/reviews`)).toHaveLength(1)
+    }, 30000)
+
+    test("draft preserves human changes to an existing pending review", async () => {
+      const f = await fixture(lab); configure(lab)
+      process.env.REVIEW_MODE = "draft"; process.env.REVIEW_OUTPUT_DIR = join(state!, "output")
+      const ctx = context(); await fetchDiff(f.args, ctx); await submit(f.args, ctx)
+      const actor = { ...lab, adminToken: lab.botToken }
+      const original = (await api(actor, `${f.path}/reviews`))[0]
+      await api(actor, `${f.path}/reviews`, { event: "PENDING", body: "Human edited pending summary", commit_id: f.head })
+      await expect(submit(f.args, ctx)).rejects.toThrow("DRAFT_EDITED")
+      const reviews = await api(actor, `${f.path}/reviews`)
+      expect(reviews).toHaveLength(1)
+      expect(reviews[0].id).toBe(original.id)
+      expect(reviews[0].body).toBe("Human edited pending summary")
+    }, 30000)
+
+    test("manual submission is recognized without another review or a completed bot baseline", async () => {
+      const f = await fixture(lab); configure(lab)
+      process.env.REVIEW_MODE = "draft"; process.env.REVIEW_OUTPUT_DIR = join(state!, "output")
+      const ctx = context(); await fetchDiff(f.args, ctx); await submit(f.args, ctx)
+      const actor = { ...lab, adminToken: lab.botToken }
+      const original = (await api(actor, `${f.path}/reviews`))[0]
+      await api(actor, `${f.path}/reviews/${original.id}`, { event: "COMMENT", body: "Human final summary" })
+      expect(await submit(f.args, ctx)).toContain("already submitted by reviewer")
+      expect(await api(actor, `${f.path}/reviews`)).toHaveLength(1)
+      process.env.REVIEW_MODE = "submit"
+      expect(await incrementalTool.execute({ ...f.args, format: "parsed" }, context())).not.toContain("No New Changes")
+      const timeline = await api(actor, `${f.path.replace("/pulls/", "/issues/")}/timeline`)
+      const entries = timeline.filter((entry: any) => entry.type === "review" && entry.review_id === original.id)
+      expect(entries).toHaveLength(lab.name === "gitea" ? 1 : 2)
+    }, 30000)
+
+    test("neither delivery mode takes over a manually started pending review", async () => {
+      const f = await fixture(lab); configure(lab)
+      const actor = { ...lab, adminToken: lab.botToken }
+      await api(actor, `${f.path}/reviews`, { event: "PENDING", body: "Existing human pending work", commit_id: f.head })
+      const ctx = context(); await fetchDiff(f.args, ctx)
+      await expect(submit(f.args, ctx)).rejects.toThrow("PENDING_REVIEW_EXISTS")
+      process.env.REVIEW_MODE = "draft"; process.env.REVIEW_OUTPUT_DIR = join(state!, "output")
+      await expect(submit(f.args, ctx)).rejects.toThrow("DRAFT_CONFLICT")
+      expect(await api(actor, `${f.path}/reviews`)).toHaveLength(1)
+    }, 30000)
+
+    test("new commits cannot overwrite a pending draft from an older snapshot", async () => {
+      const f = await fixture(lab); configure(lab)
+      process.env.REVIEW_MODE = "draft"; process.env.REVIEW_OUTPUT_DIR = join(state!, "output")
+      const first = context(); await fetchDiff(f.args, first); await submit(f.args, first)
+      await f.push("export const a = 1\nexport const b = 20\n")
+      for (let attempt = 0; attempt < 30 && (await api(lab, f.path)).head.sha === f.head; attempt++) await Bun.sleep(100)
+      const next = context(); await fetchDiff(f.args, next)
+      await expect(submit(f.args, next)).rejects.toThrow("DRAFT_CONFLICT")
+      const reviews = await api({ ...lab, adminToken: lab.botToken }, `${f.path}/reviews`)
+      expect(reviews).toHaveLength(1)
+      expect(reviews[0].commit_id).toBe(f.head)
+    }, 30000)
+
+    test("a lost draft POST response is reconciled without adding pending comments twice", async () => {
+      const f = await fixture(lab); let posts = 0
+      const url = proxyFor(lab, async (request, response) => {
+        if (request.method === "POST" && new URL(request.url).pathname.endsWith("/reviews")) {
+          posts++; const body = await response.text(); await Bun.sleep(1500)
+          return new Response(body, { status: response.status })
+        }
+        return response
+      })
+      configure(lab, url); process.env.GITEA_API_TIMEOUT_MS = "500"
+      process.env.REVIEW_MODE = "draft"; process.env.REVIEW_OUTPUT_DIR = join(state!, "output")
+      const ctx = context(); await fetchDiff(f.args, ctx); await submit(f.args, ctx); await submit(f.args, ctx)
+      expect(posts).toBe(1)
+      const actor = { ...lab, adminToken: lab.botToken }
+      const reviews = await api(actor, `${f.path}/reviews`)
+      expect(reviews).toHaveLength(1)
+      expect(await api(actor, `${f.path}/reviews/${reviews[0].id}/comments`)).toHaveLength(1)
+    }, 30000)
+
     test("publishes a real review and line comment on the captured commit", async () => {
       const f = await fixture(lab); configure(lab); const ctx = context()
       expect(await fetchDiff(f.args, ctx)).toContain(`[NEW:2] +export const b = 2`)

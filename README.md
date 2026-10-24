@@ -6,13 +6,14 @@
 
 [中文文档](README_zh.md) | English
 
-An AI-powered **automatic code review tool for Gitea/Forgejo PRs**, built on the [OpenCode](https://opencode.ai) plugin system. It listens for PR and comment events via Gitea Actions, automatically fetches code diffs, and submits structured reviews.
+An AI-powered **code review tool for Gitea/Forgejo PRs**, built on the [OpenCode](https://opencode.ai) plugin system. Run it externally with Docker for a selected repository/PR, or trigger it through Gitea Actions. It fetches code diffs and either submits a structured review or saves a draft for a human reviewer.
 
 ## ✨ Features
 
 - 🤖 **AI-Powered Code Review** - Uses Claude/GPT/DeepSeek models to analyze code changes
 - 📝 **Line-Level Comments** - Provides precise feedback on specific code lines
 - ✅ **Review Decisions** - Supports approve, request_changes, and comment states
+- ✍️ **Draft Reviews** - Save pending comments under the human reviewer's account, then edit and submit in the native UI
 - 🔄 **Auto-Trigger** - Triggered by `/oc` or `/opencode` comments
 - 🔁 **Incremental Review** - Only reviews new changes since last review (for updated PRs)
 - 🏷️ **Structured Tags** - Categorizes issues by type (BUG, SECURITY, PERFORMANCE) and severity
@@ -23,7 +24,11 @@ An AI-powered **automatic code review tool for Gitea/Forgejo PRs**, built on the
 
 ## 📦 Installation
 
-### Docker Setup Without an Install Script (Recommended)
+For manual reviews without installing anything in the target repository, use
+[external Docker draft mode](#draft-first-submit-manually). It needs no workflow,
+checkout or target-code mount. See the [screenshots and validation](docs/draft-review-validation.md).
+
+### Docker Setup for Actions Without an Install Script
 
 Docker setup only needs **one workflow file**. You do not need to run `install.sh` or add `.opencode-review/` to your repository.
 
@@ -91,7 +96,7 @@ Configure the following secrets in your Gitea repository:
 
 | Secret Name | Description |
 |-------------|-------------|
-| `OPENCODE_GIT_TOKEN` | Gitea API Token (requires repo permissions) |
+| `OPENCODE_GIT_TOKEN` | Gitea API token: `read:user` + `write:repository`; add `write:issue` for draft timeline handling. The account must have repository access. |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key (default model) |
 | `ANTHROPIC_API_KEY` | Anthropic API Key (optional) |
 | `OPENAI_API_KEY` | OpenAI API Key (optional) |
@@ -353,7 +358,6 @@ or
 
 ```bash
 docker run --rm \
-  -v $(pwd):/workspace \
   -e GITEA_TOKEN="your-token" \
   -e GITEA_SERVER_URL="https://your-gitea.example.com" \
   -e DEEPSEEK_API_KEY="your-key" \
@@ -366,6 +370,39 @@ docker run --rm \
 `REPO_NAME` can be either `repo` or `owner/repo` (entrypoint will normalize it).
 
 The image is published for `linux/amd64` and `linux/arm64`. A mounted project is used only for inferring `GITEA_SERVER_URL`; its `.opencode-review/` is ignored unless `OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true`.
+
+### Draft first, submit manually
+
+Set `REVIEW_MODE=draft` and mount a persistent `REVIEW_OUTPUT_DIR`. The same
+external Docker command can review any authorized repository/PR without adding
+a workflow or checking out its code. The default remains `REVIEW_MODE=submit`.
+
+For an unreleased change, first [build the checked-out source](docs/draft-review.md#choose-an-image)
+and set `REVIEW_IMAGE` to that local image; the published `latest` tag does not
+include a PR until it has been merged and its publishing workflow succeeds.
+Export `GITEA_TOKEN`, `GITEA_SERVER_URL` and your model provider key in your shell.
+
+```bash
+mkdir -p review-output
+docker run --rm \
+  -v "$(pwd)/review-output:/review-output" \
+  -e GITEA_TOKEN -e GITEA_SERVER_URL -e DEEPSEEK_API_KEY \
+  -e REPO_OWNER="your-org" -e REPO_NAME="your-repo" -e PR_NUMBER=123 \
+  -e REVIEW_MODE=draft -e REVIEW_OUTPUT_DIR=/review-output \
+  "${REVIEW_IMAGE:-ghcr.io/ccsert/opencode-review:latest}"
+```
+
+Use the actual human reviewer's token. Open the returned **Files** page with that
+same account, edit its pending line comments, copy the exported Markdown summary
+into the review form, and manually choose Comment, Approve or Request Changes.
+The native editor does not prefill summaries. AI summaries stay local: some
+server versions expose pending review bodies through their timeline API.
+
+Repeated draft runs reuse the original review. Manual edits and existing pending
+reviews are preserved; conflicts stop the run. A manually submitted draft is
+acknowledged without becoming an automatic incremental-review baseline.
+See [draft lifecycle, server compatibility and recovery](docs/draft-review.md),
+including the Forgejo timeline-display limitation.
 
 ### Local Testing (Source)
 

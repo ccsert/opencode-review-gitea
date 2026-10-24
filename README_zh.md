@@ -6,13 +6,14 @@
 
 中文 | [English](README.md)
 
-一个基于 [OpenCode](https://opencode.ai) 的 **Gitea/Forgejo PR 自动代码审查工具**。通过 Gitea Actions 监听 PR 和评论事件，AI Agent 自动获取代码差异并提交结构化审查。
+一个基于 [OpenCode](https://opencode.ai) 的 **Gitea/Forgejo PR 代码审查工具**。可以在仓库外通过 Docker 指定仓库和 PR，也可以用 Gitea Actions 自动触发；AI 获取代码差异后直接提交审查，或保存草稿交给人工编辑、确认后提交。
 
 ## ✨ 功能特性
 
 - 🤖 **AI 驱动的代码审查** - 使用 Claude/GPT/DeepSeek 等模型分析代码变更
 - 📝 **行级评论** - 在具体代码行上提供精确反馈
 - ✅ **审查决策** - 支持 approve、request_changes、comment 三种审查状态
+- ✍️ **草稿审查** - 用实际审查者账号保存待定评论，再到原生页面编辑和提交
 - 🔄 **自动触发** - 通过 `/oc` 或 `/opencode` 评论触发审查
 - 🔁 **增量审查** - 仅审查上次审查后的新变更（适用于 PR 更新）
 - 🏷️ **结构化标签** - 按类型（BUG、SECURITY、PERFORMANCE）和严重程度分类问题
@@ -23,7 +24,9 @@
 
 ## 📦 安装
 
-### 无需安装脚本的 Docker 接入（推荐）
+如果需要在目标仓库外手动审查，直接使用 [Docker 草稿模式](#先生成草稿再由人工提交)，无需添加 workflow、克隆或挂载目标代码。效果截图和验证范围见 [验收说明](docs/draft-review-validation.md)。
+
+### 无需安装脚本的 Docker Actions 接入
 
 Docker 接入只需要 **一个 workflow 文件**，无需执行 `install.sh`，也无需向仓库添加 `.opencode-review/`。
 
@@ -91,7 +94,7 @@ curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/i
 
 | Secret 名称 | 说明 |
 |------------|------|
-| `OPENCODE_GIT_TOKEN` | Gitea API Token（需要 repo 权限） |
+| `OPENCODE_GIT_TOKEN` | Gitea API Token：`read:user` + `write:repository`；草稿时间线处理还需要 `write:issue`。账号本身也需有仓库访问权限。 |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key（默认模型） |
 | `ANTHROPIC_API_KEY` | Anthropic API Key（可选） |
 | `OPENAI_API_KEY` | OpenAI API Key（可选） |
@@ -351,7 +354,6 @@ OpenCode 会截断超过 2000 行或 50 KiB 的工具输出。因此 diff 工具
 
 ```bash
 docker run --rm \
-  -v $(pwd):/workspace \
   -e GITEA_TOKEN="your-token" \
   -e GITEA_SERVER_URL="https://your-gitea.example.com" \
   -e DEEPSEEK_API_KEY="your-key" \
@@ -364,6 +366,28 @@ docker run --rm \
 `REPO_NAME` 既可以传 `repo`，也可以传 `owner/repo`（entrypoint 会自动规范化）。
 
 镜像发布了 `linux/amd64` 和 `linux/arm64` 两种架构。挂载的项目目录仅用于推断 `GITEA_SERVER_URL`；除非设置 `OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true`，其中的 `.opencode-review/` 会被忽略。
+
+### 先生成草稿，再由人工提交
+
+设置 `REVIEW_MODE=draft`，并挂载持久化的 `REVIEW_OUTPUT_DIR`。Docker 可以在目标仓库外运行，无需添加 workflow，也无需克隆或挂载目标代码。默认仍为 `REVIEW_MODE=submit`，直接发布审查。
+
+测试尚未发布的改动时，先从对应分支 [构建本地镜像](docs/draft-review.md#choose-an-image)，并设置 `REVIEW_IMAGE`。PR 合并且发布流程成功后，公开的 `latest` 镜像才会包含该改动。在当前 shell 中导出 `GITEA_TOKEN`、`GITEA_SERVER_URL` 和模型服务密钥后运行：
+
+```bash
+mkdir -p review-output
+docker run --rm \
+  -v "$(pwd)/review-output:/review-output" \
+  -e GITEA_TOKEN -e GITEA_SERVER_URL -e DEEPSEEK_API_KEY \
+  -e REPO_OWNER="your-org" -e REPO_NAME="your-repo" -e PR_NUMBER=123 \
+  -e REVIEW_MODE=draft -e REVIEW_OUTPUT_DIR=/review-output \
+  "${REVIEW_IMAGE:-ghcr.io/ccsert/opencode-review:latest}"
+```
+
+使用**实际审查者账号的 Token**。运行结束后，以同一账号打开返回的 Files 页面，修改待定行评论，把导出的 Markdown 总结复制到评审框，再手动选择“评论 / 通过 / 请求变更”。原生页面不会自动预填总结。
+
+AI 总结仅保存在本地，因为部分服务器版本的时间线 API 会返回待定 review 的正文。重复运行复用原草稿；已有人工草稿或被人工修改的内容会触发停止，避免覆盖。手动提交后可识别原 review，且不会把它算成自动增量审查基准。
+
+生命周期、并发限制、恢复方法及 Forgejo 时间线显示限制见 [草稿模式说明](docs/draft-review.md)。
 
 ### 本地测试（源码）
 

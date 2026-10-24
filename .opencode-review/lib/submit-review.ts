@@ -6,6 +6,8 @@ import { formatCommentBody } from "./review-format"
 import { digest, loadSnapshot, reviewMarker, stateDirectory, unreadPages, writeJSON, writeReceipt } from "./review-state"
 import { isCompletedReview, submissionKey } from "./reviews"
 import { commentsDigest, confirmReviewContent } from "./review-confirmation"
+import { reviewMode } from "./review-mode"
+import { saveDraft } from "./draft-review"
 
 export interface ReviewComment { path: string; line?: number; old_line?: number; body: string; suggestion?: string }
 export interface ReviewInput extends RepositoryPR {
@@ -20,6 +22,7 @@ export function normalizeReviewText(text: string) {
 }
 
 export async function submitReview(args: ReviewInput, sessionID: string) {
+  const mode = reviewMode()
   const api = new GiteaClient()
   const path = prPath(args)
   const snapshot = await loadSnapshot(api.baseURL, args, sessionID)
@@ -44,12 +47,13 @@ export async function submitReview(args: ReviewInput, sessionID: string) {
     }
     return { path: comment.path,
       body: formatCommentBody(comment.body, comment.suggestion),
-      new_position: old ? 0 : line, old_position: old ? line : 0 }
+      new_position: old ? 0 : line!, old_position: old ? line! : 0 }
   })
   const user = await api.json<{ id: number }>("/user")
+  const summary = normalizeReviewText(args.summary)
+  if (mode === "draft") return saveDraft(api, args, snapshot, summary, comments, user.id, args.approval ?? "comment")
   const key = submissionKey(api.baseURL, args.owner, args.repo, args.pull_number, user.id, snapshot.head, snapshot.base, snapshot.scope, snapshot.context)
   const identity = { head: snapshot.head, base: snapshot.base, scope: snapshot.scope, key, context: snapshot.context }
-  const summary = normalizeReviewText(args.summary)
   const marker = { ...identity, summaryDigest: digest(summary), commentsDigest: commentsDigest(comments) }
   const intent = join(stateDirectory(), `submission-${key}.json`)
 
@@ -75,7 +79,13 @@ export async function submitReview(args: ReviewInput, sessionID: string) {
     await writeReceipt(receipt)
     return `${duplicate ? "Review already submitted" : "Review submitted and confirmed"}: ${receipt.url}\nCommit: ${receipt.head}`
   }
-  const existing = (await api.list<Review>(`${path}/reviews`)).find(review => isCompletedReview(review, user.id, identity))
+  const reviews = await api.list<Review>(`${path}/reviews`)
+  // The server merges all pending comments of this account into a submitted
+  // review. Never publish a human's pending work through the automatic mode.
+  if (reviews.some(review => review.user?.id === user.id && review.state === "PENDING")) {
+    throw new Error("PENDING_REVIEW_EXISTS: This account has a pending review. Submit or discard it manually before using submit mode")
+  }
+  const existing = reviews.find(review => isCompletedReview(review, user.id, identity))
   await checkCurrent()
   if (existing) {
     try { return await confirm(existing, true) }

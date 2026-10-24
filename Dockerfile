@@ -2,7 +2,8 @@
 # Docker image for AI-powered PR code review
 #
 # Build: docker build -t ghcr.io/ccsert/opencode-review:latest .
-# Run:   docker run --rm -v $(pwd):/workspace -e GITEA_TOKEN=xxx ghcr.io/ccsert/opencode-review
+# Run with explicit GITEA_SERVER_URL, REPO_OWNER, REPO_NAME and PR_NUMBER;
+# target code does not need to be mounted. See docs/draft-review.md.
 
 FROM oven/bun:1
 
