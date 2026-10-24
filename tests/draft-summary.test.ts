@@ -21,6 +21,7 @@ let loseResponse: boolean
 let rejectPost: boolean
 let comments: { id: number; user: { id: number }; body: string }[]
 let pendingReads: number
+let stallReview: boolean
 
 const watch = (options: Parameters<typeof watchDraftSummary>[3] = {}) =>
   watchDraftSummary(new GiteaClient(), args, key, { timeoutMs: 200, pollMs: 5, ...options })
@@ -28,12 +29,16 @@ const watch = (options: Parameters<typeof watchDraftSummary>[3] = {}) =>
 beforeEach(async () => {
   env = { ...process.env }
   directory = await mkdtemp(join(tmpdir(), "draft-summary-"))
-  head = ref = "head"; posts = 0; comments = []; loseResponse = rejectPost = false; pendingReads = 0
+  head = ref = "head"; posts = 0; comments = []; loseResponse = rejectPost = false; pendingReads = 0; stallReview = false
   review = { id: 42, user: { id: 7, login: "human" }, state: "PENDING", commit_id: "head", body: "Human edits" }
   server = Bun.serve({ port: 0, fetch: async request => {
     const path = new URL(request.url).pathname
     if (path === "/api/v1/user") return Response.json({ id: 7 })
-    if (path.endsWith("/reviews/42")) { pendingReads++; return Response.json(review) }
+    if (path.endsWith("/reviews/42")) {
+      pendingReads++
+      if (stallReview) await Bun.sleep(1000)
+      return Response.json(review)
+    }
     if (path.endsWith("/pulls/1")) return Response.json({ head: { sha: head }, base: { sha: "base" }, state: "open", merged: false })
     if (path.endsWith("/git/refs/pull/1/head")) return Response.json([{ ref: "refs/pull/1/head", object: { sha: ref } }])
     if (path.endsWith("/issues/1/comments")) {
@@ -151,4 +156,16 @@ test("concurrent watchers serialize; cancellation releases the lock for resumpti
   review.state = "COMMENT"; await watch()
   expect(posts).toBe(1)
   expect(await readFile(join(directory, `review-${key}.md`), "utf8")).toBe(record.summary)
+})
+test("cancellation aborts an in-flight API read and releases the lock promptly", async () => {
+  stallReview = true
+  const controller = new AbortController()
+  const first = watch({ signal: controller.signal, timeoutMs: 2000 })
+  while (!pendingReads) await Bun.sleep(1)
+  controller.abort(new Error("Stopped during API read"))
+  await expect(Promise.race([first, Bun.sleep(250).then(() => { throw new Error("Cancellation did not stop the API request") })]))
+    .rejects.toThrow("Stopped during API read")
+  stallReview = false; review.state = "COMMENT"
+  await watch()
+  expect(posts).toBe(1)
 })

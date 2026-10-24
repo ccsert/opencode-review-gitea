@@ -19,7 +19,8 @@ export async function watchDraftSummary(api: GiteaClient, args: RepositoryPR, ke
   const timeout = options.timeoutMs ?? draftWaitSeconds() * 1000
   const recordPath = join(stateDirectory(), `draft-${key}.json`)
   const target = receiptTarget(api.baseURL, args)
-  const user = await api.json<{ id: number }>("/user")
+  const requestOptions = { signal: options.signal }
+  const user = await api.json<{ id: number }>("/user", requestOptions)
   const lock = join(stateDirectory(), `draft-lock-${digest(JSON.stringify([target, user.id]))}`)
   await mkdir(stateDirectory(), { recursive: true, mode: 0o700 })
   try { await mkdir(lock, { mode: 0o700 }) }
@@ -37,14 +38,14 @@ export async function watchDraftSummary(api: GiteaClient, args: RepositoryPR, ke
     const commentsPath = `${path.slice(0, path.lastIndexOf("/pulls/"))}/issues/${args.pull_number}/comments`
     const marker = `<!-- opencode-review-draft-summary:v1 ${key} review=${record.reviewId} -->`
     async function currentReview() {
-      const review = await api.json<Review>(`${path}/reviews/${record!.reviewId}`)
+      const review = await api.json<Review>(`${path}/reviews/${record!.reviewId}`, requestOptions)
       if (review.user.id !== user.id || review.commit_id !== record!.head || review.dismissed ||
           !["PENDING", "COMMENT", "APPROVED", "REQUEST_CHANGES"].includes(review.state)) {
         throw new Error("DRAFT_CHANGED: Review owner, commit, dismissal or state changed; no summary published")
       }
-      const pr = await api.json<PullRequest>(path)
+      const pr = await api.json<PullRequest>(path, requestOptions)
       requireOpen(pr)
-      if (pr.head.sha !== record!.head || pr.base.sha !== record!.base || await pullRefHead(api, args) !== record!.head) {
+      if (pr.head.sha !== record!.head || pr.base.sha !== record!.base || await pullRefHead(api, args, requestOptions) !== record!.head) {
         throw new PRChangedError("The draft snapshot is stale; no summary published")
       }
       return review
@@ -71,7 +72,7 @@ export async function watchDraftSummary(api: GiteaClient, args: RepositoryPR, ke
       return url(record.summaryPublication.commentId)
     }
     const findPublished = async () => {
-      const matches = (await api.list<Comment>(commentsPath)).filter(comment => comment.user.id === user.id && comment.body.includes(marker))
+      const matches = (await api.list<Comment>(commentsPath, requestOptions)).filter(comment => comment.user.id === user.id && comment.body.includes(marker))
       if (matches.length > 1) throw new Error("DRAFT_SUMMARY_AMBIGUOUS: Multiple matching summary comments; no further write")
       return matches[0]
     }
@@ -89,7 +90,7 @@ export async function watchDraftSummary(api: GiteaClient, args: RepositoryPR, ke
       // back this marker; it must never repeat a potentially successful write.
       await writeJSON(recordPath, record)
       try {
-        await api.request(commentsPath, { method: "POST", body: JSON.stringify({ body: record.summaryPublication.body }) })
+        await api.request(commentsPath, { ...requestOptions, method: "POST", body: JSON.stringify({ body: record.summaryPublication.body }) })
       } catch { /* Reconcile an accepted POST even if its response was lost. */ }
       published = await findPublished()
     }

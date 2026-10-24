@@ -24,3 +24,21 @@ test("production API client reads every review page", async () => {
     if (oldToken === undefined) delete process.env.GITEA_TOKEN; else process.env.GITEA_TOKEN = oldToken
   }
 })
+
+test("a caller cancellation signal does not disable the API request timeout", async () => {
+  const previous = { ...process.env }
+  const server = Bun.serve({ port: 0, async fetch() { await Bun.sleep(1000); return Response.json([]) } })
+  try {
+    process.env.GITEA_SERVER_URL = server.url.origin
+    process.env.GITEA_TOKEN = "test-token"
+    process.env.GITEA_API_TIMEOUT_MS = "20"
+    delete process.env.OPENCODE_REVIEW_TARGET
+    const request = new GiteaClient().list("/reviews", { signal: new AbortController().signal })
+    await expect(Promise.race([request, Bun.sleep(250).then(() => { throw new Error("Timeout was disabled") })]))
+      .rejects.toThrow(/timeout|timed out/i)
+  } finally {
+    server.stop(true)
+    for (const name of Object.keys(process.env)) if (!(name in previous)) delete process.env[name]
+    Object.assign(process.env, previous)
+  }
+})

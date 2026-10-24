@@ -24,11 +24,15 @@ confirmed an empty submitted review body and one follow-up summary matching
 the local export. Separate API tests preserved edited native review text and
 line comments, and repeated watching did not add a second summary.
 
-The local regression suite passed 161 tests (401 assertions); the two-server
+The local regression suite passed 163 tests (404 assertions); the two-server
 API suite passed 50 tests (268 assertions). Container checks used real OpenCode
 tool dispatch and a deterministic model protocol fixture for both submit mode
 and draft-to-human-submission-to-summary delivery. Those protocol checks do not
 measure model quality. The real-model/browser run is a separate evidence layer.
+
+Review follow-up also verified cancellation during an in-flight API request:
+the watcher promptly releases its lock for resumption, while per-request timeouts
+remain enforced alongside the cancellation signal.
 
 Waiting defaults to one hour and resumes with `draft-watch <key>` using the
 same output mount, account and PR, without another model call. Pending comments
