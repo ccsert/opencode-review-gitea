@@ -8,6 +8,8 @@ import diffTool from "../../.opencode-review/tools/gitea-pr-diff"
 import incrementalTool from "../../.opencode-review/tools/gitea-incremental-diff"
 import reviewTool from "../../.opencode-review/tools/gitea-review"
 import filesTool from "../../.opencode-review/tools/gitea-pr-files"
+import { GiteaClient } from "../../.opencode-review/lib/gitea"
+import { watchDraftSummary } from "../../.opencode-review/lib/draft-summary"
 
 const context = () => ({ sessionID: crypto.randomUUID(), messageID: "integration", agent: "code-review",
   abort: new AbortController().signal, metadata() {}, async ask() {} })
@@ -65,6 +67,34 @@ function proxyFor(lab: Lab, fault: (request: Request, response: Response) => Pro
 
 for (const lab of await labs()) {
   describe(lab.name, () => {
+    test("native human submission automatically receives its local summary once, preserving human edits", async () => {
+      const f = await fixture(lab); configure(lab)
+      process.env.REVIEW_MODE = "draft"; process.env.REVIEW_OUTPUT_DIR = join(state!, "output")
+      const receiptPath = join(state!, "receipt.json"); process.env.OPENCODE_REVIEW_RECEIPT_PATH = receiptPath
+      const ctx = context(); await fetchDiff(f.args, ctx); await submit(f.args, ctx)
+      const receipt = await Bun.file(receiptPath).json()
+      const actor = { ...lab, adminToken: lab.botToken }
+      const other = { ...lab, adminToken: lab.humanToken }
+      const completed = watchDraftSummary(new GiteaClient(), f.args, receipt.draftKey, { timeoutMs: 5000, pollMs: 20 })
+      await Bun.sleep(60)
+      expect(await api(other, `${f.path.replace("/pulls/", "/issues/")}/comments`)).toHaveLength(0)
+      expect((await api(actor, `${f.path}/reviews/${receipt.reviewId}`)).state).toBe("PENDING")
+      await Bun.write(receipt.artifacts.markdown, "Human refined local AI summary")
+      const line = (await api(actor, `${f.path}/reviews/${receipt.reviewId}/comments`))[0]
+      const repo = f.path.slice(0, f.path.lastIndexOf("/pulls/"))
+      await api(actor, `${repo}/issues/comments/${line.id}`, { body: "Human refined line comment" }, "PATCH")
+      await api(actor, `${f.path}/reviews/${receipt.reviewId}`, { event: "COMMENT", body: "My additional human assessment" })
+      expect(await completed).toContain("#issuecomment-")
+      const summaries = await api(other, `${f.path.replace("/pulls/", "/issues/")}/comments`)
+      expect(summaries).toHaveLength(1)
+      expect(summaries[0].body).toContain("Human refined local AI summary")
+      expect(summaries[0].body).toContain(`review \`${receipt.reviewId}\``)
+      expect((await api(actor, `${f.path}/reviews/${receipt.reviewId}`)).body).toBe("My additional human assessment")
+      expect((await api(actor, `${f.path}/reviews/${receipt.reviewId}/comments`))[0].body).toBe("Human refined line comment")
+      await watchDraftSummary(new GiteaClient(), f.args, receipt.draftKey)
+      expect(await api(other, `${f.path.replace("/pulls/", "/issues/")}/comments`)).toHaveLength(1)
+    }, 30000)
+
     test("draft exports private summary, hides line comments and reuses the same pending review", async () => {
       const f = await fixture(lab); configure(lab)
       process.env.REVIEW_MODE = "draft"; process.env.REVIEW_OUTPUT_DIR = join(state!, "output")

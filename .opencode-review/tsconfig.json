@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["lib/**/*.ts", "run-review.ts", "tools/*.ts", "env.d.ts"]
+  "include": ["lib/**/*.ts", "run-review.ts", "draft-watch.ts", "tools/*.ts", "env.d.ts"]
 }

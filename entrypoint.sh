@@ -297,6 +297,16 @@ main() {
             exec bun "$runner" "$prompt"
             ;;
             
+        draft-watch)
+            infer_gitea_server_url
+            normalize_repo_context
+            local watcher="/app/.opencode-review/draft-watch.ts"
+            if [ ! -f "$watcher" ]; then
+                watcher="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.opencode-review/draft-watch.ts"
+            fi
+            exec bun "$watcher" "$@"
+            ;;
+
         shell|bash|sh)
             log_info "Starting interactive shell..."
             exec /bin/bash
@@ -313,6 +323,7 @@ main() {
             echo ""
             echo "Commands:"
             echo "  review [prompt]  Run code review (default)"
+            echo "  draft-watch KEY  Resume automatic summary delivery after a human submits a draft (no model call)"
             echo "  shell            Start interactive shell"
             echo "  version          Show version"
             echo "  help             Show this help"
@@ -338,6 +349,7 @@ main() {
             echo "  REVIEW_LANGUAGE    auto|en|zh-CN (default: auto)"
             echo "  REVIEW_MODE        submit|draft (default: submit). Draft saves PENDING; human submits."
             echo "  REVIEW_OUTPUT_DIR  Persistent draft output directory; mount it to retain summaries and state."
+            echo "  DRAFT_WAIT_TIMEOUT_SECONDS  Wait for human submission, then attach summary (default: 3600; 0 saves only)."
             echo "  REVIEW_STYLE       concise|balanced|thorough|security (default: balanced)"
             echo "  REVIEW_TEMPLATE    standard|concise|thorough|security|performance|compliance, or a path/URL"
             echo "                     (default: derived from REVIEW_STYLE)"
