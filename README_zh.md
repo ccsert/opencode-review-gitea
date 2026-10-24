@@ -94,7 +94,7 @@ curl -fsSL https://raw.githubusercontent.com/ccsert/opencode-review-gitea/main/i
 
 | Secret 名称 | 说明 |
 |------------|------|
-| `OPENCODE_GIT_TOKEN` | Gitea API Token（需要 repo 权限） |
+| `OPENCODE_GIT_TOKEN` | Gitea API Token：`read:user` + `write:repository`；草稿时间线处理还需要 `write:issue`。账号本身也需有仓库访问权限。 |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key（默认模型） |
 | `ANTHROPIC_API_KEY` | Anthropic API Key（可选） |
 | `OPENAI_API_KEY` | OpenAI API Key（可选） |

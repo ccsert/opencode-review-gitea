@@ -26,8 +26,12 @@ to its tag or digest instead.
 ## Persistent output and human handoff
 
 Create a Gitea/Forgejo API token for the person who will finish the review.
-That account needs access to the target repository and `write:repository`
-scope. Export these values in your shell (use your own server and credentials):
+That account needs access to the target repository. For a scoped token, enable
+`read:user` (reviewer identity), `write:repository` (PR reviews and code access)
+and `write:issue` (timeline lookup and placeholder cleanup). On the tested
+Gitea/Forgejo versions, repository permission alone does not authorize the user
+or issue-timeline endpoints. Export these values in your shell (use your own
+server and credentials):
 
 ```bash
 export GITEA_SERVER_URL="https://git.example.com"

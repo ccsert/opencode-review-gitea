@@ -96,7 +96,7 @@ Configure the following secrets in your Gitea repository:
 
 | Secret Name | Description |
 |-------------|-------------|
-| `OPENCODE_GIT_TOKEN` | Gitea API Token (requires repo permissions) |
+| `OPENCODE_GIT_TOKEN` | Gitea API token: `read:user` + `write:repository`; add `write:issue` for draft timeline handling. The account must have repository access. |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key (default model) |
 | `ANTHROPIC_API_KEY` | Anthropic API Key (optional) |
 | `OPENAI_API_KEY` | OpenAI API Key (optional) |

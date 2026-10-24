@@ -113,3 +113,10 @@ protocol checks, then exposed a test-harness ownership assumption: the host
 runner could not read a root-owned 0600 draft export. The smoke check now reads
 the export in a container with the same identity, keeping the private file
 mode. The usage guide documents this Linux bind-mount behavior as well.
+
+Scoped-token checks on both servers confirmed that `write:repository` alone
+cannot read `/user`, and adding `read:user` still cannot read the issue timeline.
+The usage guide lists the required draft scopes: `read:user`, `write:repository`
+and `write:issue`. A complete production-module draft run with those three
+scopes succeeded on each server; the temporary validation tokens were revoked
+afterward.
