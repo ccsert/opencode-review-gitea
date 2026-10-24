@@ -353,7 +353,6 @@ or
 
 ```bash
 docker run --rm \
-  -v $(pwd):/workspace \
   -e GITEA_TOKEN="your-token" \
   -e GITEA_SERVER_URL="https://your-gitea.example.com" \
   -e DEEPSEEK_API_KEY="your-key" \
@@ -366,6 +365,34 @@ docker run --rm \
 `REPO_NAME` can be either `repo` or `owner/repo` (entrypoint will normalize it).
 
 The image is published for `linux/amd64` and `linux/arm64`. A mounted project is used only for inferring `GITEA_SERVER_URL`; its `.opencode-review/` is ignored unless `OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true`.
+
+### Draft first, submit manually
+
+Set `REVIEW_MODE=draft` and mount a persistent `REVIEW_OUTPUT_DIR`. The same
+external Docker command can review any authorized repository/PR without adding
+a workflow or checking out its code. The default remains `REVIEW_MODE=submit`.
+
+```bash
+mkdir -p review-output
+docker run --rm \
+  -v "$(pwd)/review-output:/review-output" \
+  -e GITEA_TOKEN -e GITEA_SERVER_URL -e DEEPSEEK_API_KEY \
+  -e REPO_OWNER="your-org" -e REPO_NAME="your-repo" -e PR_NUMBER=123 \
+  -e REVIEW_MODE=draft -e REVIEW_OUTPUT_DIR=/review-output \
+  ghcr.io/ccsert/opencode-review:latest
+```
+
+Use the actual human reviewer's token. Open the returned **Files** page with that
+same account, edit its pending line comments, copy the exported Markdown summary
+into the review form, and manually choose Comment, Approve or Request Changes.
+The native editor does not prefill summaries. AI summaries stay local: some
+server versions expose pending review bodies through their timeline API.
+
+Repeated draft runs reuse the original review. Manual edits and existing pending
+reviews are preserved; conflicts stop the run. A manually submitted draft is
+acknowledged without becoming an automatic incremental-review baseline.
+See [draft lifecycle, server compatibility and recovery](docs/draft-review.md),
+including the Forgejo timeline-display limitation.
 
 ### Local Testing (Source)
 

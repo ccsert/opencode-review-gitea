@@ -4,6 +4,7 @@ import { digest, markPageRead, saveSnapshot, writeReceipt } from "./review-state
 import { formatReviewContext, loadReviewContext } from "./review-context"
 import { findCommitsAfter, findLastReviewedCommit, isCompletedReview, orderCommits, type Commit } from "./reviews"
 import { confirmReviewContent } from "./review-confirmation"
+import { reviewMode } from "./review-mode"
 
 export async function fetchReviewDiff(args: RepositoryPR & {
   format?: "raw" | "parsed"; file_patterns?: string[]; incremental?: boolean; page?: number
@@ -35,7 +36,7 @@ export async function fetchReviewDiff(args: RepositoryPR & {
   let unchanged: Review | undefined
   let userId: number | undefined
   let commits: Commit[] = []
-  if (args.incremental) {
+  if (args.incremental && reviewMode() !== "draft") {
     const user = await api.json<{ id: number }>("/user")
     userId = user.id
     // Gitea and Forgejo versions disagree on the default commit order.

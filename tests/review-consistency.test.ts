@@ -37,6 +37,8 @@ let hideComments: boolean
 let base: string
 let publishedComments: { path: string; body: string }[]
 let savedEnv: NodeJS.ProcessEnv
+let timeline: { id: number; type: string; review_id: number; user: { id: number }; body: string }[]
+let retainTimeline: boolean
 let session = 0
 const context = () => ({ sessionID: `session-${++session}`, messageID: "message", agent: "code-review",
   abort: new AbortController().signal, metadata() {}, async ask() {} })
@@ -47,6 +49,7 @@ beforeEach(() => {
   head = "head-a"; reviews = []; posts = 0
   base = "base"
   publishedComments = []
+  timeline = []; retainTimeline = false
   loseResponse = false; rejectPost = false; failReadback = false; pushDuringDiff = false
   rejectStatus = 503
   pushDuringReviewList = false; hideComments = false; pushDuringPost = false
@@ -55,6 +58,11 @@ beforeEach(() => {
   server = Bun.serve({ port: 0, fetch: async request => {
     const path = new URL(request.url).pathname
     if (path === "/api/v1/user") return Response.json({ id: 7, login: "review-bot" })
+    if (path.endsWith("/issues/1/timeline")) return Response.json(timeline)
+    if (request.method === "DELETE" && /\/issues\/comments\/\d+$/.test(path)) {
+      if (!retainTimeline) timeline = timeline.filter(entry => entry.id !== Number(path.split("/").at(-1)))
+      return new Response(null, { status: 204 })
+    }
     if (path.endsWith("/pulls/1")) return Response.json({ head: { sha: head }, base: { sha: base }, state: "open", merged: false })
     if (path.endsWith("/pulls/1/commits")) return Response.json([{ sha: head }])
     if (path.endsWith("/git/refs/pull/1/head")) {
@@ -83,7 +91,10 @@ beforeEach(() => {
           position: wrongPosition ? 99 : comment.new_position, original_position: comment.old_position }))
         const result: Review = { id: reviews.length + 1, body: corruptSummary ? payload.body.replace("Review result", "Corrupted summary") : payload.body, state: payload.event,
           commit_id: payload.commit_id, user: { id: 7, login: "review-bot" }, comments_count: publishedComments.length }
-        if (!rejectPost) reviews.push(result)
+        if (!rejectPost) {
+          reviews.push(result)
+          timeline.push({ id: result.id, type: "review", review_id: result.id, user: result.user, body: payload.body })
+        }
         if (pushDuringPost) head = "head-b"
         if (pushRefDuringPost) gitRefHead = "head-b"
         if (loseResponse || rejectPost) return new Response("lost response", { status: rejectStatus })
@@ -103,6 +114,9 @@ beforeEach(() => {
   process.env.OPENCODE_REVIEW_STATE_DIR = directory
   delete process.env.OPENCODE_REVIEW_RUN_ID
   delete process.env.OPENCODE_REVIEW_RECEIPT_PATH
+  delete process.env.REVIEW_MODE
+  delete process.env.OPENCODE_REVIEW_MODE
+  process.env.REVIEW_OUTPUT_DIR = join(directory, "output")
 })
 afterEach(() => {
   server.stop(true)
@@ -114,6 +128,109 @@ afterEach(() => {
 const fetchDiff = (ctx: ReturnType<typeof context>) => diffTool.execute({ ...args, format: "parsed", file_patterns: undefined }, ctx)
 const submit = (ctx: ReturnType<typeof context>, line = 2) => reviewTool.execute({ ...args, summary: "Review result",
   approval: "comment", comments: [{ path: "app.ts", line, body: "**[BUG:HIGH]** Example finding" }] }, ctx)
+
+test("draft saves PENDING regardless of recommended approval and exports summary without exposing it in timeline", async () => {
+  process.env.REVIEW_MODE = "draft"
+  process.env.REVIEW_OUTPUT_DIR = join(directory, "output")
+  const ctx = context(); await fetchDiff(ctx)
+  const receiptPath = join(directory, "receipt.json"); process.env.OPENCODE_REVIEW_RECEIPT_PATH = receiptPath
+  expect(await reviewTool.execute({ ...args, summary: "Private AI summary", approval: "approve", comments: [] }, ctx)).toContain("not published")
+  expect(reviews[0].state).toBe("PENDING")
+  expect(reviews[0].body).not.toContain("Private AI summary")
+  expect(timeline).toHaveLength(0)
+  const receipt = await Bun.file(receiptPath).json()
+  expect(receipt.status).toBe("draft_saved")
+  expect(receipt.url).toBe(`${server.url.origin}/owner/repo/pulls/1/files`)
+  expect(await Bun.file(receipt.artifacts.markdown).text()).toBe("Private AI summary\n")
+  expect((await Bun.file(receipt.artifacts.json).json()).recommendation).toBe("approve")
+})
+test("draft repeat reuses existing content and does not become an incremental completed baseline", async () => {
+  process.env.REVIEW_MODE = "draft"
+  const ctx = context(); await fetchDiff(ctx); await submit(ctx)
+  const next = context()
+  expect(await incrementalTool.execute({ ...args, format: "parsed" }, next)).not.toContain("No New Changes")
+  expect(await submit(next)).toContain("not published")
+  expect(posts).toBe(1)
+})
+test("draft preserves manually edited comments and does not create or overwrite reviews", async () => {
+  process.env.REVIEW_MODE = "draft"
+  const ctx = context(); await fetchDiff(ctx); await submit(ctx)
+  publishedComments[0].body = "Human revision"
+  await expect(submit(ctx)).rejects.toThrow("DRAFT_EDITED")
+  expect(publishedComments[0].body).toBe("Human revision")
+  expect(posts).toBe(1)
+})
+test("draft recognizes manual submission after editing the summary", async () => {
+  process.env.REVIEW_MODE = "draft"
+  const ctx = context(); await fetchDiff(ctx); await submit(ctx)
+  reviews[0].state = "COMMENT"; reviews[0].body = "Human revised summary"
+  expect(await submit(ctx)).toContain("already submitted by reviewer")
+  expect(posts).toBe(1)
+})
+test("draft rejects an existing manual pending review and an older pending draft", async () => {
+  process.env.REVIEW_MODE = "draft"
+  reviews.push({ id: 99, user: { id: 7, login: "review-bot" }, state: "PENDING", commit_id: "old-head", body: "Human pending work" })
+  const ctx = context(); await fetchDiff(ctx)
+  await expect(submit(ctx)).rejects.toThrow("DRAFT_CONFLICT")
+  expect(posts).toBe(0)
+})
+test("submit mode refuses to accidentally publish a pending human review", async () => {
+  reviews.push({ id: 99, user: { id: 7, login: "review-bot" }, state: "PENDING", commit_id: head, body: "Human pending work" })
+  const ctx = context(); await fetchDiff(ctx)
+  await expect(submit(ctx)).rejects.toThrow("PENDING_REVIEW_EXISTS")
+  expect(posts).toBe(0)
+})
+test("draft reconciles an accepted POST with a lost response without another POST", async () => {
+  process.env.REVIEW_MODE = "draft"; loseResponse = true
+  const ctx = context(); await fetchDiff(ctx)
+  expect(await submit(ctx)).toContain("not published")
+  expect(posts).toBe(1)
+  expect(reviews).toHaveLength(1)
+})
+test("draft cannot retry a rejected or ambiguous POST automatically", async () => {
+  process.env.REVIEW_MODE = "draft"; rejectPost = true
+  const ctx = context(); await fetchDiff(ctx)
+  await expect(submit(ctx)).rejects.toThrow("DRAFT_UNKNOWN")
+  await expect(submit(ctx)).rejects.toThrow("DRAFT_UNKNOWN")
+  expect(posts).toBe(1)
+})
+test("retained native timeline entry contains only an opaque placeholder and emits a compatibility warning", async () => {
+  process.env.REVIEW_MODE = "draft"; retainTimeline = true
+  const ctx = context(); await fetchDiff(ctx)
+  expect(await submit(ctx)).toContain("PENDING_TIMELINE_RETAINED")
+  expect(timeline).toHaveLength(1)
+  expect(timeline[0].body).not.toContain("Review result")
+  expect(timeline[0].body).not.toContain("Example finding")
+})
+test("invalid mode fails before writing a review", async () => {
+  process.env.REVIEW_MODE = "invalid"
+  const ctx = context(); await fetchDiff(ctx)
+  await expect(submit(ctx)).rejects.toThrow("REVIEW_MODE_INVALID")
+  expect(posts).toBe(0)
+})
+test("draft requires persistent output configuration before any review write", async () => {
+  process.env.REVIEW_MODE = "draft"; delete process.env.REVIEW_OUTPUT_DIR
+  await expect(submit(context())).rejects.toThrow("DRAFT_OUTPUT_REQUIRED")
+  expect(posts).toBe(0)
+})
+test("concurrent draft calls create only one native review", async () => {
+  process.env.REVIEW_MODE = "draft"
+  const ctx = context(); await fetchDiff(ctx)
+  const results = await Promise.allSettled([submit(ctx), submit(ctx)])
+  expect(results.some(result => result.status === "fulfilled")).toBe(true)
+  expect(posts).toBe(1)
+  expect(reviews).toHaveLength(1)
+})
+test("draft exports do not overwrite a locally edited summary", async () => {
+  process.env.REVIEW_MODE = "draft"
+  const receiptPath = join(directory, "receipt.json"); process.env.OPENCODE_REVIEW_RECEIPT_PATH = receiptPath
+  const ctx = context(); await fetchDiff(ctx); await submit(ctx)
+  const receipt = await Bun.file(receiptPath).json()
+  await Bun.write(receipt.artifacts.markdown, "Human edited local summary")
+  await submit(ctx)
+  expect(await Bun.file(receipt.artifacts.markdown).text()).toBe("Human edited local summary")
+  expect(posts).toBe(1)
+})
 
 test("refuses to fetch a different PR from the configured target", async () => {
   process.env.PR_NUMBER = "99"

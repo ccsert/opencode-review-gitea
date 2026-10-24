@@ -26,14 +26,15 @@ function runReview(script: string[], options: {
   writeFileSync(join(directory, "opencode"), `#!/usr/bin/env bun
 import { appendFileSync, writeFileSync } from "node:fs"
 const args = process.argv.slice(2)
-appendFileSync(process.env.TEST_CALLS, JSON.stringify({ args, config: process.env.OPENCODE_CONFIG_DIR, cwd:process.cwd(), disableProjectConfig:process.env.OPENCODE_DISABLE_PROJECT_CONFIG }) + "\\n")
+appendFileSync(process.env.TEST_CALLS, JSON.stringify({ args, config: process.env.OPENCODE_CONFIG_DIR, cwd:process.cwd(), disableProjectConfig:process.env.OPENCODE_DISABLE_PROJECT_CONFIG,mode:process.env.OPENCODE_REVIEW_MODE,output:process.env.REVIEW_OUTPUT_DIR }) + "\\n")
 if (args[0] === "models") process.exit(Number(process.env.TEST_REFRESH_STATUS))
 if (args[0] === "run") {
   if (process.env.TEST_WRITE_RECEIPT === "true" && process.env.OPENCODE_REVIEW_RECEIPT_PATH) {
     const target = JSON.parse(process.env.TEST_RECEIPT_TARGET || process.env.OPENCODE_REVIEW_TARGET || JSON.stringify({server:process.env.GITEA_SERVER_URL,owner:process.env.REPO_OWNER,repo:process.env.REPO_NAME,pull_number:Number(process.env.PR_NUMBER)}))
     writeFileSync(process.env.OPENCODE_REVIEW_RECEIPT_PATH, JSON.stringify({
-      ...(process.env.TEST_LEGACY_RECEIPT === "true" ? {} : {target}),status:"submitted",head:"test-head",reviewId:1,
-      url:process.env.TEST_RECEIPT_URL || target.server + "/" + target.owner + "/" + target.repo + "/pulls/" + target.pull_number + "#pullreview-1"}))
+      ...(process.env.TEST_LEGACY_RECEIPT === "true" ? {} : {target}),status:process.env.TEST_RECEIPT_STATUS || "submitted",head:"test-head",reviewId:1,
+      ...(process.env.TEST_DRAFT_RECEIPT === "true" ? {mode:"draft",artifacts:{json:"/out/review.json",markdown:"/out/review.md"}} : {}),
+      url:process.env.TEST_RECEIPT_URL || target.server + "/" + target.owner + "/" + target.repo + "/pulls/" + target.pull_number + (process.env.TEST_DRAFT_RECEIPT === "true" ? "/files" : "#pullreview-1")}))
   }
   process.exit(Number(process.env.TEST_RUN_STATUS))
 }
@@ -59,6 +60,7 @@ if (args[0] === "run") {
       TEST_RUN_STATUS: String(options.runStatus ?? 0),
       TEST_WRITE_RECEIPT: String(options.receipt ?? true),
       OPENCODE_REVIEW_STATE_DIR: directory,
+      REVIEW_OUTPUT_DIR: options.env?.REVIEW_MODE === "draft" ? directory : undefined,
       ...options.env,
     },
   })
@@ -126,6 +128,33 @@ test("Docker version does not refresh models", () => {
   const result = runReview([join(root, "entrypoint.sh"), "version"])
   expect(result.status).toBe(0)
   expect(result.invocations.map(call => call.args)).toEqual([["--version"]])
+})
+
+test("Docker draft mode freezes delivery and accepts a verified saved draft receipt", () => {
+  const result = runReview([join(root, "entrypoint.sh"), "review"], { env: {
+    REVIEW_MODE: "draft", TEST_DRAFT_RECEIPT: "true", TEST_RECEIPT_STATUS: "draft_saved",
+  } })
+  expect(result.status).toBe(0)
+  expect(result.invocations.at(-1).mode).toBe("draft")
+  expect(result.invocations.at(-1).output).toBe(result.directory)
+  expect(result.invocations.at(-1).args.at(-1)).toContain("Delivery mode: draft")
+  expect(result.stdout).toContain("Verified draft:")
+})
+test("a published receipt cannot certify draft mode", () => {
+  const result = runReview([join(root, "entrypoint.sh"), "review"], { env: { REVIEW_MODE: "draft" } })
+  expect(result.status).toBe(1)
+  expect(result.stdout + result.stderr).toContain("REVIEW_NOT_CONFIRMED")
+})
+test("a draft receipt cannot certify submit mode", () => {
+  const result = runReview([join(root, "entrypoint.sh"), "review"], { env: {
+    TEST_DRAFT_RECEIPT: "true", TEST_RECEIPT_STATUS: "draft_saved",
+  } })
+  expect(result.status).toBe(1)
+})
+test("invalid delivery mode does not start the model", () => {
+  const result = runReview([join(root, "entrypoint.sh"), "review"], { env: { REVIEW_MODE: "invalid" } })
+  expect(result.status).toBe(1)
+  expect(result.invocations.some(call => call.args[0] === "run")).toBe(false)
 })
 
 describe("review receipt target", () => {

@@ -88,7 +88,9 @@ jobs:
           OPENCODE_VERSION: ${{ inputs.opencode_version || 'latest' }}
         run: docker build --build-arg "OPENCODE_VERSION=$OPENCODE_VERSION" -t opencode-review-reliability:local .
       - name: Exercise OpenCode tool dispatch and verified review receipt
-        run: bun tests/integration/model-smoke.ts
+        run: |
+          bun tests/integration/model-smoke.ts
+          REVIEW_TEST_MODE=draft bun tests/integration/model-smoke.ts
       - name: Save model integration logs
         if: failure()
         uses: actions/upload-artifact@v4

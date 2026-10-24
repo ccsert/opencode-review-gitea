@@ -351,7 +351,6 @@ OpenCode 会截断超过 2000 行或 50 KiB 的工具输出。因此 diff 工具
 
 ```bash
 docker run --rm \
-  -v $(pwd):/workspace \
   -e GITEA_TOKEN="your-token" \
   -e GITEA_SERVER_URL="https://your-gitea.example.com" \
   -e DEEPSEEK_API_KEY="your-key" \
@@ -364,6 +363,26 @@ docker run --rm \
 `REPO_NAME` 既可以传 `repo`，也可以传 `owner/repo`（entrypoint 会自动规范化）。
 
 镜像发布了 `linux/amd64` 和 `linux/arm64` 两种架构。挂载的项目目录仅用于推断 `GITEA_SERVER_URL`；除非设置 `OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG=true`，其中的 `.opencode-review/` 会被忽略。
+
+### 先生成草稿，再由人工提交
+
+设置 `REVIEW_MODE=draft`，并挂载持久化的 `REVIEW_OUTPUT_DIR`。Docker 可以在目标仓库外运行，无需添加 workflow，也无需克隆或挂载目标代码。默认仍为 `REVIEW_MODE=submit`，直接发布审查。
+
+```bash
+mkdir -p review-output
+docker run --rm \
+  -v "$(pwd)/review-output:/review-output" \
+  -e GITEA_TOKEN -e GITEA_SERVER_URL -e DEEPSEEK_API_KEY \
+  -e REPO_OWNER="your-org" -e REPO_NAME="your-repo" -e PR_NUMBER=123 \
+  -e REVIEW_MODE=draft -e REVIEW_OUTPUT_DIR=/review-output \
+  ghcr.io/ccsert/opencode-review:latest
+```
+
+使用**实际审查者账号的 Token**。运行结束后，以同一账号打开返回的 Files 页面，修改待定行评论，把导出的 Markdown 总结复制到评审框，再手动选择“评论 / 通过 / 请求变更”。原生页面不会自动预填总结。
+
+AI 总结仅保存在本地，因为部分服务器版本的时间线 API 会返回待定 review 的正文。重复运行复用原草稿；已有人工草稿或被人工修改的内容会触发停止，避免覆盖。手动提交后可识别原 review，且不会把它算成自动增量审查基准。
+
+生命周期、并发限制、恢复方法及 Forgejo 时间线显示限制见 [草稿模式说明](docs/draft-review.md)。
 
 ### 本地测试（源码）
 

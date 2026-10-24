@@ -5,7 +5,8 @@ import { dirname, join } from "node:path"
 import type { RepositoryPR, ReviewTarget } from "./gitea"
 
 export const digest = (value: string) => createHash("sha256").update(value).digest("hex")
-export const stateDirectory = () => process.env.OPENCODE_REVIEW_STATE_DIR || join(tmpdir(), "opencode-review-state")
+export const stateDirectory = () => process.env.OPENCODE_REVIEW_STATE_DIR || (process.env.REVIEW_OUTPUT_DIR
+  ? join(process.env.REVIEW_OUTPUT_DIR, ".state") : join(tmpdir(), "opencode-review-state"))
 
 export interface Snapshot {
   head: string
@@ -20,11 +21,14 @@ export interface Snapshot {
   pageDigest?: string
 }
 export interface Receipt {
+  mode?: "submit" | "draft"
   target: ReviewTarget
-  status: "submitted" | "duplicate" | "unchanged"
+  status: "submitted" | "duplicate" | "unchanged" | "draft_saved" | "draft_reused" | "draft_submitted"
   head: string
   reviewId: number
   url: string
+  artifacts?: { json: string; markdown: string }
+  warnings?: string[]
 }
 
 export function stateKey(server: string, pr: RepositoryPR) {

@@ -225,6 +225,7 @@ build_prompt() {
 print_config() {
     log_info "Configuration:"
     echo "  Model:    ${MODEL:-deepseek/deepseek-chat}"
+    echo "  Mode:     ${REVIEW_MODE:-submit}"
     echo "  Style:    ${REVIEW_STYLE:-balanced}"
     echo "  Template: ${REVIEW_TEMPLATE:-from REVIEW_STYLE}"
     echo "  Rules:    ${REVIEW_RULES:-auto (.gitea/review-rules*, .forgejo/review-rules*)}"
@@ -335,6 +336,8 @@ main() {
             echo "  OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG  Use .opencode-review from the workspace (default: false)."
             echo "                     Enable only when the workspace is a trusted checkout, never PR code."
             echo "  REVIEW_LANGUAGE    auto|en|zh-CN (default: auto)"
+            echo "  REVIEW_MODE        submit|draft (default: submit). Draft saves PENDING; human submits."
+            echo "  REVIEW_OUTPUT_DIR  Persistent draft output directory; mount it to retain summaries and state."
             echo "  REVIEW_STYLE       concise|balanced|thorough|security (default: balanced)"
             echo "  REVIEW_TEMPLATE    standard|concise|thorough|security|performance|compliance, or a path/URL"
             echo "                     (default: derived from REVIEW_STYLE)"
