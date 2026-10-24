@@ -44,7 +44,8 @@ async function exportDraft(record: DraftRecord) {
 
 async function removeTransportEntry(api: GiteaClient, args: RepositoryPR, record: DraftRecord) {
   const path = prPath(args)
-  const timeline = `${path.replace(/\/pulls\//, "/issues/")}/timeline`
+  const repository = path.slice(0, path.lastIndexOf("/pulls/"))
+  const timeline = `${repository}/issues/${args.pull_number}/timeline`
   const ownEntries = (entries: TimelineEntry[]) => entries.filter(entry => entry.type === "review" &&
     entry.review_id === record.reviewId && entry.user?.id === record.userId && entry.body === record.nativeBody)
   // Gitea 1.24 creates a timeline comment even for PENDING. It may be visible via
@@ -56,7 +57,7 @@ async function removeTransportEntry(api: GiteaClient, args: RepositoryPR, record
       throw new Error("DRAFT_CHANGED: The reviewer changed or submitted the draft during handoff")
     }
     try {
-      await api.request(`${path.slice(0, path.lastIndexOf("/pulls/"))}/issues/comments/${entry.id}`, { method: "DELETE" })
+      await api.request(`${repository}/issues/comments/${entry.id}`, { method: "DELETE" })
     } catch { /* The read-back below determines whether this API supports cleanup. */ }
   }
   return ownEntries(await api.list<TimelineEntry>(timeline)).length

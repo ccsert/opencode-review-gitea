@@ -144,6 +144,27 @@ test("draft saves PENDING regardless of recommended approval and exports summary
   expect(await Bun.file(receipt.artifacts.markdown).text()).toBe("Private AI summary\n")
   expect((await Bun.file(receipt.artifacts.json).json()).recommendation).toBe("approve")
 })
+for (const target of [{ ...args, owner: "pulls" }, { ...args, repo: "pulls" }]) {
+  test(`draft handoff succeeds when the target is ${target.owner}/${target.repo}`, async () => {
+    process.env.REVIEW_MODE = "draft"
+    process.env.REPO_OWNER = target.owner; process.env.REPO_NAME = target.repo
+    const receiptPath = join(directory, "receipt.json"); process.env.OPENCODE_REVIEW_RECEIPT_PATH = receiptPath
+    const input = { ...target, summary: "Private AI summary", approval: "comment" as const,
+      comments: [{ path: "app.ts", line: 2, body: "Draft finding" }] }
+    for (const expected of ["draft_saved", "draft_reused"]) {
+      const ctx = context()
+      await diffTool.execute({ ...target, format: "parsed", file_patterns: undefined }, ctx)
+      await reviewTool.execute(input, ctx)
+      const receipt = await Bun.file(receiptPath).json()
+      expect(receipt.status).toBe(expected)
+      expect(receipt.url).toBe(`${server.url.origin}/${target.owner}/${target.repo}/pulls/1/files`)
+      expect(timeline).toHaveLength(0)
+    }
+    expect(posts).toBe(1)
+    expect(reviews[0].state).toBe("PENDING")
+    expect(publishedComments).toHaveLength(1)
+  })
+}
 test("draft repeat reuses existing content and does not become an incremental completed baseline", async () => {
   process.env.REVIEW_MODE = "draft"
   const ctx = context(); await fetchDiff(ctx); await submit(ctx)

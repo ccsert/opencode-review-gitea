@@ -111,6 +111,18 @@ when explicitly configured; keep it persistent too. Files are created with
 mode 0600 and directories with mode 0700. Existing exports are not overwritten,
 so edits made to the local Markdown survive a repeated run.
 
+On Linux, bind mounts preserve numeric ownership. With the image's default
+container user, the exported 0600 files can be owned by root and unreadable to
+your host account. You can read the summary using the same image without
+changing its private permissions (replace `<key>` with the returned filename):
+
+```bash
+docker run --rm --entrypoint cat \
+  -v "$(pwd)/review-output:/review-output:ro" \
+  "${REVIEW_IMAGE:-ghcr.io/ccsert/opencode-review:latest}" \
+  "/review-output/review-<key>.md"
+```
+
 1. Open the returned `/pulls/<number>/files` page as the token's account.
 2. Review/edit the pending line comments.
 3. Copy the Markdown summary into the native review form; it is not prefilled.

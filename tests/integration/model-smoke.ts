@@ -90,7 +90,14 @@ for (const lab of await labs()) {
     if (draft) {
       const { readdir } = await import("node:fs/promises")
       const markdown = (await readdir(output)).find(name => name.endsWith(".md"))
-      if (!markdown || !(await Bun.file(join(output, markdown)).text()).includes("Deterministic local model integration")) throw new Error("Missing persisted draft summary")
+      if (!markdown) throw new Error("Missing persisted draft summary")
+      // On Linux the default container user owns the 0600 export. Read it in
+      // a container with the same identity instead of weakening its permissions.
+      const saved = Bun.spawnSync(["docker", "run", "--rm", "--entrypoint", "cat",
+        "-v", `${output}:/review-output:ro`, image, `/review-output/${markdown}`])
+      if (saved.exitCode !== 0 || !saved.stdout.toString().includes("Deterministic local model integration")) {
+        throw new Error("Missing persisted draft summary")
+      }
     }
     console.log(`${lab.name}: real OpenCode → production tools → ${draft ? "PENDING draft" : "review"} #${reviews[0].id} → verified receipt PASS`)
     console.log(`  ${lab.url}/${f.args.owner}/${f.args.repo}/pulls/${f.args.pull_number}`)

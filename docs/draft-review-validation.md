@@ -97,3 +97,19 @@ the PR's own workflow results for those statuses.
   illustrate why the handoff step matters.
 
 For repeatable automated checks, see [local testing](local-testing.md).
+
+### PR review follow-up
+
+The PR's automated review identified a timeline URL bug when an owner or
+repository is named `pulls`. The issue was reproduced with two focused tests
+that failed before the fix. Timeline lookup and deletion now share the exact
+repository path, and both cases verify draft creation, receipt generation,
+placeholder cleanup and reuse of the same review. The updated unit suite has
+142 passing tests; the original 140-test record above describes the initial
+UI acceptance runtime.
+
+The first Linux CI run passed the clean Dockerfile build and both submit-mode
+protocol checks, then exposed a test-harness ownership assumption: the host
+runner could not read a root-owned 0600 draft export. The smoke check now reads
+the export in a container with the same identity, keeping the private file
+mode. The usage guide documents this Linux bind-mount behavior as well.
