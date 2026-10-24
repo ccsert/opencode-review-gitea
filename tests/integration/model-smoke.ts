@@ -71,23 +71,48 @@ for (const lab of await labs()) {
       ...(process.platform === "linux" ? ["--add-host", "host.docker.internal:host-gateway"] : []),
       "-v", `${resolve(configPath)}:/app/.opencode-review/opencode.json:ro`,
       "-v", `${resolve(workspace)}:/workspace:ro`,
-      ...(draft ? ["-v", `${output}:/review-output`, "-e", "REVIEW_MODE=draft", "-e", "REVIEW_OUTPUT_DIR=/review-output"] : []),
+      ...(draft ? ["-v", `${output}:/review-output`, "-e", "REVIEW_MODE=draft", "-e", "REVIEW_OUTPUT_DIR=/review-output", "-e", "DRAFT_WAIT_TIMEOUT_SECONDS=30"] : []),
       "-e", "GITEA_TOKEN", "-e", `GITEA_SERVER_URL=http://${lab.name}:3000`,
       "-e", "MODEL=review-test/review", "-e", "OPENCODE_REFRESH_MODELS=false", "-e", "OPENAI_API_KEY=local-fixture",
       "-e", `PR_NUMBER=${f.args.pull_number}`, "-e", `REPO_OWNER=${f.args.owner}`, "-e", `REPO_NAME=${f.args.repo}`,
       image, "review"], { stdout: "pipe", stderr: "pipe", env: { ...process.env, GITEA_TOKEN: lab.botToken } })
+    let humanSubmitted = false
+    const collectOutput = async () => {
+      let text = ""
+      for await (const chunk of processHandle.stdout) {
+        text += new TextDecoder().decode(chunk, { stream: true })
+        if (draft && !humanSubmitted && text.includes("Waiting for reviewer to submit:")) {
+          const actor = { ...lab, adminToken: lab.botToken }
+          const review = (await api(actor, `${f.path}/reviews`))[0]
+          const other = { ...lab, adminToken: lab.humanToken }
+          const timeline = await api(other, `${f.path.replace("/pulls/", "/issues/")}/timeline`)
+          if (review?.state !== "PENDING" || JSON.stringify(timeline).includes("Deterministic local model integration")) {
+            throw new Error(`${lab.name}: draft was not private before human submission`)
+          }
+          // Deterministic harness simulates the human's native Submit action.
+          // Browser acceptance separately exercises the real native UI.
+          await api(actor, `${f.path}/reviews/${review.id}`, { event: "COMMENT", body: "Human final assessment" })
+          humanSubmitted = true
+        }
+      }
+      return text
+    }
     const [status, stdout, stderr] = await Promise.all([processHandle.exited,
-      new Response(processHandle.stdout).text(), new Response(processHandle.stderr).text()])
+      collectOutput(), new Response(processHandle.stderr).text()])
     await writeFile(join(directory, `model-${lab.name}${draft ? "-draft" : ""}.log`), stdout + stderr)
     if (status !== 0) throw new Error(`${lab.name} OpenCode exited ${status}: ${(stdout + stderr).slice(-3500)}`)
     const actor = draft ? { ...lab, adminToken: lab.botToken } : lab
     const reviews = await api(actor, `${f.path}/reviews`)
     if (reviews.length !== 1 || reviews[0].commit_id !== f.head || reviews[0].comments_count !== 1 ||
         calls.filter(name => name === "gitea-pr-diff").length < 2 || !calls.includes("gitea-review") || !stdout.includes(draft ? "Verified draft:" : "Verified review:") || leakedProjectInstructions ||
-        (draft && (reviews[0].state !== "PENDING" || reviews[0].body.includes("Deterministic local model integration")))) {
+        (draft && (!humanSubmitted || reviews[0].state !== "COMMENT" || reviews[0].body !== "Human final assessment" || !stdout.includes("AI summary attached:")))) {
       throw new Error(`${lab.name}: missing tool dispatch, review, line comment or verified receipt`)
     }
     if (draft) {
+      const summaries = await api(actor, `${f.path.replace("/pulls/", "/issues/")}/comments`)
+      if (summaries.length !== 1 || !summaries[0].body.includes("Deterministic local model integration")) {
+        throw new Error(`${lab.name}: summary did not appear automatically after native submission`)
+      }
       const { readdir } = await import("node:fs/promises")
       const markdown = (await readdir(output)).find(name => name.endsWith(".md"))
       if (!markdown) throw new Error("Missing persisted draft summary")
@@ -99,7 +124,7 @@ for (const lab of await labs()) {
         throw new Error("Missing persisted draft summary")
       }
     }
-    console.log(`${lab.name}: real OpenCode → production tools → ${draft ? "PENDING draft" : "review"} #${reviews[0].id} → verified receipt PASS`)
+    console.log(`${lab.name}: real OpenCode → production tools → ${draft ? "PENDING → human submission → automatic summary" : "review"} #${reviews[0].id} → verified receipt PASS`)
     console.log(`  ${lab.url}/${f.args.owner}/${f.args.repo}/pulls/${f.args.pull_number}`)
   } finally { model.stop(true) }
 }

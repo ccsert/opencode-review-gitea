@@ -5,7 +5,7 @@ import { commentsDigest } from "./review-confirmation"
 import { digest, readJSON, stateDirectory, writeJSON, writeReceipt, type Snapshot } from "./review-state"
 
 export interface DraftComment { path: string; body: string; new_position: number; old_position: number }
-interface DraftRecord {
+export interface DraftRecord {
   key: string
   target: ReturnType<typeof receiptTarget>
   userId: number
@@ -18,6 +18,7 @@ interface DraftRecord {
   recommendation: string
   nativeBody: string
   reviewId?: number
+  summaryPublication?: { body: string; commentId?: number }
 }
 interface TimelineEntry { id: number; type: string; review_id?: number; user?: { id: number }; body?: string }
 
@@ -90,7 +91,7 @@ export async function saveDraft(api: GiteaClient, args: RepositoryPR, snapshot: 
     if (!record) {
       record = { key, target, userId, head: snapshot.head, base: snapshot.base, context: snapshot.context,
         summary, comments, commentsDigest: commentsDigest(comments), recommendation,
-        nativeBody: `OpenCode draft: copy the locally exported Markdown summary into the review form before submitting.\n\n<!-- opencode-review-draft:v1 ${key} -->` }
+        nativeBody: `OpenCode draft: edit the pending comments and submit in the native UI. Keep the review container running; it will attach the AI summary after submission.\n\n<!-- opencode-review-draft:v1 ${key} -->` }
       await exportDraft(record)
       // Persist before POST: an ambiguous response must never cause another POST.
       await writeJSON(recordPath, record)
@@ -143,7 +144,7 @@ export async function saveDraft(api: GiteaClient, args: RepositoryPR, snapshot: 
     await checkCurrent(api, args, snapshot)
     const artifacts = await exportDraft(record)
     const url = `${api.baseURL}/${args.owner}/${args.repo}/pulls/${args.pull_number}/files`
-    await writeReceipt({ mode: "draft", status, target, head: record.head, reviewId: current.id, url, artifacts, warnings })
-    return `${status === "draft_submitted" ? "Draft already submitted by reviewer; no new review created" : "Draft saved and verified; not published"}: ${url}\nCommit: ${record.head}\nSummary: ${artifacts.markdown}\nData: ${artifacts.json}\n${warnings.join("\n")}\nUse the same account in the native UI. Copy the Markdown summary, edit the pending comments, then manually submit.`
+    await writeReceipt({ mode: "draft", status, target, head: record.head, reviewId: current.id, url, artifacts, warnings, draftKey: key })
+    return `${status === "draft_submitted" ? "Draft already submitted by reviewer; no new review created" : "Draft saved and verified; not published"}: ${url}\nCommit: ${record.head}\nSummary: ${artifacts.markdown}\nData: ${artifacts.json}\n${warnings.join("\n")}\nUse the same account in the native UI. Edit the pending comments and manually submit. The runner will attach the summary automatically after submission; keep the container running.`
   } finally { await rm(lock, { recursive: true, force: true }) }
 }

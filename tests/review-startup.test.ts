@@ -130,15 +130,28 @@ test("Docker version does not refresh models", () => {
   expect(result.invocations.map(call => call.args)).toEqual([["--version"]])
 })
 
-test("Docker draft mode freezes delivery and accepts a verified saved draft receipt", () => {
+test("Docker draft mode freezes delivery and can explicitly save without waiting", () => {
   const result = runReview([join(root, "entrypoint.sh"), "review"], { env: {
-    REVIEW_MODE: "draft", TEST_DRAFT_RECEIPT: "true", TEST_RECEIPT_STATUS: "draft_saved",
+    REVIEW_MODE: "draft", TEST_DRAFT_RECEIPT: "true", TEST_RECEIPT_STATUS: "draft_saved", DRAFT_WAIT_TIMEOUT_SECONDS: "0",
   } })
   expect(result.status).toBe(0)
   expect(result.invocations.at(-1).mode).toBe("draft")
   expect(result.invocations.at(-1).output).toBe(result.directory)
   expect(result.invocations.at(-1).args.at(-1)).toContain("Delivery mode: draft")
   expect(result.stdout).toContain("Verified draft:")
+  expect(result.stdout).toContain("Draft saved without waiting")
+})
+test("invalid draft wait configuration fails before starting the model", () => {
+  const result = runReview([join(root, "entrypoint.sh"), "review"], { env: { REVIEW_MODE: "draft", DRAFT_WAIT_TIMEOUT_SECONDS: "-1" } })
+  expect(result.status).toBe(1)
+  expect(result.invocations.some(call => call.args[0] === "run")).toBe(false)
+})
+test("the default draft handoff requires persisted state instead of trusting a receipt alone", () => {
+  const result = runReview([join(root, "entrypoint.sh"), "review"], { env: {
+    REVIEW_MODE: "draft", TEST_DRAFT_RECEIPT: "true", TEST_RECEIPT_STATUS: "draft_saved",
+  } })
+  expect(result.status).toBe(1)
+  expect(result.stderr).toContain("DRAFT_STATE_REQUIRED")
 })
 test("a published receipt cannot certify draft mode", () => {
   const result = runReview([join(root, "entrypoint.sh"), "review"], { env: { REVIEW_MODE: "draft" } })

@@ -4,9 +4,12 @@ import { tmpdir } from "node:os"
 import { readJSON, stateDirectory, type Receipt } from "./lib/review-state"
 import { configuredReviewTarget, matchesReviewTarget, reviewURL } from "./lib/gitea"
 import { reviewMode } from "./lib/review-mode"
+import { draftWaitSeconds } from "./lib/draft-summary"
+import { runDraftWatcher } from "./draft-watch"
 
 export async function runReview(prompt: string) {
   const mode = reviewMode()
+  const wait = mode === "draft" ? draftWaitSeconds() : 0
   const target = configuredReviewTarget(true)!
   const runID = crypto.randomUUID()
   const state = resolve(stateDirectory())
@@ -46,8 +49,10 @@ export async function runReview(prompt: string) {
     }
     console.log(`Verified ${mode === "draft" ? "draft" : "review"}: ${receipt.url} (${receipt.head}, ${receipt.status})`)
     if (mode === "draft") {
-      console.log(`Copy the summary from: ${receipt.artifacts!.markdown}`)
+      console.log(`Local summary preview: ${receipt.artifacts!.markdown}`)
       for (const warning of receipt.warnings ?? []) console.warn(warning)
+      if (wait > 0) await runDraftWatcher(receipt.draftKey ?? "")
+      else console.log(`Draft saved without waiting (DRAFT_WAIT_TIMEOUT_SECONDS=0). To attach the summary after submission, resume: draft-watch ${receipt.draftKey ?? "<draft-key>"}`)
     }
     await rm(receiptPath, { force: true })
     return 0

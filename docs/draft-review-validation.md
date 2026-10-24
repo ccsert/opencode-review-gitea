@@ -5,6 +5,46 @@ This is the local acceptance record for the implementation proposed in
 on 2026-10-24. See [the usage guide](draft-review.md) for Docker commands,
 custom model configuration and recovery instructions.
 
+## Automatic summary handoff
+
+The current flow removes the copy/paste step from the original acceptance
+below. Keep the container running, edit the pending line comments, then submit
+through the native review form. The form can be empty: the trusted runner
+observes the submitted review and automatically adds the local summary as a
+separate PR comment, identifying the review and captured commit.
+
+![Native review form left empty before submission](images/draft-review/summary-empty-form.png)
+
+![AI summary automatically attached after native submission](images/draft-review/summary-after-submit.png)
+
+Both Gitea 1.24.6 and Forgejo 17.0.0 were exercised with a clean Dockerfile build
+and OpenCode 1.19.4. A real MiniMax run on each platform created the pending
+comments. Browser submission left the native summary form empty; API read-back
+confirmed an empty submitted review body and one follow-up summary matching
+the local export. Separate API tests preserved edited native review text and
+line comments, and repeated watching did not add a second summary.
+
+The local regression suite passed 163 tests (404 assertions); the two-server
+API suite passed 50 tests (268 assertions). Container checks used real OpenCode
+tool dispatch and a deterministic model protocol fixture for both submit mode
+and draft-to-human-submission-to-summary delivery. Those protocol checks do not
+measure model quality. The real-model/browser run is a separate evidence layer.
+
+Review follow-up also verified cancellation during an in-flight API request:
+the watcher promptly releases its lock for resumption, while per-request timeouts
+remain enforced alongside the cancellation signal.
+
+Waiting defaults to one hour and resumes with `draft-watch <key>` using the
+same output mount, account and PR, without another model call. Pending comments
+remain private to their owner under the tested ordinary-account permissions;
+the summary is not published until submission. The existing Forgejo placeholder
+timeline limitation still applies.
+
+Editing line comments does not regenerate the summary; preview/edit its local
+Markdown if those changes affect the conclusions. The sections below record
+the original manual-summary handoff, including its historical test counts and
+build limitations. They are not the current usage instructions.
+
 ## What the reviewer sees
 
 The demo used a private test repository with three identical PR diffs. An

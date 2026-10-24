@@ -108,7 +108,7 @@ use a Docker network shared with the service.
 
 ### Finish the review
 
-The output contains `review-<key>.md` (copyable AI summary), `review-<key>.json`
+The output contains `review-<key>.md` (editable local AI summary), `review-<key>.json`
 (target, immutable base/head, recommendation and formatted comments), and a
 private `.state/` directory. `OPENCODE_REVIEW_STATE_DIR` overrides the latter
 when explicitly configured; keep it persistent too. Files are created with
@@ -129,8 +129,53 @@ docker run --rm --entrypoint cat \
 
 1. Open the returned `/pulls/<number>/files` page as the token's account.
 2. Review/edit the pending line comments.
-3. Copy the Markdown summary into the native review form; it is not prefilled.
-4. Manually select Comment, Approve or Request Changes.
+3. Keep the container running. Optionally add your own assessment in the native review form.
+4. Select Comment, Approve or Request Changes. The runner detects submission and
+   automatically attaches the local Markdown summary as a separate PR comment.
+   It names the reviewed commit and review ID; it does not modify your native
+   review body, line comments or chosen verdict. No summary copying is needed.
+
+Before submitting, you can preview or edit `review-<key>.md` locally. The watcher
+reads that file after submission, then persists the exact publication intent.
+It never publishes the summary while the review is PENDING. Its comment uses
+the same token/account as the draft, and is labelled as an AI summary.
+
+Editing or deleting a pending line comment does not regenerate the summary.
+The watcher publishes the original or locally edited Markdown; review that
+file too when your changes affect its conclusions. Summary preview/editing is
+currently through the local file, not a prefilled native review form.
+
+### Waiting and recovery
+
+`DRAFT_WAIT_TIMEOUT_SECONDS` defaults to `3600` (one hour). On timeout the process
+exits with an explicit incomplete-handoff error and preserves the pending review
+and output. `0` explicitly saves without waiting, for separately scheduled
+watchers. To resume, keep the original output mount, account and exact target:
+
+```bash
+docker run --rm \
+  -v "$(pwd)/review-output:/review-output" \
+  -e GITEA_TOKEN -e GITEA_SERVER_URL \
+  -e REPO_OWNER=your-org -e REPO_NAME=your-repo -e PR_NUMBER=123 \
+  -e REVIEW_OUTPUT_DIR=/review-output \
+  "${REVIEW_IMAGE:-ghcr.io/ccsert/opencode-review:latest}" \
+  draft-watch <draft-key>
+```
+
+The key is printed when waiting starts. This command does not call a model or
+create another review. It accepts human edits to pending comments and the native
+review body. It refuses to publish for a changed base/head, wrong account,
+deleted/dismissed review, or closed PR. Graceful interruption releases the local
+lock; after a forced kill, establish that no process owns the lock before
+removing its abandoned `draft-lock-*` directory.
+
+Publication intent is persisted before POST. A lost response is reconciled
+through a unique comment marker; an unknown result is never retried as a write.
+Preserve state and rerun `draft-watch` for another read-back. Once the comment ID
+is confirmed, subsequent runs do not overwrite human edits or recreate a
+manually deleted summary. This follow-up comment is separate from the native
+review, so it may create an additional notification. The container must remain
+running (or be resumed) to observe native submission.
 
 Drafts belong to an account, not to a team. A different ordinary collaborator
 cannot open the pending review. Site administrators have special access. Use
@@ -167,7 +212,8 @@ ambiguous native results are not automatically recreated.
 Gitea 1.24.6 and Forgejo 17.0.0 may expose the body of a PENDING review through
 the issue timeline API. Therefore the model's summary is **never put in that
 body**. A non-sensitive handoff placeholder and opaque key are used instead;
-AI findings stay in pending line comments and local exports.
+Until the human submits, AI findings stay in pending line comments and local
+exports. The automatic summary comment is created only after submission.
 
 On Gitea 1.24.6 the runtime removes only the exact placeholder timeline entry
 belonging to the new pending review. Its owner, review ID, type and exact body

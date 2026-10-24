@@ -28,6 +28,7 @@ export interface Receipt {
   reviewId: number
   url: string
   artifacts?: { json: string; markdown: string }
+  draftKey?: string
   warnings?: string[]
 }
 

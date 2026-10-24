@@ -392,11 +392,23 @@ docker run --rm \
   "${REVIEW_IMAGE:-ghcr.io/ccsert/opencode-review:latest}"
 ```
 
-Use the actual human reviewer's token. Open the returned **Files** page with that
-same account, edit its pending line comments, copy the exported Markdown summary
-into the review form, and manually choose Comment, Approve or Request Changes.
-The native editor does not prefill summaries. AI summaries stay local: some
-server versions expose pending review bodies through their timeline API.
+Use the actual human reviewer's token. When the runner starts waiting, keep the
+container running, open the returned **Files** page with that account, edit the
+pending line comments, and choose Comment, Approve or Request Changes. After
+submission the container automatically attaches the summary as a separate PR
+comment identifying the review and commit. No copy/paste is needed. Any human
+text in the native review form is preserved. Before submission the AI summary
+stays local, because some server versions expose pending review bodies through
+their timeline API. You may preview or edit the exported Markdown locally.
+
+The default wait is one hour (`DRAFT_WAIT_TIMEOUT_SECONDS=3600`). After a timeout
+or interruption, use the same output mount, account and target with
+`draft-watch <draft-key>` to resume without calling the model again. Setting the
+timeout to `0` saves without waiting and requires that separate watcher command.
+
+Editing/deleting line comments does not regenerate the summary. Preview or
+edit the local Markdown when your changes affect its conclusions; that file
+is what the watcher publishes after submission.
 
 Repeated draft runs reuse the original review. Manual edits and existing pending
 reviews are preserved; conflicts stop the run. A manually submitted draft is

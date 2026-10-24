@@ -80,7 +80,8 @@ export class GiteaClient {
     if (options.body) headers.set("Content-Type", "application/json")
     // Never automatically retry a write: a lost response does not imply a failed write.
     const response = await fetch(`${this.baseURL}/api/v1${endpoint}`, {
-      ...options, headers, signal: options.signal ?? AbortSignal.timeout(timeoutMs()),
+      ...options, headers, signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs())]) : AbortSignal.timeout(timeoutMs()),
     })
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 1000)
@@ -106,10 +107,10 @@ export class GiteaClient {
     return response.text()
   }
 
-  async list<T>(endpoint: string): Promise<T[]> {
+  async list<T>(endpoint: string, options?: RequestInit): Promise<T[]> {
     const result: T[] = []
     for (let page = 1; page <= 1000; page++) {
-      const response = await this.request(`${endpoint}${endpoint.includes("?") ? "&" : "?"}limit=50&page=${page}`)
+      const response = await this.request(`${endpoint}${endpoint.includes("?") ? "&" : "?"}limit=50&page=${page}`, options)
       const rows = await response.json() as T[]
       if (!Array.isArray(rows)) throw new Error(`Expected a list from ${endpoint}`)
       result.push(...rows)
@@ -143,10 +144,10 @@ export function prPath(pr: RepositoryPR) {
   return `/repos/${encodeURIComponent(pr.owner)}/${encodeURIComponent(pr.repo)}/pulls/${pr.pull_number}`
 }
 
-export async function pullRefHead(api: GiteaClient, args: RepositoryPR): Promise<string | undefined> {
+export async function pullRefHead(api: GiteaClient, args: RepositoryPR, options?: RequestInit): Promise<string | undefined> {
   const path = prPath(args)
   const refs = await api.json<{ ref: string; object: { sha: string } }[]>(
-    `${path.slice(0, path.lastIndexOf("/pulls/"))}/git/refs/pull/${args.pull_number}/head`)
+    `${path.slice(0, path.lastIndexOf("/pulls/"))}/git/refs/pull/${args.pull_number}/head`, options)
   return refs.find(ref => ref.ref === `refs/pull/${args.pull_number}/head`)?.object.sha
 }
 
