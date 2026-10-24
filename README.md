@@ -406,6 +406,10 @@ or interruption, use the same output mount, account and target with
 `draft-watch <draft-key>` to resume without calling the model again. Setting the
 timeout to `0` saves without waiting and requires that separate watcher command.
 
+Editing/deleting line comments does not regenerate the summary. Preview or
+edit the local Markdown when your changes affect its conclusions; that file
+is what the watcher publishes after submission.
+
 Repeated draft runs reuse the original review. Manual edits and existing pending
 reviews are preserved; conflicts stop the run. A manually submitted draft is
 acknowledged without becoming an automatic incremental-review baseline.

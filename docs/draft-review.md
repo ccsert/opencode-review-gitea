@@ -140,6 +140,11 @@ reads that file after submission, then persists the exact publication intent.
 It never publishes the summary while the review is PENDING. Its comment uses
 the same token/account as the draft, and is labelled as an AI summary.
 
+Editing or deleting a pending line comment does not regenerate the summary.
+The watcher publishes the original or locally edited Markdown; review that
+file too when your changes affect its conclusions. Summary preview/editing is
+currently through the local file, not a prefilled native review form.
+
 ### Waiting and recovery
 
 `DRAFT_WAIT_TIMEOUT_SECONDS` defaults to `3600` (one hour). On timeout the process
