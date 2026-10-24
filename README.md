@@ -6,13 +6,14 @@
 
 [中文文档](README_zh.md) | English
 
-An AI-powered **automatic code review tool for Gitea/Forgejo PRs**, built on the [OpenCode](https://opencode.ai) plugin system. It listens for PR and comment events via Gitea Actions, automatically fetches code diffs, and submits structured reviews.
+An AI-powered **code review tool for Gitea/Forgejo PRs**, built on the [OpenCode](https://opencode.ai) plugin system. Run it externally with Docker for a selected repository/PR, or trigger it through Gitea Actions. It fetches code diffs and either submits a structured review or saves a draft for a human reviewer.
 
 ## ✨ Features
 
 - 🤖 **AI-Powered Code Review** - Uses Claude/GPT/DeepSeek models to analyze code changes
 - 📝 **Line-Level Comments** - Provides precise feedback on specific code lines
 - ✅ **Review Decisions** - Supports approve, request_changes, and comment states
+- ✍️ **Draft Reviews** - Save pending comments under the human reviewer's account, then edit and submit in the native UI
 - 🔄 **Auto-Trigger** - Triggered by `/oc` or `/opencode` comments
 - 🔁 **Incremental Review** - Only reviews new changes since last review (for updated PRs)
 - 🏷️ **Structured Tags** - Categorizes issues by type (BUG, SECURITY, PERFORMANCE) and severity
@@ -23,7 +24,11 @@ An AI-powered **automatic code review tool for Gitea/Forgejo PRs**, built on the
 
 ## 📦 Installation
 
-### Docker Setup Without an Install Script (Recommended)
+For manual reviews without installing anything in the target repository, use
+[external Docker draft mode](#draft-first-submit-manually). It needs no workflow,
+checkout or target-code mount. See the [screenshots and validation](docs/draft-review-validation.md).
+
+### Docker Setup for Actions Without an Install Script
 
 Docker setup only needs **one workflow file**. You do not need to run `install.sh` or add `.opencode-review/` to your repository.
 
@@ -372,6 +377,11 @@ Set `REVIEW_MODE=draft` and mount a persistent `REVIEW_OUTPUT_DIR`. The same
 external Docker command can review any authorized repository/PR without adding
 a workflow or checking out its code. The default remains `REVIEW_MODE=submit`.
 
+For an unreleased change, first [build the checked-out source](docs/draft-review.md#choose-an-image)
+and set `REVIEW_IMAGE` to that local image; the published `latest` tag does not
+include a PR until it has been merged and its publishing workflow succeeds.
+Export `GITEA_TOKEN`, `GITEA_SERVER_URL` and your model provider key in your shell.
+
 ```bash
 mkdir -p review-output
 docker run --rm \
@@ -379,7 +389,7 @@ docker run --rm \
   -e GITEA_TOKEN -e GITEA_SERVER_URL -e DEEPSEEK_API_KEY \
   -e REPO_OWNER="your-org" -e REPO_NAME="your-repo" -e PR_NUMBER=123 \
   -e REVIEW_MODE=draft -e REVIEW_OUTPUT_DIR=/review-output \
-  ghcr.io/ccsert/opencode-review:latest
+  "${REVIEW_IMAGE:-ghcr.io/ccsert/opencode-review:latest}"
 ```
 
 Use the actual human reviewer's token. Open the returned **Files** page with that

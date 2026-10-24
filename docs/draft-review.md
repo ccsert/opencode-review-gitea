@@ -5,7 +5,39 @@ review owned by the token's account; the AI cannot switch it to a published
 review. This works from an external Docker invocation without a workflow or
 checkout in the target repository.
 
+See [screenshots and local validation](draft-review-validation.md) for the
+reviewer/other-collaborator views and the tested platform versions.
+
+## Choose an image
+
+When testing an unreleased PR, build from a checkout containing that change:
+
+```bash
+docker build --build-arg OPENCODE_VERSION=1.19.4 -t opencode-review:draft .
+export REVIEW_IMAGE=opencode-review:draft
+```
+
+The version above is the OpenCode version used for the local acceptance run.
+Omit the build argument to use the Dockerfile's current default. The published
+`ghcr.io/ccsert/opencode-review:latest` includes a change only after it is merged
+and the publishing workflow succeeds. For a released image, set `REVIEW_IMAGE`
+to its tag or digest instead.
+
 ## Persistent output and human handoff
+
+Create a Gitea/Forgejo API token for the person who will finish the review.
+That account needs access to the target repository and `write:repository`
+scope. Export these values in your shell (use your own server and credentials):
+
+```bash
+export GITEA_SERVER_URL="https://git.example.com"
+export GITEA_TOKEN="<human-reviewer-token>"
+export DEEPSEEK_API_KEY="<model-provider-key>"
+```
+
+The example uses the image's default DeepSeek model. For another supported
+provider, pass its key and `MODEL`; for an OpenAI-compatible custom gateway,
+use the example below. Avoid putting tokens in repository files.
 
 Draft mode requires `REVIEW_OUTPUT_DIR`. Mount it to retain both the exported
 summary and recovery data across disposable containers:
@@ -17,12 +49,60 @@ docker run --rm \
   -e GITEA_TOKEN -e GITEA_SERVER_URL -e DEEPSEEK_API_KEY \
   -e REPO_OWNER=your-org -e REPO_NAME=your-repo -e PR_NUMBER=123 \
   -e REVIEW_MODE=draft -e REVIEW_OUTPUT_DIR=/review-output \
-  ghcr.io/ccsert/opencode-review:latest
+  "${REVIEW_IMAGE:-ghcr.io/ccsert/opencode-review:latest}"
 ```
 
 Custom model providers use the same trusted OpenCode config mounting mechanism
 as submit mode. Only the output directory and optional provider configuration
 are mounted; target repository code is not needed.
+
+### Custom OpenAI-compatible gateway
+
+Save this as `review-provider.json` outside the target repository. Replace
+`my-model` with the model ID accepted by your gateway, including any slashes or
+prefixes. The `MODEL` value consists of the provider name followed by that ID.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "review-gateway/my-model",
+  "enabled_providers": ["review-gateway"],
+  "permission": { "edit": "deny", "bash": "deny", "read": "deny" },
+  "provider": {
+    "review-gateway": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "{env:REVIEW_GATEWAY_URL}",
+        "apiKey": "{env:REVIEW_GATEWAY_KEY}"
+      },
+      "models": { "my-model": { "name": "My review model" } }
+    }
+  }
+}
+```
+
+Export `REVIEW_GATEWAY_URL` (ending in `/v1`) and `REVIEW_GATEWAY_KEY` in your
+shell, then run:
+
+```bash
+mkdir -p review-output
+docker run --rm \
+  -v "$(pwd)/review-provider.json:/app/.opencode-review/opencode.json:ro" \
+  -v "$(pwd)/review-output:/review-output" \
+  -e GITEA_TOKEN -e GITEA_SERVER_URL \
+  -e REVIEW_GATEWAY_URL -e REVIEW_GATEWAY_KEY \
+  -e MODEL=review-gateway/my-model -e OPENCODE_REFRESH_MODELS=false \
+  -e REPO_OWNER=your-org -e REPO_NAME=your-repo -e PR_NUMBER=123 \
+  -e REVIEW_MODE=draft -e REVIEW_OUTPUT_DIR=/review-output \
+  "${REVIEW_IMAGE:-ghcr.io/ccsert/opencode-review:latest}"
+```
+
+URLs must be reachable from inside the container: `127.0.0.1` there refers to
+the container itself. Docker Desktop can reach a host service through
+`host.docker.internal`; on Linux, configure the corresponding host gateway or
+use a Docker network shared with the service.
+
+### Finish the review
 
 The output contains `review-<key>.md` (copyable AI summary), `review-<key>.json`
 (target, immutable base/head, recommendation and formatted comments), and a

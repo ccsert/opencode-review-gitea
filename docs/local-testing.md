@@ -28,13 +28,14 @@ bun test tests/integration/review.integration.test.ts
 # 构建当前代码，并验证完整的 OpenCode 工具调用链
 docker build -t opencode-review-reliability:local .
 bun tests/integration/model-smoke.ts
+REVIEW_TEST_MODE=draft bun tests/integration/model-smoke.ts
 ```
 
 API 集成测试覆盖固定提交、超过 30 个文件的分页列表、大 diff 分页与未读完拒绝提交、规范从 base commit/共享仓库/URL 加载、人工 review 不推进 bot 基准、push 后拒绝旧结果、并发与重复提交、POST 响应超时恢复、发布后读回失败及恢复。增量审查按新提交触及的文件筛选原始 PR hunks，保留 PR base/head 行号，不拼接不同提交的 diff。
 
 草稿验收还覆盖原生 PENDING、总结本地导出、其他普通账号的 review/行评论/时间线访问、重复起草、已有人工草稿与新提交冲突、人工修改及手动提交后的识别，以及响应超时后的不重复写入。Gitea 与 Forgejo 的时间线差异按实际能力分别断言，见 [草稿模式](draft-review.md)。
 
-模型测试使用**真实 OpenCode CLI 和项目 Docker 入口**，由本地 OpenAI 兼容协议桩产生确定性 tool calls，再调用生产工具发布真实 review、读回行评论并检查回执。它不访问商业模型，不代表真实模型审查质量或真实模型服务兼容性。日志保存在 `.local/model-gitea.log`、`.local/model-forgejo.log`。
+模型测试使用**真实 OpenCode CLI 和项目 Docker 入口**，由本地 OpenAI 兼容协议桩产生确定性 tool calls，再调用生产工具发布真实 review 或保存原生 PENDING、读回行评论并检查回执。它不访问商业模型，不代表真实模型审查质量或真实模型服务兼容性。提交模式日志保存在 `.local/model-gitea.log`、`.local/model-forgejo.log`，草稿模式使用对应的 `-draft.log` 文件。实际自定义模型及双账号网页的验收范围见 [草稿效果与验证记录](draft-review-validation.md)。
 
 CI 在发布镜像前运行上述测试；任何一步失败都不会进入镜像发布任务。旧的统计测试针对的是仓库中已不存在的实现，现已删除。
 
