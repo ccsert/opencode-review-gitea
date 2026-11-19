@@ -94,13 +94,11 @@ validate_env() {
         exit 1
     fi
 
-    # Warn if no LLM API key is set (not fatal - some providers don't need one)
+    # Only inspect the built-in credential variables, not provider configuration.
     if [ -z "$DEEPSEEK_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ] && \
        [ -z "$OPENAI_API_KEY" ] && [ -z "$LLM_API_KEY" ] && \
        [ -z "$OPENROUTER_API_KEY" ] && [ -z "$OPENAI_BASE_URL" ]; then
-        log_warn "No LLM API key detected (DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, LLM_API_KEY, OPENROUTER_API_KEY)"
-        log_warn "If you are using a local model or custom gateway, you can ignore this warning"
-        log_warn "For custom gateways (9router, LiteLLM, etc.), add a custom provider to .opencode-review/opencode.json; OPENAI_BASE_URL alone only works for OpenAI catalog models — use a custom provider for non-catalog model ids"
+        log_info "No built-in provider credentials configured via environment; custom or local providers load their own settings in OpenCode."
     fi
     
     log_success "Environment validated"
@@ -224,7 +222,7 @@ build_prompt() {
 # Print configuration summary
 print_config() {
     log_info "Configuration:"
-    echo "  Model:    ${MODEL:-deepseek/deepseek-chat}"
+    echo "  MODEL env default: ${MODEL:-deepseek/deepseek-chat} (OpenCode config can select a different model)"
     echo "  Mode:     ${REVIEW_MODE:-submit}"
     echo "  Style:    ${REVIEW_STYLE:-balanced}"
     echo "  Template: ${REVIEW_TEMPLATE:-from REVIEW_STYLE}"
@@ -348,6 +346,7 @@ main() {
             echo "                     Enable only when the workspace is a trusted checkout, never PR code."
             echo "  REVIEW_LANGUAGE    auto|en|zh-CN (default: auto)"
             echo "  REVIEW_MODE        submit|draft (default: submit). Draft saves PENDING; human submits."
+            echo "  REVIEW_RUN_TIMEOUT_SECONDS  Time limit for the OpenCode run, excluding draft watch (default: 900)."
             echo "  REVIEW_OUTPUT_DIR  Persistent draft output directory; mount it to retain summaries and state."
             echo "  DRAFT_WAIT_TIMEOUT_SECONDS  Wait for human submission, then attach summary (default: 3600; 0 saves only)."
             echo "  REVIEW_STYLE       concise|balanced|thorough|security (default: balanced)"

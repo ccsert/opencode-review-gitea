@@ -106,6 +106,19 @@ the container itself. Docker Desktop can reach a host service through
 `host.docker.internal`; on Linux, configure the corresponding host gateway or
 use a Docker network shared with the service.
 
+The startup summary shows the `MODEL` environment setting, not necessarily the
+model selected by OpenCode. If the model does not respond, check that the
+gateway sees `POST /v1/chat/completions`, that its streamed response finishes,
+and that the selected model supports streamed tool calls. Share only redacted
+logs (image version, container error, HTTP status, and whether the gateway
+issued a tool call), never API keys or the PR diff.
+
+`REVIEW_RUN_TIMEOUT_SECONDS` bounds the OpenCode review run (default 900 seconds,
+range 1–86400). It does not include the separate wait for human submission.
+A timeout returns exit status 124 without retrying. A tool might already have
+saved a native review, so check the PR and keep the persisted output and
+`.state/` before retrying.
+
 ### Finish the review
 
 The output contains `review-<key>.md` (editable local AI summary), `review-<key>.json`

@@ -91,6 +91,12 @@ jobs:
         run: |
           bun tests/integration/model-smoke.ts
           REVIEW_TEST_MODE=draft bun tests/integration/model-smoke.ts
+      - name: Exercise custom gateway failure diagnostics
+        run: |
+          export REVIEW_TEST_MODE=draft
+          for scenario in disconnect stalled-stream missing-tool; do
+            REVIEW_TEST_GATEWAY_CASE="$scenario" bun tests/integration/model-smoke.ts
+          done
       - name: Save model integration logs
         if: failure()
         uses: actions/upload-artifact@v4

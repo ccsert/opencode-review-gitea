@@ -36,6 +36,7 @@ if (args[0] === "run") {
       ...(process.env.TEST_DRAFT_RECEIPT === "true" ? {mode:"draft",artifacts:{json:"/out/review.json",markdown:"/out/review.md"}} : {}),
       url:process.env.TEST_RECEIPT_URL || target.server + "/" + target.owner + "/" + target.repo + "/pulls/" + target.pull_number + (process.env.TEST_DRAFT_RECEIPT === "true" ? "/files" : "#pullreview-1")}))
   }
+  if (process.env.TEST_STALL === "true") await new Promise(() => setInterval(() => {}, 1000))
   process.exit(Number(process.env.TEST_RUN_STATUS))
 }
 `, { mode: 0o755 })
@@ -45,6 +46,7 @@ if (args[0] === "run") {
   const result = spawnSync("bash", script, {
     cwd: root,
     encoding: "utf8",
+    timeout: 15_000,
     env: {
       PATH: `${directory}:${process.env.PATH}`,
       OPENCODE_CONFIG_DIR: directory,
@@ -122,6 +124,47 @@ test("Docker preserves a custom prompt after refreshing models", () => {
   const result = runReview([join(root, "entrypoint.sh"), "review", prompt])
   expect(result.status).toBe(0)
   expect(result.invocations.at(-1).args).toEqual(["run", "--agent", "code-review", prompt])
+})
+
+test("Docker reports the MODEL environment setting without claiming it was selected", () => {
+  const result = runReview([join(root, "entrypoint.sh"), "review"], { env: {
+    MODEL: undefined,
+    OPENAI_BASE_URL: undefined,
+    DEEPSEEK_API_KEY: undefined,
+    ANTHROPIC_API_KEY: undefined,
+    OPENAI_API_KEY: undefined,
+    LLM_API_KEY: undefined,
+    OPENROUTER_API_KEY: undefined,
+    REVIEW_GATEWAY_KEY: "never-print-this-fixture",
+  } })
+  expect(result.status).toBe(0)
+  expect(result.stdout).toContain("MODEL env default: deepseek/deepseek-chat")
+  expect(result.stdout).toContain("OpenCode config can select a different model")
+  expect(result.stdout).toContain("custom or local providers load their own settings")
+  expect(result.stdout + result.stderr).not.toContain("No LLM API key detected")
+  expect(result.stdout + result.stderr).not.toContain("never-print-this-fixture")
+})
+
+test("a stalled OpenCode run times out without rerunning or treating a receipt as success", () => {
+  const result = runReview([join(root, "entrypoint.sh"), "review"], { refresh: "false", env: {
+    REVIEW_MODE: "draft", TEST_DRAFT_RECEIPT: "true", TEST_RECEIPT_STATUS: "draft_saved",
+    REVIEW_RUN_TIMEOUT_SECONDS: "1", TEST_STALL: "true",
+  } })
+  expect(result.status).toBe(124)
+  expect(result.invocations.map(call => call.args[0])).toEqual(["run"])
+  expect(result.stderr).toContain("REVIEW_RUN_TIMEOUT")
+  expect(result.stderr).toContain("may already have written a review")
+  expect(result.stdout).not.toContain("Verified draft")
+  expect(existsSync(result.invocations[0].cwd)).toBe(false)
+})
+
+test("invalid runner timeout fails without starting the review", () => {
+  const result = runReview([join(root, "entrypoint.sh"), "review"], { refresh: "false", env: {
+    REVIEW_RUN_TIMEOUT_SECONDS: "0",
+  } })
+  expect(result.status).toBe(1)
+  expect(result.invocations).toEqual([])
+  expect(result.stderr).toContain("INVALID_REVIEW_RUN_TIMEOUT")
 })
 
 test("Docker version does not refresh models", () => {

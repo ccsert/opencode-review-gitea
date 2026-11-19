@@ -7,9 +7,19 @@ import { reviewMode } from "./lib/review-mode"
 import { draftWaitSeconds } from "./lib/draft-summary"
 import { runDraftWatcher } from "./draft-watch"
 
+function reviewRunTimeoutSeconds() {
+  const raw = process.env.REVIEW_RUN_TIMEOUT_SECONDS ?? "900"
+  const seconds = Number(raw)
+  if (!/^[0-9]+$/.test(raw) || !Number.isInteger(seconds) || seconds < 1 || seconds > 86400) {
+    throw new Error("INVALID_REVIEW_RUN_TIMEOUT: REVIEW_RUN_TIMEOUT_SECONDS must be an integer from 1 to 86400.")
+  }
+  return seconds
+}
+
 export async function runReview(prompt: string) {
   const mode = reviewMode()
   const wait = mode === "draft" ? draftWaitSeconds() : 0
+  const runTimeout = reviewRunTimeoutSeconds()
   const target = configuredReviewTarget(true)!
   const runID = crypto.randomUUID()
   const state = resolve(stateDirectory())
@@ -31,13 +41,27 @@ export async function runReview(prompt: string) {
         REVIEW_OUTPUT_DIR: process.env.REVIEW_OUTPUT_DIR ? resolve(process.env.REVIEW_OUTPUT_DIR) : undefined,
         OPENCODE_REVIEW_TARGET: JSON.stringify(target) },
     })
-    const status = await child.exited
-    if (status !== 0) return status
+    let timedOut = false
+    let killTimer: ReturnType<typeof setTimeout> | undefined
+    const runTimer = setTimeout(() => {
+      timedOut = true
+      console.error(`REVIEW_RUN_TIMEOUT: OpenCode did not finish within ${runTimeout}s. Check gateway reachability from the review environment, stream completion and tool-call support. Check the native PR and persisted state before rerunning; this attempt may already have written a review.`)
+      child.kill("SIGTERM")
+      killTimer = setTimeout(() => child.kill("SIGKILL"), 2000)
+    }, runTimeout * 1000)
+    let status: number
+    try { status = await child.exited }
+    finally { clearTimeout(runTimer); clearTimeout(killTimer) }
+    if (timedOut) return 124
+    if (status !== 0) {
+      console.error(`REVIEW_RUN_FAILED: OpenCode exited with status ${status}. Check its output above and the gateway response; no automatic retry was made.`)
+      return status
+    }
     const receipt = await readJSON<Receipt>(receiptPath)
     const statuses = mode === "draft" ? ["draft_saved", "draft_reused", "draft_submitted"] : ["submitted", "duplicate", "unchanged"]
     if (!receipt || !statuses.includes(receipt.status) ||
         !receipt.head || !Number.isInteger(receipt.reviewId) || receipt.reviewId <= 0 || !receipt.url) {
-      console.error("REVIEW_NOT_CONFIRMED: OpenCode exited without a verified Gitea review receipt. The run is incomplete.")
+      console.error("REVIEW_NOT_CONFIRMED: OpenCode exited without a verified Gitea review receipt. Check whether the model emitted a supported gitea-review tool call, and inspect the native PR and persisted state before rerunning.")
       return 1
     }
     const expectedURL = mode === "draft" ? `${target.server}/${target.owner}/${target.repo}/pulls/${target.pull_number}/files` : reviewURL(target, receipt.reviewId)
