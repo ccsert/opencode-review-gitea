@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { GiteaClient, GiteaError, type RepositoryPR } from "./gitea"
 import { matchPattern } from "./diff"
+import { MOUNTED_RULE_SOURCE, readMountedRules, rulesByteLimit } from "./mounted-rules"
 
 // Review templates and team standards are review instructions. Repository
 // sources are read from the PR base commit, never the checked-out head: a PR
@@ -56,12 +57,6 @@ export function parseRuleDocument(source: string, text: string): RuleDocument {
   return { source, title, paths, body }
 }
 
-function maxBytes() {
-  const value = Number(process.env.REVIEW_RULES_MAX_BYTES ?? 30000)
-  if (!Number.isInteger(value) || value < 1) throw new Error("REVIEW_RULES_MAX_BYTES must be a positive integer")
-  return value
-}
-
 async function readRepository(api: GiteaClient, owner: string, repo: string, path: string, ref: string | undefined, label: string) {
   const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`
   const query = ref ? `?ref=${encodeURIComponent(ref)}` : ""
@@ -105,6 +100,7 @@ export async function loadTemplate(api: GiteaClient, pr: RepositoryPR, base: str
 }
 
 export async function loadRules(api: GiteaClient, pr: RepositoryPR, base: string, changedPaths: string[]) {
+  const mounted = await readMountedRules()
   const configured = process.env.REVIEW_RULES?.trim()
   if (configured === "none" || configured === "false") return { rules: [], skipped: [] }
   const explicit = Boolean(configured)
@@ -118,10 +114,11 @@ export async function loadRules(api: GiteaClient, pr: RepositoryPR, base: string
       throw new Error(`RULES_UNAVAILABLE: ${value}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
+  if (mounted !== undefined) rules.push(parseRuleDocument(MOUNTED_RULE_SOURCE, mounted))
   const applicable = rules.filter(rule => !rule.paths.length || changedPaths.some(path => rule.paths.some(pattern => matchPattern(path, pattern))))
   const size = Buffer.byteLength(applicable.map(rule => rule.body).join("\n"))
-  if (size > maxBytes()) {
-    throw new Error(`RULES_TOO_LARGE: Applicable standards are ${size} bytes (limit ${maxBytes()}). Split them with "paths:" frontmatter or raise REVIEW_RULES_MAX_BYTES.`)
+  if (size > rulesByteLimit()) {
+    throw new Error(`RULES_TOO_LARGE: Applicable standards are ${size} bytes (limit ${rulesByteLimit()}). Split them with "paths:" frontmatter or raise REVIEW_RULES_MAX_BYTES.`)
   }
   return { rules: applicable, skipped: rules.filter(rule => !applicable.includes(rule)).map(rule => rule.source) }
 }

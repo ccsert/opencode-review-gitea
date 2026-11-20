@@ -6,6 +6,7 @@ import { configuredReviewTarget, matchesReviewTarget, reviewURL } from "./lib/gi
 import { reviewMode } from "./lib/review-mode"
 import { draftWaitSeconds } from "./lib/draft-summary"
 import { runDraftWatcher } from "./draft-watch"
+import { readMountedRules } from "./lib/mounted-rules"
 
 function reviewRunTimeoutSeconds() {
   const raw = process.env.REVIEW_RUN_TIMEOUT_SECONDS ?? "900"
@@ -21,6 +22,9 @@ export async function runReview(prompt: string) {
   const wait = mode === "draft" ? draftWaitSeconds() : 0
   const runTimeout = reviewRunTimeoutSeconds()
   const target = configuredReviewTarget(true)!
+  // Fail before the model (and before any draft/write) for an invalid explicit
+  // mount. Tool loading reads it again and binds its content to the snapshot.
+  await readMountedRules()
   const runID = crypto.randomUUID()
   const state = resolve(stateDirectory())
   const receiptPath = join(state, `receipt-${runID}.json`)

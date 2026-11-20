@@ -18,6 +18,7 @@ function runReview(script: string[], options: {
   refreshStatus?: number
   runStatus?: number
   receipt?: boolean
+  cwd?: string
   env?: Record<string, string | undefined>
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "review-startup-"))
@@ -44,7 +45,7 @@ if (args[0] === "run") {
   writeFileSync(join(directory, "uname"), "#!/bin/sh\necho x86_64\n", { mode: 0o755 })
 
   const result = spawnSync("bash", script, {
-    cwd: root,
+    cwd: options.cwd ?? root,
     encoding: "utf8",
     timeout: 15_000,
     env: {
@@ -80,6 +81,29 @@ const scripts = [
     return { name: path, script: ["-e", "-c", script] }
   }),
 ]
+
+test("invalid mounted rules fail before starting the model or creating a draft", () => {
+  const missing = join(mkdtempSync(join(tmpdir(), "missing-rules-")), "not-there.md")
+  temporaryDirectories.push(join(missing, ".."))
+  const result = runReview([join(root, "entrypoint.sh"), "review"], { refresh: "false", env: {
+    REVIEW_RULES_FILE: missing, REVIEW_MODE: "draft", DRAFT_WAIT_TIMEOUT_SECONDS: "0",
+  } })
+  expect(result.status).toBe(1)
+  expect(result.invocations).toEqual([])
+  expect(result.stdout + result.stderr).toContain("RULES_UNAVAILABLE")
+  expect(result.stdout + result.stderr).not.toContain(missing)
+})
+
+test("Docker launcher ignores untrusted workspace dotenv configuration", () => {
+  const workspace = mkdtempSync(join(tmpdir(), "review-dotenv-"))
+  temporaryDirectories.push(workspace)
+  writeFileSync(join(workspace, ".env"), "REVIEW_RULES_FILE=/workspace/attacker.md\nREVIEW_RULES=none\n")
+  const result = runReview([join(root, "entrypoint.sh"), "review"], { cwd: workspace, refresh: "false", env: {
+    OPENCODE_REVIEW_WORKSPACE: workspace,
+  } })
+  expect(result.status).toBe(0)
+  expect(result.invocations.map(call => call.args[0])).toEqual(["run"])
+})
 
 for (const { name, script } of scripts) {
   describe(name, () => {

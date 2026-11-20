@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import diffTool from "../.opencode-review/tools/gitea-pr-diff"
@@ -117,6 +117,7 @@ beforeEach(() => {
   delete process.env.REVIEW_MODE
   delete process.env.OPENCODE_REVIEW_MODE
   process.env.REVIEW_OUTPUT_DIR = join(directory, "output")
+  delete process.env.REVIEW_RULES_FILE
 })
 afterEach(() => {
   server.stop(true)
@@ -128,6 +129,44 @@ afterEach(() => {
 const fetchDiff = (ctx: ReturnType<typeof context>) => diffTool.execute({ ...args, format: "parsed", file_patterns: undefined }, ctx)
 const submit = (ctx: ReturnType<typeof context>, line = 2) => reviewTool.execute({ ...args, summary: "Review result",
   approval: "comment", comments: [{ path: "app.ts", line, body: "**[BUG:HIGH]** Example finding" }] }, ctx)
+
+test("mounted rules reach draft context without leaking paths; changed rules cannot reuse the pending draft", async () => {
+  process.env.REVIEW_MODE = "draft"
+  const file = join(directory, "trusted.md"); process.env.REVIEW_RULES_FILE = file
+  writeFileSync(file, "# Trusted\nMOUNTED_RULE_SENTINEL")
+  const first = context()
+  const text = await fetchDiff(first)
+  expect(text).toContain("MOUNTED_RULE_SENTINEL")
+  expect(text).toContain("mounted:REVIEW_RULES_FILE")
+  expect(text).not.toContain(file)
+  await submit(first)
+  expect(reviews[0].state).toBe("PENDING")
+  expect(posts).toBe(1)
+  const original = await loadSnapshot(server.url.origin, args, first.sessionID)
+  writeFileSync(file, "# Trusted\nCHANGED_MOUNTED_RULE")
+  await expect(fetchDiff(first)).rejects.toThrow("REVIEW_CONTEXT_CHANGED")
+  const next = context(); await fetchDiff(next)
+  expect((await loadSnapshot(server.url.origin, args, next.sessionID))?.context).not.toBe(original?.context)
+  await expect(submit(next)).rejects.toThrow("DRAFT_CONFLICT")
+  expect(posts).toBe(1)
+})
+test("missing mounted rules cannot create a draft or use an implicit fallback", async () => {
+  process.env.REVIEW_MODE = "draft"
+  process.env.REVIEW_RULES_FILE = join(directory, "missing.md")
+  const ctx = context()
+  await expect(fetchDiff(ctx)).rejects.toThrow("RULES_UNAVAILABLE")
+  await expect(submit(ctx)).rejects.toThrow("SNAPSHOT_REQUIRED")
+  expect(posts).toBe(0)
+  expect(reviews).toHaveLength(0)
+})
+test("changed mounted rules invalidate a completed incremental baseline", async () => {
+  const file = join(directory, "trusted.md"); process.env.REVIEW_RULES_FILE = file
+  writeFileSync(file, "First rule.")
+  const first = context(); await fetchDiff(first); await submit(first)
+  expect(await incrementalTool.execute({ ...args, format: "parsed" }, context())).toContain("No New Changes")
+  writeFileSync(file, "Different rule.")
+  expect(await incrementalTool.execute({ ...args, format: "parsed" }, context())).not.toContain("No New Changes")
+})
 
 test("draft saves PENDING regardless of recommended approval and exports summary without exposing it in timeline", async () => {
   process.env.REVIEW_MODE = "draft"

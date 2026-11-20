@@ -112,7 +112,7 @@ jobs:
             FILE_INSTRUCTION="Only review files matching: $FILE_PATTERNS."
           fi
           
-          bun .opencode-review/run-review.ts \
+          bun --no-env-file .opencode-review/run-review.ts \
             "Review PR #${PR_NUMBER} in ${REPO_OWNER}/${REPO_NAME}. \
              Analyze code changes, identify issues, and submit review with inline comments. \
              ${LANG_INSTRUCTION} ${FILE_INSTRUCTION}"
