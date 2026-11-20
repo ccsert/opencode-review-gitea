@@ -79,7 +79,7 @@ jobs:
             fi
           fi
 
-          bun .opencode-review/run-review.ts \
+          bun --no-env-file .opencode-review/run-review.ts \
             "Please review PR #${PR_NUMBER} in ${REPO_OWNER}/${REPO_NAME}. \
              Fetch the diff, analyze the code changes, and submit a detailed review \
              with line-level comments for any issues found."

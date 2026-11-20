@@ -292,7 +292,7 @@ main() {
             if [ ! -f "$runner" ]; then
                 runner="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.opencode-review/run-review.ts"
             fi
-            exec bun "$runner" "$prompt"
+            exec bun --no-env-file "$runner" "$prompt"
             ;;
             
         draft-watch)
@@ -302,7 +302,7 @@ main() {
             if [ ! -f "$watcher" ]; then
                 watcher="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.opencode-review/draft-watch.ts"
             fi
-            exec bun "$watcher" "$@"
+            exec bun --no-env-file "$watcher" "$@"
             ;;
 
         shell|bash|sh)
@@ -345,6 +345,7 @@ main() {
             echo "  OPENCODE_REVIEW_TRUST_WORKSPACE_CONFIG  Use .opencode-review from the workspace (default: false)."
             echo "                     Enable only when the workspace is a trusted checkout, never PR code."
             echo "  REVIEW_LANGUAGE    auto|en|zh-CN (default: auto)"
+            echo "  REVIEW_RULES_FILE  Trusted absolute Markdown/text file outside workspace; mount read-only."
             echo "  REVIEW_MODE        submit|draft (default: submit). Draft saves PENDING; human submits."
             echo "  REVIEW_RUN_TIMEOUT_SECONDS  Time limit for the OpenCode run, excluding draft watch (default: 900)."
             echo "  REVIEW_OUTPUT_DIR  Persistent draft output directory; mount it to retain summaries and state."

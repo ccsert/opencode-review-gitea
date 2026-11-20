@@ -246,6 +246,7 @@ env:
 
   # 团队审查规范（默认读取 .gitea/review-rules[.md] 和 .forgejo/review-rules[.md]）
   REVIEW_RULES: ""           # 例如："docs/standards/, org/standards:backend@v2, https://example.com/api.md"
+  REVIEW_RULES_FILE: ""      # 可选可信挂载文件绝对路径，例如 /review-rules/standards.md
 
   # 审查前刷新模型目录（设为 "false" 可跳过）
   OPENCODE_REFRESH_MODELS: "true"
@@ -317,6 +318,32 @@ paths: ["*.go"]
 ```
 
 适用规范的总大小受 `REVIEW_RULES_MAX_BYTES` 限制（默认 30000），超出时请用 `paths:` 拆分。与 `REVIEW_TEMPLATE: compliance` 配合可得到逐条核对清单。
+
+##### 挂载本地规范
+
+在**可信启动环境**中设置 `REVIEW_RULES_FILE`，指定容器内单个绝对路径，
+例如 `/review-rules/standards.md`。将操作者维护的 UTF-8 `.md`、`.markdown`
+或 `.txt` 文件只读挂载到 PR 工作区之外，参见[外部 Docker 草稿示例](docs/draft-review.md#mounted-local-review-rules)。
+文件内容会发送给所配置的模型，不要放入密钥等秘密信息。
+引用来源固定显示为 `mounted:REVIEW_RULES_FILE`，不会暴露本地路径或文件名。
+
+- 文件规则**追加**到 `REVIEW_RULES` 规则之后；未设置 `REVIEW_RULES` 时，原有
+  PR base 默认来源仍然加载。与 `REVIEW_RULES=none` 或 `false` 同时设置会报错，
+  不会静默覆盖。
+- 复用 frontmatter 的 `title`/`paths` 和适用规则总大小限制。本地文件的完整字节数
+  （含 frontmatter）也须在读取全文、过滤适用文件前满足 `REVIEW_RULES_MAX_BYTES`
+  （默认 30000）。
+- 文件缺失、不可读、不是普通文件、是符号链接、超限或不是合法 UTF-8 时，
+  在启动模型或创建草稿前失败，不回退。禁止读取 `/workspace`、
+  `$GITHUB_WORKSPACE`、`$OPENCODE_REVIEW_WORKSPACE` 内的文件，
+  包括父目录符号链接解析后的路径，开启 workspace trust 也不能绕过。
+- 不能从 PR 内容生成此设置或挂载文件。提供的启动脚本不加载工作区 `.env`，
+  请显式导出可信环境变量。运行期间保持文件稳定；有效规则变化会使增量复用失效，
+  也不能静默覆盖已有待提交草稿。
+
+`REVIEW_RULES` 原语义不变：其中 `/tmp/rules.md` 仍是 PR base 仓库路径，
+`file://...` 不受支持。`REVIEW_RULES_FILE` 不接受 URI、目录或来源列表，
+不扩展 `REVIEW_TEMPLATE` 的本地读取能力。
 
 #### 审查技能（Skills）
 
@@ -406,7 +433,7 @@ export REPO_NAME="repo"
 export PR_NUMBER=123
 
 opencode models --refresh
-bun .opencode-review/run-review.ts \
+bun --no-env-file .opencode-review/run-review.ts \
   "Please review PR #123 in owner/repo"
 ```
 

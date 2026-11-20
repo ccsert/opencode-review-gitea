@@ -60,6 +60,45 @@ Custom model providers use the same trusted OpenCode config mounting mechanism
 as submit mode. Only the output directory and optional provider configuration
 are mounted; target repository code is not needed.
 
+### Mounted local review rules
+
+To add a private local Markdown rules file without changing the target repository
+or hosting the file on HTTP, set `REVIEW_RULES_FILE` in the Docker launch command.
+Use an existing, operator-owned file outside any PR checkout:
+
+```bash
+mkdir -p review-output
+docker run --rm \
+  --mount type=bind,src=/absolute/path/code-review.md,dst=/review-rules/standards.md,readonly \
+  -v "$(pwd)/review-output:/review-output" \
+  -e GITEA_TOKEN -e GITEA_SERVER_URL -e DEEPSEEK_API_KEY \
+  -e REPO_OWNER=your-org -e REPO_NAME=your-repo -e PR_NUMBER=123 \
+  -e REVIEW_MODE=draft -e REVIEW_OUTPUT_DIR=/review-output \
+  -e REVIEW_RULES_FILE=/review-rules/standards.md \
+  "${REVIEW_IMAGE:-ghcr.io/ccsert/opencode-review:latest}"
+```
+
+The destination is an absolute **container** path, not a `file://` URI. Do not
+mount PR-controlled files here or derive this environment value from a PR.
+Keep the mount outside `/workspace` and any configured Actions/review workspace;
+canonical workspace paths and symbolic-link files are rejected. No workspace
+trust flag is needed. The supplied launchers ignore workspace `.env` files.
+
+Rules append to explicit `REVIEW_RULES` sources, or to the default PR-base rules
+when that variable is unset. `REVIEW_RULES=none/false` plus a file is an error.
+The non-empty UTF-8 `.md`/`.markdown`/`.txt` file is limited to
+`REVIEW_RULES_MAX_BYTES` including frontmatter (default 30000); applicable rules
+from all sources share the existing total cap. `title` and `paths` frontmatter
+work as usual. A missing/unreadable/invalid file stops before the model starts or
+a native draft is created, with no fallback to repository paths or URLs.
+
+The model receives the rule **contents**, so keep credentials out of the file.
+Source citations use `mounted:REVIEW_RULES_FILE`, not its private path or filename.
+Keep the content stable during a run. Effective rule changes are included in the
+review context digest, so completed reviews are not reused under different rules
+and a pending draft is never silently overwritten. This option does not change
+`REVIEW_TEMPLATE` or the repository/remote semantics of `REVIEW_RULES`.
+
 ### Custom OpenAI-compatible gateway
 
 Save this as `review-provider.json` outside the target repository. Replace

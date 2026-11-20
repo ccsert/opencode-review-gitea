@@ -250,6 +250,7 @@ env:
 
   # Team review standards (default: .gitea/review-rules[.md] and .forgejo/review-rules[.md])
   REVIEW_RULES: ""           # e.g., "docs/standards/, org/standards:backend@v2, https://example.com/api.md"
+  REVIEW_RULES_FILE: ""      # optional trusted absolute mounted file, e.g., /review-rules/standards.md
 
   # Refresh the model catalog before review (set to "false" to skip)
   OPENCODE_REFRESH_MODELS: "true"
@@ -321,6 +322,34 @@ paths: ["*.go"]
 ```
 
 Applicable standards are limited to `REVIEW_RULES_MAX_BYTES` (default 30000); split large sets with `paths:`. Combine with `REVIEW_TEMPLATE: compliance` for a rule-by-rule checklist.
+
+##### Mounted local standards
+
+Set `REVIEW_RULES_FILE` in the **trusted launch environment** to one absolute
+container path, such as `/review-rules/standards.md`. Mount an operator-owned
+UTF-8 `.md`, `.markdown` or `.txt` file read-only, outside the PR workspace.
+See the [external Docker draft example](docs/draft-review.md#mounted-local-review-rules).
+The file's contents are sent to your configured model; do not include secrets.
+The citation is `mounted:REVIEW_RULES_FILE`, not the private pathname.
+
+- The file is **added** to `REVIEW_RULES`; when `REVIEW_RULES` is unset, the usual
+  PR-base defaults still apply. Combining a file with `REVIEW_RULES=none` or
+  `false` is an error, not a silent override.
+- Frontmatter `title`/`paths` and the total applicable-rules limit still apply.
+  The entire mounted file, including frontmatter, must also fit
+  `REVIEW_RULES_MAX_BYTES` (default 30000) before filtering or reading it in full.
+- Missing, unreadable, non-regular, symbolic-link, oversized or invalid UTF-8
+  files fail before the model starts or a draft is created. There is no fallback.
+  Files in `/workspace`, `$GITHUB_WORKSPACE` or `$OPENCODE_REVIEW_WORKSPACE`,
+  including symlink-resolved paths, are rejected even with workspace trust enabled.
+- Never derive this setting or the mounted file from PR content. The supplied
+  launchers ignore workspace `.env` files; export trusted environment values
+  explicitly. Keep the file stable for a run. Changed effective rules invalidate
+  incremental reuse and cannot silently replace an existing pending draft.
+
+This does not change `REVIEW_RULES`: `/tmp/rules.md` there is still a PR-base
+repository path and `file://...` is unsupported. `REVIEW_RULES_FILE` is not a URI,
+directory, source list or template setting; `REVIEW_TEMPLATE` is unchanged.
 
 #### Review Skills
 
@@ -429,7 +458,7 @@ export REPO_NAME="repo"
 export PR_NUMBER=123
 
 opencode models --refresh
-bun .opencode-review/run-review.ts \
+bun --no-env-file .opencode-review/run-review.ts \
   "Please review PR #123 in owner/repo"
 ```
 

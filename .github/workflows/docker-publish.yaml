@@ -97,6 +97,12 @@ jobs:
           for scenario in disconnect stalled-stream missing-tool; do
             REVIEW_TEST_GATEWAY_CASE="$scenario" bun tests/integration/model-smoke.ts
           done
+      - name: Exercise mounted rules in external draft mode
+        run: |
+          export REVIEW_TEST_MODE=draft
+          for scenario in mounted missing; do
+            REVIEW_TEST_RULES_CASE="$scenario" bun tests/integration/model-smoke.ts
+          done
       - name: Save model integration logs
         if: failure()
         uses: actions/upload-artifact@v4
