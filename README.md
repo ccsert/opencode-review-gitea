@@ -88,6 +88,41 @@ Maintainers can also run **Docker Build & Publish** from GitHub Actions. The opt
 
 To update a local installation, run `docker pull ghcr.io/ccsert/opencode-review:latest`. Gitea/Forgejo runners must also pull the updated image rather than reuse a cached tag. For reproducible reviews, pin the workflow's `container.image` to a published digest (`ghcr.io/ccsert/opencode-review@sha256:<digest>`); update that digest explicitly when ready.
 
+### OpenCode 2 (opt-in Docker image)
+
+Existing images, including `:latest`, continue to use OpenCode 1. To try OpenCode
+2, use `ghcr.io/ccsert/opencode-review:opencode-v2` as your Docker image or your
+workflow's `container.image` **after that tag has been published**. No change to
+the source installer or source workflow is required for current users. Do not
+share an OpenCode 1 data directory with the v2 container.
+
+To test a pinned v2 image before publication:
+
+```bash
+docker build --build-arg OPENCODE_GENERATION=2 --build-arg OPENCODE_VERSION=2.3.2 \
+  -t opencode-review:v2-local .
+```
+
+The [v2 workflow](.github/workflows/docker-opencode-v2.yaml) resolves a stable
+2.x version (at least 2.3.2) once per run. Native Linux AMD64 and ARM64 jobs both
+test Gitea and Forgejo with a local model fixture. Pull requests only run checks.
+Scheduled or manually dispatched default-branch runs promote the two tested
+images, not a rebuild, to a unique `opencode-v2-<version>-<run>-<attempt>` tag and
+then update `:opencode-v2`. A failed candidate leaves the previous `:opencode-v2`
+in place. Older workflow runs and lower OpenCode versions cannot replace the
+alias, and rerunning the active workflow run does not move it. If the registry
+cannot verify the current alias, promotion stops. To roll back deliberately,
+pin the desired older unique tag or digest in your deployment. Keep the
+`opencode-v2` prefix reserved for this workflow.
+
+OpenCode 2 manages its model catalog; the v2 container skips the legacy
+`models --refresh` command. For a fully custom or offline model provider,
+mount only the [trusted provider config file](docs/draft-review.md#custom-openai-compatible-gateway)
+(not the whole built-in config directory), pass `OPENCODE_REFRESH_MODELS=false`
+and `OPENCODE_DISABLE_MODELS_FETCH=true`, and point it at your reachable gateway.
+Use a prebuilt image when the deployment has no registry access; the review
+still needs access to Gitea/Forgejo and the configured model endpoint.
+
 ## ⚙️ Configuration
 
 ### 1. Set Up Secrets

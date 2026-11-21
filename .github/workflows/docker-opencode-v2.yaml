@@ -1,0 +1,192 @@
+name: OpenCode v2 image
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'entrypoint.sh'
+      - '.opencode-review/**'
+      - '.github/scripts/*.mjs'
+      - '.github/workflows/docker-opencode-v2.yaml'
+      - 'tests/**'
+  schedule:
+    - cron: '53 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize release candidates from resolution through promotion. PRs use their
+# own group and have no registry credentials or package-write job.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('opencode-v2-pr-{0}', github.event.pull_request.number) || format('opencode-v2-release-{0}', github.ref) }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      opencode: ${{ steps.resolve.outputs.opencode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Resolve a stable OpenCode 2 release once
+        id: resolve
+        run: |
+          set -euo pipefail
+          version=$(npm view '@opencode/cli@2' version --json --registry=https://registry.npmjs.org | node .github/scripts/resolve-opencode-v2.mjs)
+          echo "opencode=$version" >> "$GITHUB_OUTPUT"
+          echo "OpenCode candidate: $version" >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    needs: version
+    name: Smoke (linux/${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      OPENCODE_VERSION: ${{ needs.version.outputs.opencode }}
+      ARCH: ${{ matrix.arch }}
+      REVIEW_TEST_IMAGE: opencode-review-v2:tested-${{ matrix.arch }}
+      REVIEW_TEST_STRICT_TOOLS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Build the native candidate
+        run: |
+          set -euo pipefail
+          docker build --pull --provenance=false --platform "linux/$ARCH" \
+            --build-arg OPENCODE_GENERATION=2 --build-arg "OPENCODE_VERSION=$OPENCODE_VERSION" \
+            -t "$REVIEW_TEST_IMAGE" .
+          [[ "$(docker image inspect "$REVIEW_TEST_IMAGE" --format '{{.Os}}/{{.Architecture}}')" == "linux/$ARCH" ]]
+          [[ "$(docker run --rm --network none --entrypoint opencode "$REVIEW_TEST_IMAGE" --version)" == "opencode v$OPENCODE_VERSION" ]]
+      - name: Start synthetic Gitea and Forgejo
+        run: |
+          docker compose -f tests/integration/compose.yaml up -d
+          bun tests/integration/lab.ts
+      - name: Exercise submit, restart and fail-closed paths on both servers
+        run: |
+          REVIEW_TEST_DEFAULT_REFRESH=true REVIEW_TEST_REPEAT_SUBMIT=true bun tests/integration/model-smoke.ts
+          REVIEW_TEST_MODE=draft REVIEW_TEST_RESUME=true bun tests/integration/model-smoke.ts
+          export REVIEW_TEST_MODE=draft
+          for scenario in mounted missing; do
+            REVIEW_TEST_RULES_CASE="$scenario" bun tests/integration/model-smoke.ts
+          done
+          for scenario in disconnect stalled-stream missing-tool; do
+            REVIEW_TEST_GATEWAY_CASE="$scenario" bun tests/integration/model-smoke.ts
+          done
+      - name: Preserve the exact tested image
+        if: github.repository == 'ccsert/opencode-review-gitea' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        run: |
+          set -euo pipefail
+          mkdir tested-image
+          docker image inspect "$REVIEW_TEST_IMAGE" --format '{{.Id}}' > tested-image/config-id
+          printf '%s\n' "$OPENCODE_VERSION" > tested-image/opencode-version
+          docker save "$REVIEW_TEST_IMAGE" | gzip -1 > tested-image/image.tar.gz
+          (cd tested-image && sha256sum image.tar.gz > image.sha256)
+      - uses: actions/upload-artifact@v4
+        if: github.repository == 'ccsert/opencode-review-gitea' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        with:
+          name: opencode-v2-image-${{ matrix.arch }}
+          path: tested-image/
+          compression-level: 0
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 2
+      - name: Save fixture logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-v2-smoke-logs-${{ matrix.arch }}
+          path: tests/integration/.local/model-*.log
+          if-no-files-found: ignore
+      - name: Stop test servers
+        if: always()
+        run: docker compose -f tests/integration/compose.yaml down -v
+
+  publish:
+    if: github.repository == 'ccsert/opencode-review-gitea' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    needs: [version, smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    env:
+      OPENCODE_VERSION: ${{ needs.version.outputs.opencode }}
+      IMAGE: ghcr.io/ccsert/opencode-review
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: opencode-v2-image-*
+          path: tested-images
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote both tested image digests without rebuilding
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          guard=.github/scripts/opencode-v2-promotion.mjs
+          check_alias() {
+            local decision
+            decision=$(node "$guard" check) || exit 1
+            case "$decision" in
+              promote) ;;
+              already-active) echo 'This run is already active; no alias change.' >> "$GITHUB_STEP_SUMMARY"; exit 0 ;;
+              *) echo 'Unknown promotion decision; alias left unchanged.' >&2; exit 1 ;;
+            esac
+          }
+          check_alias
+          release="opencode-v2-$OPENCODE_VERSION-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          refs=()
+          for arch in amd64 arm64; do
+            dir="tested-images/opencode-v2-image-$arch"
+            (cd "$dir" && sha256sum -c image.sha256)
+            [[ "$(cat "$dir/opencode-version")" == "$OPENCODE_VERSION" ]]
+            config=$(cat "$dir/config-id")
+            [[ "$config" =~ ^sha256:[a-f0-9]{64}$ ]]
+            docker load -i "$dir/image.tar.gz"
+            local_tag="opencode-review-v2:tested-$arch"
+            [[ "$(docker image inspect "$local_tag" --format '{{.Id}} {{.Os}}/{{.Architecture}}')" == "$config linux/$arch" ]]
+            remote="$IMAGE:$release-$arch"
+            docker tag "$local_tag" "$remote"
+            pushed=$(docker push "$remote")
+            printf '%s\n' "$pushed"
+            digest=$(sed -nE 's/^.* digest: (sha256:[a-f0-9]{64}) size:.*$/\1/p' <<< "$pushed")
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            ref="$IMAGE@$digest"
+            [[ "$(docker buildx imagetools inspect --raw "$ref" | jq -er '.config.digest')" == "$config" ]]
+            refs+=("$ref")
+          done
+          # Buildx resolves the exact descriptors without writing a tag. The
+          # guard stages an explicit annotated OCI index even for Docker children.
+          index=$(docker buildx imagetools create --dry-run "${refs[@]}" | \
+            node "$guard" stage "$release" "${refs[0]#*@}" "${refs[1]#*@}")
+          # Re-read the live alias, then use the verified immutable index digest.
+          check_alias
+          docker buildx imagetools create -t "$IMAGE:opencode-v2" "$IMAGE@$index"
+          node "$guard" confirm "$index"
+          printf 'Promoted `%s` from the two tested image digests.\n' "$IMAGE:$release" >> "$GITHUB_STEP_SUMMARY"
