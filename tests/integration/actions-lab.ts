@@ -12,9 +12,11 @@ const model = process.env.REVIEW_LAB_MODEL
 if (!model?.includes("/")) throw new Error("Set REVIEW_LAB_MODEL=provider/model to select a real configured model")
 const providerName = model.split("/")[0]
 const config = JSON.parse(await readFile(process.env.REVIEW_LAB_CONFIG || join(homedir(), ".config/opencode/opencode.json"), "utf8"))
-const provider = config.provider?.[providerName]
+// OpenCode accepts native V2 `providers` and legacy V1 `provider` entries; forward the entry in its own format.
+const providersKey = config.providers?.[providerName] ? "providers" : "provider"
+const provider = config[providersKey]?.[providerName]
 if (!provider) throw new Error(`Provider ${providerName} is not present in the selected local config`)
-const modelConfig = JSON.stringify({ provider: { [providerName]: provider } })
+const modelConfig = JSON.stringify({ [providersKey]: { [providerName]: provider } })
 
 async function command(args: string[]) {
   const child = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" })

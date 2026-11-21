@@ -2,11 +2,16 @@ import { afterEach, beforeEach, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import diffTool from "../.opencode-review/tools/gitea-pr-diff"
-import reviewTool from "../.opencode-review/tools/gitea-review"
-import incrementalTool from "../.opencode-review/tools/gitea-incremental-diff"
+import diffToolDefinition from "../.opencode-review/tools/gitea-pr-diff"
+import reviewToolDefinition from "../.opencode-review/tools/gitea-review"
+import incrementalToolDefinition from "../.opencode-review/tools/gitea-incremental-diff"
 import type { Review } from "../.opencode-review/lib/gitea"
 import { loadSnapshot, saveSnapshot } from "../.opencode-review/lib/review-state"
+import { toolText } from "./tool-text"
+
+const diffTool = toolText(diffToolDefinition)
+const reviewTool = toolText(reviewToolDefinition)
+const incrementalTool = toolText(incrementalToolDefinition)
 
 const args = { owner: "owner", repo: "repo", pull_number: 1 }
 const diff = "diff --git a/app.ts b/app.ts\nindex a..b 100644\n--- a/app.ts\n+++ b/app.ts\n@@ -1 +1,2 @@\n const a = 1\n+const b = 2\n"
@@ -41,7 +46,7 @@ let timeline: { id: number; type: string; review_id: number; user: { id: number 
 let retainTimeline: boolean
 let session = 0
 const context = () => ({ sessionID: `session-${++session}`, messageID: "message", agent: "code-review",
-  abort: new AbortController().signal, metadata() {}, async ask() {} })
+  id: "call", signal: new AbortController().signal, async progress() {} })
 
 beforeEach(() => {
   savedEnv = { ...process.env }

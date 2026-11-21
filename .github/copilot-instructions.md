@@ -20,7 +20,8 @@ This is an **AI-powered Gitea/Forgejo PR code review tool** built on the [OpenCo
 ├── .gitea/workflows/          → Gitea Actions workflow
 └── .opencode-review/          → ISOLATED config directory (not .opencode/)
     ├── agents/                → AI Agent definitions (Markdown + YAML frontmatter)
-    ├── tools/                 → Custom tools (TypeScript with @opencode-ai/plugin)
+    ├── plugins/gitea-review/  → OpenCode V2 plugin that registers the tools (@opencode/plugin)
+    ├── tools/                 → Tool definitions (zod input schema + execute)
     ├── skills/                → Reusable skills (SKILL.md format)
     ├── opencode.json          → OpenCode config
     └── package.json           → Tool dependencies
@@ -41,15 +42,17 @@ This is an **AI-powered Gitea/Forgejo PR code review tool** built on the [OpenCo
 All tools follow a unified structure (see `.opencode-review/tools/gitea-review.ts`):
 
 ```typescript
-import { tool } from "@opencode-ai/plugin";
+import { z } from "zod";
+import { giteaTool } from "../lib/tool";
 
-export default tool({
+export default giteaTool({
+  name: "my-tool",
   description: "Tool description",
-  args: {
-    param: tool.schema.string().describe("Parameter description"),
-  },
-  async execute(args, context) {
-    // context contains directory, worktree, sessionID, etc.
+  input: z.object({
+    param: z.string().describe("Parameter description"),
+  }),
+  async execute(input, context) {
+    // context.sessionID identifies the OpenCode session
     return "Result message";
   },
 });
@@ -58,7 +61,8 @@ export default tool({
 **Key conventions**:
 
 - Filename = tool name (e.g., `gitea-review.ts` → tool `gitea-review`)
-- Use `tool.schema` (Zod) for argument types
+- Register each tool in `.opencode-review/plugins/gitea-review/index.ts`
+- Use zod for the input schema; `giteaTool` registers it as a direct (non-Code Mode) tool
 - `giteaFetch()` helper handles API authentication
 - Supports both `GITEA_*` and `GITHUB_*` env vars for compatibility
 
@@ -71,9 +75,9 @@ Agent files use Markdown + YAML frontmatter (see `.opencode-review/agents/code-r
 description: Agent description (required)
 mode: primary | subagent
 # Model is configured via MODEL env var or opencode.json
-tools:
-  "*": false # Disable all tools by default
-  "gitea-review": true # Explicitly enable needed tools
+permissions: # Ordered rules; the last match wins
+  - { action: "*", resource: "*", effect: deny } # Deny all tools by default
+  - { action: gitea-review, resource: "*", effect: allow } # Explicitly allow needed tools
 ---
 System prompt content...
 ```
@@ -100,8 +104,8 @@ System prompt content...
 
 ```bash
 cd .opencode-review && bun install    # Install dependencies
-opencode run --agent code-review      # Test Agent locally
-opencode agent create                 # Create new Agent (interactive)
+opencode run --standalone --agent code-review   # Test Agent locally
+opencode debug agents --standalone              # Show resolved agents and permissions
 ```
 
 ## Isolation Strategy

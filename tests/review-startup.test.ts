@@ -15,7 +15,6 @@ afterEach(() => {
 
 function runReview(script: string[], options: {
   refresh?: string
-  refreshStatus?: number
   runStatus?: number
   receipt?: boolean
   cwd?: string
@@ -27,8 +26,7 @@ function runReview(script: string[], options: {
   writeFileSync(join(directory, "opencode"), `#!/usr/bin/env bun
 import { appendFileSync, writeFileSync } from "node:fs"
 const args = process.argv.slice(2)
-appendFileSync(process.env.TEST_CALLS, JSON.stringify({ args, config: process.env.OPENCODE_CONFIG_DIR, cwd:process.cwd(), disableProjectConfig:process.env.OPENCODE_DISABLE_PROJECT_CONFIG,mode:process.env.OPENCODE_REVIEW_MODE,output:process.env.REVIEW_OUTPUT_DIR }) + "\\n")
-if (args[0] === "models") process.exit(Number(process.env.TEST_REFRESH_STATUS))
+appendFileSync(process.env.TEST_CALLS, JSON.stringify({ args, config: process.env.OPENCODE_CONFIG_DIR, cwd:process.cwd(), disableProjectConfig:process.env.OPENCODE_DISABLE_PROJECT_CONFIG,modelsFetch:process.env.OPENCODE_DISABLE_MODELS_FETCH,mode:process.env.OPENCODE_REVIEW_MODE,output:process.env.REVIEW_OUTPUT_DIR }) + "\\n")
 if (args[0] === "run") {
   if (process.env.TEST_WRITE_RECEIPT === "true" && process.env.OPENCODE_REVIEW_RECEIPT_PATH) {
     const target = JSON.parse(process.env.TEST_RECEIPT_TARGET || process.env.OPENCODE_REVIEW_TARGET || JSON.stringify({server:process.env.GITEA_SERVER_URL,owner:process.env.REPO_OWNER,repo:process.env.REPO_NAME,pull_number:Number(process.env.PR_NUMBER)}))
@@ -59,7 +57,6 @@ if (args[0] === "run") {
       REPO_OWNER: "owner",
       REPO_NAME: "repo",
       TEST_CALLS: calls,
-      TEST_REFRESH_STATUS: String(options.refreshStatus ?? 0),
       TEST_RUN_STATUS: String(options.runStatus ?? 0),
       TEST_WRITE_RECEIPT: String(options.receipt ?? true),
       OPENCODE_REVIEW_STATE_DIR: directory,
@@ -107,27 +104,21 @@ test("Docker launcher ignores untrusted workspace dotenv configuration", () => {
 
 for (const { name, script } of scripts) {
   describe(name, () => {
-    test("refreshes models before review using the configured directory", () => {
+    test("runs the review on a private OpenCode server with the configured directory", () => {
       const result = runReview(script)
       expect(result.status).toBe(0)
-      expect(result.invocations.map(call => call.args[0])).toEqual(["models", "run"])
-      expect(result.invocations[0].args).toEqual(["models", "--refresh"])
-      expect(result.invocations.every(call => call.config === result.directory)).toBe(true)
-      expect(result.invocations[1].args).toContain("code-review")
-      expect(result.invocations[1].args.at(-1)).toContain("PR #42")
+      expect(result.invocations.map(call => call.args[0])).toEqual(["run"])
+      expect(result.invocations[0].config).toBe(result.directory)
+      expect(result.invocations[0].args).toContain("--standalone")
+      expect(result.invocations[0].args).toContain("code-review")
+      expect(result.invocations[0].args.at(-1)).toContain("PR #42")
+      expect(result.invocations[0].modelsFetch).toBeUndefined()
     })
 
-    test("warns and continues review when refreshing models fails", () => {
-      const result = runReview(script, { refreshStatus: 7 })
-      expect(result.status).toBe(0)
-      expect(result.invocations.map(call => call.args[0])).toEqual(["models", "run"])
-      expect(result.stdout + result.stderr).toContain("Failed to refresh models")
-    })
-
-    test("supports skipping refresh for offline or custom provider setups", () => {
+    test("disables fetching the model catalog for offline or custom provider setups", () => {
       const result = runReview(script, { refresh: "false" })
       expect(result.status).toBe(0)
-      expect(result.invocations.map(call => call.args[0])).toEqual(["run"])
+      expect(result.invocations[0].modelsFetch).toBe("true")
     })
 
     test("preserves the review command failure status", () => {
@@ -143,11 +134,11 @@ for (const { name, script } of scripts) {
   })
 }
 
-test("Docker preserves a custom prompt after refreshing models", () => {
+test("Docker preserves a custom prompt", () => {
   const prompt = "Review PR #17 with spaces and 'quotes'."
   const result = runReview([join(root, "entrypoint.sh"), "review", prompt])
   expect(result.status).toBe(0)
-  expect(result.invocations.at(-1).args).toEqual(["run", "--agent", "code-review", prompt])
+  expect(result.invocations.at(-1).args).toEqual(["run", "--standalone", "--agent", "code-review", prompt])
 })
 
 test("Docker reports the MODEL environment setting without claiming it was selected", () => {
@@ -191,7 +182,7 @@ test("invalid runner timeout fails without starting the review", () => {
   expect(result.stderr).toContain("INVALID_REVIEW_RUN_TIMEOUT")
 })
 
-test("Docker version does not refresh models", () => {
+test("Docker version only asks OpenCode for its version", () => {
   const result = runReview([join(root, "entrypoint.sh"), "version"])
   expect(result.status).toBe(0)
   expect(result.invocations.map(call => call.args)).toEqual([["--version"]])
@@ -279,8 +270,8 @@ describe("workspace configuration", () => {
   function workspace() {
     const directory = mkdtempSync(join(tmpdir(), "review-workspace-"))
     temporaryDirectories.push(directory)
-    mkdirSync(join(directory, ".opencode-review", "tools"), { recursive: true })
-    writeFileSync(join(directory, ".opencode-review", "tools", "added-by-pr.ts"), "throw new Error('PR code ran')\n")
+    mkdirSync(join(directory, ".opencode-review", "plugins", "added-by-pr"), { recursive: true })
+    writeFileSync(join(directory, ".opencode-review", "plugins", "added-by-pr", "index.ts"), "throw new Error('PR code ran')\n")
     return directory
   }
   const entrypoint = [join(root, "entrypoint.sh"), "review"]

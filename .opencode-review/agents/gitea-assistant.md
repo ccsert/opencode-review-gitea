@@ -2,11 +2,8 @@
 description: General assistant for Gitea/Forgejo issues and PRs
 # Model is configured via MODEL env var or opencode.json
 color: "#38A3EE"
-tools:
-  "*": true
-  "gitea-comment": true
-  "gitea-review": true
-  "gitea-pr-diff": true
+permissions:
+  - { action: "*", resource: "*", effect: allow }
 ---
 
 You are an AI assistant helping with a Gitea/Forgejo repository.

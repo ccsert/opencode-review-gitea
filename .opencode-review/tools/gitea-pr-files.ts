@@ -1,6 +1,7 @@
-import { tool } from "@opencode-ai/plugin"
+import { z } from "zod"
 import { GiteaClient, prPath } from "../lib/gitea"
 import { filterFilesByPatterns } from "../lib/diff"
+import { giteaTool } from "../lib/tool"
 
 interface ChangedFile {
   filename: string
@@ -30,17 +31,18 @@ const STATUS_ICONS: Record<string, string> = {
   added: "🆕", modified: "📝", changed: "📝", deleted: "🗑️", removed: "🗑️", renamed: "📋",
 }
 
-export default tool({
+export default giteaTool({
+  name: "gitea-pr-files",
   description: DESCRIPTION,
-  args: {
-    owner: tool.schema.string().describe("Repository owner"),
-    repo: tool.schema.string().describe("Repository name"),
-    pull_number: tool.schema.number().describe("Pull request number"),
-    file_patterns: tool.schema
-      .array(tool.schema.string())
+  input: z.object({
+    owner: z.string().describe("Repository owner"),
+    repo: z.string().describe("Repository name"),
+    pull_number: z.number().describe("Pull request number"),
+    file_patterns: z
+      .array(z.string())
       .optional()
       .describe("Optional glob patterns to filter files (e.g., ['*.ts', 'src/**/*.go'])"),
-  },
+  }),
   async execute(args) {
     const patterns = args.file_patterns?.filter(Boolean) ?? []
     // The endpoint is paginated (30 rows by default); a partial list hides files from review.

@@ -49,7 +49,7 @@ jobs:
           # Examples: deepseek/deepseek-chat, anthropic/claude-sonnet-4-5, openai/gpt-4o
           MODEL: deepseek/deepseek-chat
           # OPENCODE_REVIEW_STATE_DIR: /persistent/review-state  # Shared durable volume, if configured
-          # OPENCODE_REFRESH_MODELS: "false"  # Skip catalog refresh in offline environments
+          # OPENCODE_REFRESH_MODELS: "false"  # Skip fetching the model catalog in offline environments
           
           # Review configuration
           REVIEW_LANGUAGE: auto          # auto | en | zh-CN

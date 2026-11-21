@@ -146,11 +146,11 @@ no custom provider is required — set `OPENAI_BASE_URL` and use that id directl
 
 ```json
 {
-  "provider": {
+  "providers": {
     "opencode-review-provider": {
-      "npm": "@ai-sdk/openai-compatible",
+      "package": "aisdk:@ai-sdk/openai-compatible",
       "name": "opencode-review-provider",
-      "options": {
+      "settings": {
         "baseURL": "{env:OPENAI_BASE_URL}",
         "apiKey": "{env:OPENAI_API_KEY}"
       },
@@ -168,10 +168,10 @@ no custom provider is required — set `OPENAI_BASE_URL` and use that id directl
 
 ```json
 {
-  "provider": {
+  "providers": {
     "opencode-review-provider": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
       "models": {
         "deepseek-v4-pro": {
           "name": "DeepSeek V4 Pro",
@@ -198,10 +198,10 @@ Each model entry in the `models` object can carry gateway-facing attributes:
 
 ```json
 {
-  "provider": {
+  "providers": {
     "opencode-review-provider": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
       "models": {
         "deepseek-v4-pro": {
           "name": "DeepSeek V4 Pro",
@@ -252,11 +252,11 @@ env:
   REVIEW_RULES: ""           # e.g., "docs/standards/, org/standards:backend@v2, https://example.com/api.md"
   REVIEW_RULES_FILE: ""      # optional trusted absolute mounted file, e.g., /review-rules/standards.md
 
-  # Refresh the model catalog before review (set to "false" to skip)
+  # Fetch the latest model catalog (set to "false" for offline use)
   OPENCODE_REFRESH_MODELS: "true"
 ```
 
-Before each review, Docker and source workflows run [`opencode models --refresh`](https://opencode.ai/docs/cli/#models). If refreshing fails, a warning is logged and the review continues with the cached catalog. For offline or fully custom provider setups, set `OPENCODE_REFRESH_MODELS: "false"`. For local source runs, execute `opencode models --refresh` before `opencode run` as shown below.
+OpenCode fetches the latest model catalog when a review starts. For offline or fully custom provider setups, set `OPENCODE_REFRESH_MODELS: "false"`; the review then uses the catalog bundled with OpenCode and your configured providers.
 
 #### Language Options
 
@@ -457,7 +457,6 @@ export REPO_OWNER="owner"
 export REPO_NAME="repo"
 export PR_NUMBER=123
 
-opencode models --refresh
 bun --no-env-file .opencode-review/run-review.ts \
   "Please review PR #123 in owner/repo"
 ```
@@ -482,10 +481,10 @@ For the review focus and summary format, prefer a custom `REVIEW_TEMPLATE` and `
 ```markdown
 ---
 description: AI code reviewer for Gitea/Forgejo PRs
-tools:
-  "*": false
-  "gitea-review": true
-  "gitea-pr-diff": true
+permissions:
+  - { action: "*", resource: "*", effect: deny }
+  - { action: gitea-review, resource: "*", effect: allow }
+  - { action: gitea-pr-diff, resource: "*", effect: allow }
 ---
 
 You are a code review expert focusing on [your domain]...
@@ -493,21 +492,25 @@ You are a code review expert focusing on [your domain]...
 
 ### Add New Tools
 
-Create a TypeScript file in `.opencode-review/tools/`:
+Tools are registered by the OpenCode plugin in `.opencode-review/plugins/gitea-review/`. Create a definition in `.opencode-review/tools/`:
 
 ```typescript
-import { tool } from "@opencode-ai/plugin"
+import { z } from "zod"
+import { giteaTool } from "../lib/tool"
 
-export default tool({
+export default giteaTool({
+  name: "my-tool",
   description: "Tool description",
-  args: {
-    param: tool.schema.string().describe("Parameter description"),
-  },
-  async execute(args, context) {
+  input: z.object({
+    param: z.string().describe("Parameter description"),
+  }),
+  async execute(input, context) {
     return "Result"
   },
 })
 ```
+
+Then add it in `plugins/gitea-review/index.ts` with `editor.add(...)`, and allow it in the agent's `permissions`.
 
 ## 📁 Project Structure
 
@@ -526,6 +529,8 @@ export default tool({
     ├── agents/
     │   ├── code-review.md          # Code review agent (main)
     │   └── gitea-assistant.md      # General assistant agent
+    ├── plugins/
+    │   └── gitea-review/index.ts   # OpenCode plugin that registers the tools
     ├── tools/
     │   ├── gitea-pr-diff.ts        # Get full PR diff
     │   ├── gitea-pr-files.ts       # List changed files
@@ -544,7 +549,7 @@ export default tool({
 ## 🔗 Related Links
 
 - [OpenCode Documentation](https://opencode.ai/docs)
-- [OpenCode Custom Tools](https://opencode.ai/docs/custom-tools/)
+- [OpenCode Plugins](https://opencode.ai/docs/build/plugins/)
 - [Gitea API Documentation](https://docs.gitea.io/en-us/api-usage/)
 - [Docker Image](https://ghcr.io/ccsert/opencode-review)
 

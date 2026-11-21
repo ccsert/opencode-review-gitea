@@ -43,7 +43,7 @@ jobs:
         run: ~/.bun/bin/bun install
 
       - name: Install opencode
-        run: ~/.bun/bin/bun add -g opencode-ai
+        run: ~/.bun/bin/bun install -g --trust @opencode/cli
 
       - name: Run code review
         env:
@@ -53,7 +53,7 @@ jobs:
           # Model configuration - use format: provider/model-id
           # Examples: deepseek/deepseek-chat, anthropic/claude-sonnet-4-5, openai/gpt-4o
           MODEL: deepseek/deepseek-chat
-          # OPENCODE_REFRESH_MODELS: "false"  # Skip catalog refresh in offline environments
+          # OPENCODE_REFRESH_MODELS: "false"  # Skip fetching the model catalog in offline environments
           # Review template and team standards (see README)
           # REVIEW_TEMPLATE: standard    # standard | concise | thorough | security | performance | compliance, or a path/URL
           # REVIEW_RULES: ""             # Team standards: repo paths (read from the PR base), owner/repo:path@ref, or URLs
@@ -71,14 +71,6 @@ jobs:
           # Debug (optional)
           OPENCODE_LOG_LEVEL: info
         run: |
-          # Refresh the model catalog; keep cached models usable if offline.
-          if [ "${OPENCODE_REFRESH_MODELS:-true}" != "false" ]; then
-            echo "Refreshing models cache..."
-            if ! opencode models --refresh >/dev/null; then
-              echo "[WARN] Failed to refresh models; continuing with the cached model catalog" >&2
-            fi
-          fi
-
           bun --no-env-file .opencode-review/run-review.ts \
             "Please review PR #${PR_NUMBER} in ${REPO_OWNER}/${REPO_NAME}. \
              Fetch the diff, analyze the code changes, and submit a detailed review \

@@ -109,12 +109,19 @@ prefixes. The `MODEL` value consists of the provider name followed by that ID.
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "review-gateway/my-model",
-  "enabled_providers": ["review-gateway"],
-  "permission": { "edit": "deny", "bash": "deny", "read": "deny" },
-  "provider": {
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "review-gateway", "effect": "allow" }
+  ],
+  "permissions": [
+    { "action": "edit", "resource": "*", "effect": "deny" },
+    { "action": "shell", "resource": "*", "effect": "deny" },
+    { "action": "read", "resource": "*", "effect": "deny" }
+  ],
+  "providers": {
     "review-gateway": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
         "baseURL": "{env:REVIEW_GATEWAY_URL}",
         "apiKey": "{env:REVIEW_GATEWAY_KEY}"
       },

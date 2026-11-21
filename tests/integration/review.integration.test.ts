@@ -4,15 +4,21 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { api, labs, type Lab } from "./lab"
 import { fixture } from "./fixtures"
-import diffTool from "../../.opencode-review/tools/gitea-pr-diff"
-import incrementalTool from "../../.opencode-review/tools/gitea-incremental-diff"
-import reviewTool from "../../.opencode-review/tools/gitea-review"
-import filesTool from "../../.opencode-review/tools/gitea-pr-files"
+import diffToolDefinition from "../../.opencode-review/tools/gitea-pr-diff"
+import incrementalToolDefinition from "../../.opencode-review/tools/gitea-incremental-diff"
+import reviewToolDefinition from "../../.opencode-review/tools/gitea-review"
+import filesToolDefinition from "../../.opencode-review/tools/gitea-pr-files"
 import { GiteaClient } from "../../.opencode-review/lib/gitea"
 import { watchDraftSummary } from "../../.opencode-review/lib/draft-summary"
+import { toolText } from "../tool-text"
+
+const diffTool = toolText(diffToolDefinition)
+const incrementalTool = toolText(incrementalToolDefinition)
+const reviewTool = toolText(reviewToolDefinition)
+const filesTool = toolText(filesToolDefinition)
 
 const context = () => ({ sessionID: crypto.randomUUID(), messageID: "integration", agent: "code-review",
-  abort: new AbortController().signal, metadata() {}, async ask() {} })
+  id: "call", signal: new AbortController().signal, async progress() {} })
 let previousEnv: NodeJS.ProcessEnv | undefined
 let state: string | undefined
 const proxies: ReturnType<typeof Bun.serve>[] = []

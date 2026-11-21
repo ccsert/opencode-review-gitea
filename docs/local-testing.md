@@ -47,10 +47,10 @@ CI 在发布镜像前运行上述测试；任何一步失败都不会进入镜�
 
 ```json
 {
-  "provider": {
+  "providers": {
     "review-gateway": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
         "baseURL": "http://host.docker.internal:3425/v1",
         "apiKey": "<填写本地网关密钥>"
       },

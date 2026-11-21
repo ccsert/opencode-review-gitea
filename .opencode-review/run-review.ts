@@ -34,11 +34,15 @@ export async function runReview(prompt: string) {
   const directory = await mkdtemp(join(tmpdir(), "opencode-review-run-"))
   try {
     const instruction = mode === "draft" ? `${prompt}\nDelivery mode: draft. gitea-review saves a PENDING review only. Do not publish. After it confirms draft_saved, draft_reused or draft_submitted, stop and report the native page and exported summary path.` : prompt
-    const child = Bun.spawn(["opencode", "run", "--agent", "code-review", instruction], {
+    // A private server per run: the tools read this run's environment, which a shared
+    // background service started by an earlier run would not have.
+    const child = Bun.spawn(["opencode", "run", "--standalone", "--agent", "code-review", instruction], {
       cwd: directory, stdin: "inherit", stdout: "inherit", stderr: "inherit",
       env: { ...process.env, OPENCODE_REVIEW_RUN_ID: runID, OPENCODE_REVIEW_RECEIPT_PATH: receiptPath,
         OPENCODE_REVIEW_MODE: mode,
         OPENCODE_DISABLE_PROJECT_CONFIG: "true",
+        // OpenCode refreshes the model catalog itself; this keeps the offline switch.
+        ...(process.env.OPENCODE_REFRESH_MODELS === "false" ? { OPENCODE_DISABLE_MODELS_FETCH: "true" } : {}),
         OPENCODE_CONFIG_DIR: process.env.OPENCODE_CONFIG_DIR ? resolve(process.env.OPENCODE_CONFIG_DIR) : undefined,
         OPENCODE_CONFIG: process.env.OPENCODE_CONFIG ? resolve(process.env.OPENCODE_CONFIG) : undefined,
         OPENCODE_REVIEW_STATE_DIR: state,

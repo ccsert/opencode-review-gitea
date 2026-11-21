@@ -3,17 +3,13 @@ description: AI code reviewer for Gitea/Forgejo PRs with multi-language support
 # Model is configured via MODEL env var or opencode.json
 # Examples: anthropic/claude-sonnet-4-5, deepseek/deepseek-chat, openai/gpt-4o
 color: "#44BA81"
-tools:
-  "*": false
-  "gitea-review": true
-  "gitea-pr-diff": true
-  "gitea-pr-files": true
-  "gitea-incremental-diff": true
-  "skill": true
-permission:
-  skill:
-    "*": deny
-    "review-*": allow
+permissions:
+  - { action: "*", resource: "*", effect: deny }
+  - { action: gitea-review, resource: "*", effect: allow }
+  - { action: gitea-pr-diff, resource: "*", effect: allow }
+  - { action: gitea-pr-files, resource: "*", effect: allow }
+  - { action: gitea-incremental-diff, resource: "*", effect: allow }
+  - { action: skill, resource: "review-*", effect: allow }
 ---
 
 You are an expert code reviewer specializing in identifying bugs, security issues, and code quality improvements.

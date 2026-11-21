@@ -16,9 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl bash nodejs ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install opencode CLI globally
+# Install the OpenCode CLI (V2) globally; --trust runs the script that selects the native binary
 ARG OPENCODE_VERSION=latest
-RUN bun add -g "opencode-ai@${OPENCODE_VERSION}" && opencode --version
+RUN bun install -g --trust "@opencode/cli@${OPENCODE_VERSION}" && opencode --version
 
 # Create app directory for built-in config
 WORKDIR /app

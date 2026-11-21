@@ -143,11 +143,11 @@ LiteLLM、9router 等网关常以自定义名称暴露模型（聚合前缀、�
 
 ```json
 {
-  "provider": {
+  "providers": {
     "opencode-review-provider": {
-      "npm": "@ai-sdk/openai-compatible",
+      "package": "aisdk:@ai-sdk/openai-compatible",
       "name": "opencode-review-provider",
-      "options": {
+      "settings": {
         "baseURL": "{env:OPENAI_BASE_URL}",
         "apiKey": "{env:OPENAI_API_KEY}"
       },
@@ -164,10 +164,10 @@ LiteLLM、9router 等网关常以自定义名称暴露模型（聚合前缀、�
 
 ```json
 {
-  "provider": {
+  "providers": {
     "opencode-review-provider": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
       "models": {
         "deepseek-v4-pro": {
           "name": "DeepSeek V4 Pro",
@@ -194,10 +194,10 @@ LiteLLM、9router 等网关常以自定义名称暴露模型（聚合前缀、�
 
 ```json
 {
-  "provider": {
+  "providers": {
     "opencode-review-provider": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": { "baseURL": "{env:OPENAI_BASE_URL}", "apiKey": "{env:OPENAI_API_KEY}" },
       "models": {
         "deepseek-v4-pro": {
           "name": "DeepSeek V4 Pro",
@@ -248,11 +248,11 @@ env:
   REVIEW_RULES: ""           # 例如："docs/standards/, org/standards:backend@v2, https://example.com/api.md"
   REVIEW_RULES_FILE: ""      # 可选可信挂载文件绝对路径，例如 /review-rules/standards.md
 
-  # 审查前刷新模型目录（设为 "false" 可跳过）
+  # 获取最新模型目录（离线环境设为 "false"）
   OPENCODE_REFRESH_MODELS: "true"
 ```
 
-Docker 和源码 workflow 在每次审查前都会执行 [`opencode models --refresh`](https://opencode.ai/docs/cli/#models)。刷新失败时会输出警告，并使用已有模型缓存继续审查。离线环境或完全自定义 provider 可设置 `OPENCODE_REFRESH_MODELS: "false"`。本地源码运行时，请按下方示例在 `opencode run` 前执行 `opencode models --refresh`。
+OpenCode 在审查启动时获取最新模型目录。离线环境或完全自定义 provider 可设置 `OPENCODE_REFRESH_MODELS: "false"`，此时使用 OpenCode 内置的模型目录和已配置的 provider。
 
 #### 语言选项
 
@@ -432,7 +432,6 @@ export REPO_OWNER="owner"
 export REPO_NAME="repo"
 export PR_NUMBER=123
 
-opencode models --refresh
 bun --no-env-file .opencode-review/run-review.ts \
   "Please review PR #123 in owner/repo"
 ```
@@ -455,10 +454,10 @@ Docker 入口及源码 workflow 使用 `run-review.ts`，只有读回确认 revi
 ```markdown
 ---
 description: AI code reviewer for Gitea/Forgejo PRs
-tools:
-  "*": false
-  "gitea-review": true
-  "gitea-pr-diff": true
+permissions:
+  - { action: "*", resource: "*", effect: deny }
+  - { action: gitea-review, resource: "*", effect: allow }
+  - { action: gitea-pr-diff, resource: "*", effect: allow }
 ---
 
 你是一个专注于 [你的领域] 的代码审查专家...
@@ -466,21 +465,25 @@ tools:
 
 ### 添加新工具
 
-在 `.opencode-review/tools/` 目录创建新的 TypeScript 文件：
+工具由 `.opencode-review/plugins/gitea-review/` 中的 OpenCode 插件注册。在 `.opencode-review/tools/` 目录创建工具定义：
 
 ```typescript
-import { tool } from "@opencode-ai/plugin"
+import { z } from "zod"
+import { giteaTool } from "../lib/tool"
 
-export default tool({
+export default giteaTool({
+  name: "my-tool",
   description: "工具描述",
-  args: {
-    param: tool.schema.string().describe("参数说明"),
-  },
-  async execute(args, context) {
+  input: z.object({
+    param: z.string().describe("参数说明"),
+  }),
+  async execute(input, context) {
     return "结果"
   },
 })
 ```
+
+然后在 `plugins/gitea-review/index.ts` 中用 `editor.add(...)` 注册，并在 agent 的 `permissions` 中允许该工具。
 
 ## 📁 项目结构
 
@@ -499,6 +502,8 @@ export default tool({
     ├── agents/
     │   ├── code-review.md          # 代码审查 Agent（主）
     │   └── gitea-assistant.md      # 通用助手 Agent
+    ├── plugins/
+    │   └── gitea-review/index.ts   # 注册工具的 OpenCode 插件
     ├── tools/
     │   ├── gitea-pr-diff.ts        # 获取完整 PR Diff
     │   ├── gitea-pr-files.ts       # 列出变更的文件
@@ -517,7 +522,7 @@ export default tool({
 ## 🔗 相关链接
 
 - [OpenCode 官方文档](https://opencode.ai/docs)
-- [OpenCode 自定义工具](https://opencode.ai/docs/custom-tools/)
+- [OpenCode 插件](https://opencode.ai/docs/build/plugins/)
 - [Gitea API 文档](https://docs.gitea.io/en-us/api-usage/)
 - [Docker 镜像](https://ghcr.io/ccsert/opencode-review)
 
