@@ -82,6 +82,13 @@ const scripts = [
   }),
 ]
 
+test("the opt-in Docker image skips only the V1 model-refresh command", () => {
+  const result = runReview(scripts[0].script, { env: { OPENCODE_IMAGE_GENERATION: "2" } })
+  expect(result.status).toBe(0)
+  expect(result.invocations.map(call => call.args[0])).toEqual(["run"])
+  expect(result.stdout).toContain("OpenCode 2 manages its model catalog")
+})
+
 test("invalid mounted rules fail before starting the model or creating a draft", () => {
   const missing = join(mkdtempSync(join(tmpdir(), "missing-rules-")), "not-there.md")
   temporaryDirectories.push(join(missing, ".."))

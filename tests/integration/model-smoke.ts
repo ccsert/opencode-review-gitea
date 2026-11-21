@@ -5,14 +5,19 @@ import { fixture } from "./fixtures"
 
 // Protocol fixture, not a real model: exercise OpenCode's actual tool dispatch,
 // the container entrypoint, production tools, Gitea writes and the final receipt.
+const expectedTools = ["gitea-incremental-diff", "gitea-pr-diff", "gitea-pr-files", "gitea-review", "skill"]
+const strictTools = process.env.REVIEW_TEST_STRICT_TOOLS === "true"
+const platform = process.env.REVIEW_TEST_PLATFORM
+const resume = process.env.REVIEW_TEST_RESUME === "true"
+const repeatSubmit = process.env.REVIEW_TEST_REPEAT_SUBMIT === "true"
 const image = process.env.REVIEW_TEST_IMAGE || "opencode-review-reliability:local"
 const draft = process.env.REVIEW_TEST_MODE === "draft"
 const gatewayCase = process.env.REVIEW_TEST_GATEWAY_CASE ?? "success"
 const rulesCase = process.env.REVIEW_TEST_RULES_CASE ?? "default"
+if (resume && (!draft || rulesCase !== "default" || gatewayCase !== "success")) throw new Error("Resume case requires ordinary draft success fixture")
 if (!["default", "mounted", "missing"].includes(rulesCase) ||
     rulesCase !== "default" && (!draft || gatewayCase !== "success")) throw new Error("Mounted rules cases require draft mode and the success gateway fixture")
-if (!["success", "disconnect", "stalled-stream", "missing-tool"].includes(gatewayCase) ||
-    gatewayCase !== "success" && !draft) throw new Error("Invalid gateway fixture case (failure cases require draft mode)")
+if (!["success", "disconnect", "stalled-stream", "missing-tool"].includes(gatewayCase)) throw new Error("Invalid gateway fixture case")
 const composeProject = process.env.COMPOSE_PROJECT_NAME || "opencode-review-lab"
 const directory = join(import.meta.dir, ".local")
 await mkdir(directory, { recursive: true, mode: 0o700 })
@@ -27,6 +32,8 @@ for (const lab of await labs()) {
     await Bun.sleep(100)
   }
   const calls: string[] = []
+  const offeredTools = new Set<string>()
+  let sawReviewAgent = false
   let requestCount = 0
   let leakedProjectInstructions = false
   let sawMountedRules = false
@@ -42,11 +49,13 @@ for (const lab of await labs()) {
       }), { headers: { "Content-Type": "text/event-stream" } })
     }
     const body = await request.json() as any
+    if (JSON.stringify(body.messages ?? []).includes("You are an expert code reviewer")) sawReviewAgent = true
     if (JSON.stringify(body.messages ?? []).includes("UNTRUSTED_PROJECT_SENTINEL")) leakedProjectInstructions = true
     const toolMessages = JSON.stringify((body.messages ?? []).filter((message: any) => message.role === "tool"))
     if (toolMessages.includes("TRUSTED_MOUNTED_RULE_SENTINEL") && toolMessages.includes("mounted:REVIEW_RULES_FILE")) sawMountedRules = true
     if (JSON.stringify(body.messages ?? []).includes("/review-rules/private-name.md")) leakedMountPath = true
     const functions = (body.tools ?? []).map((tool: any) => tool.function.name) as string[]
+    for (const name of functions) offeredTools.add(name)
     const diffName = functions.find(name => name === "gitea-pr-diff")
     const reviewName = functions.find(name => name === "gitea-review")
     const previous = (body.messages ?? []).flatMap((message: any) => message.tool_calls ?? []).map((call: any) => call.function.name)
@@ -76,7 +85,7 @@ for (const lab of await labs()) {
       chunk({}, toolCall ? "tool_calls" : "stop") + "data: [DONE]\n\n", { headers: { "Content-Type": "text/event-stream" } })
   } })
   try {
-    const caseLabel = `model-${lab.name}${draft ? "-draft" : ""}${gatewayCase === "success" ? "" : `-${gatewayCase}`}${rulesCase === "default" ? "" : `-rules-${rulesCase}`}`
+    const caseLabel = `model-${lab.name}${resume ? "-resume" : ""}${draft ? "-draft" : ""}${gatewayCase === "success" ? "" : `-${gatewayCase}`}${rulesCase === "default" ? "" : `-rules-${rulesCase}`}`
     const configPath = join(directory, `${caseLabel}.json`)
     const modelPort = model.port
     if (gatewayCase === "disconnect") model.stop(true)
@@ -97,27 +106,44 @@ for (const lab of await labs()) {
         options: { baseURL: "{env:REVIEW_GATEWAY_URL}", apiKey: "{env:REVIEW_GATEWAY_KEY}" },
         models: { review: { name: "Deterministic fixture", limit: { context: 64000, output: 4000 } } } } },
       permission: { edit: "deny", bash: "deny", read: "deny" } }), { mode: 0o600 })
-    const processHandle = Bun.spawn(["docker", "run", "--rm", "--network", `${composeProject}_default`,
-      ...(process.platform === "linux" ? ["--add-host", "host.docker.internal:host-gateway"] : []),
+    const containerName = `${composeProject}-review-${crypto.randomUUID().slice(0, 8)}`
+    const platformArgs = platform ? ["--platform", platform] : []
+    const hostArgs = process.platform === "linux" ? ["--add-host", "host.docker.internal:host-gateway"] : []
+    const targetArgs = ["-e", "GITEA_TOKEN", "-e", `GITEA_SERVER_URL=http://${lab.name}:3000`,
+      "-e", `PR_NUMBER=${f.args.pull_number}`, "-e", `REPO_OWNER=${f.args.owner}`, "-e", `REPO_NAME=${f.args.repo}`]
+    const containerEnv = { ...process.env, GITEA_TOKEN: lab.botToken }
+    const dockerRun = ["docker", "run", "--rm", ...platformArgs, "--name", containerName, "--network", `${composeProject}_default`,
+      ...hostArgs,
       "-v", `${resolve(configPath)}:/app/.opencode-review/opencode.json:ro`,
       "-v", `${resolve(workspace)}:/workspace:ro`,
       ...(draft ? ["-v", `${output}:/review-output`, "-e", "REVIEW_MODE=draft", "-e", "REVIEW_OUTPUT_DIR=/review-output", "-e", `DRAFT_WAIT_TIMEOUT_SECONDS=${rulesCase === "default" ? 30 : 0}`] : []),
       ...(rulesCase === "default" ? [] : ["-v", `${rulesPath}:/review-rules/private-name.md:ro`,
         "-e", `REVIEW_RULES_FILE=/review-rules/${rulesCase === "mounted" ? "private-name" : "missing"}.md`]),
-      "-e", "GITEA_TOKEN", "-e", `GITEA_SERVER_URL=http://${lab.name}:3000`,
-      "-e", "OPENCODE_REFRESH_MODELS=false", "-e", "OPENCODE_DISABLE_MODELS_FETCH=true",
+      ...targetArgs,
+      ...(process.env.REVIEW_TEST_DEFAULT_REFRESH === "true" ? [] : ["-e", "OPENCODE_REFRESH_MODELS=false"]), "-e", "OPENCODE_DISABLE_MODELS_FETCH=true",
       "-e", "OPENCODE_DISABLE_AUTOUPDATE=true", "-e", "REVIEW_GATEWAY_KEY=local-fixture",
       "-e", `REVIEW_GATEWAY_URL=http://host.docker.internal:${modelPort}/v1`,
       // A completed-response case must allow for cold SDK initialization.
-      "-e", `REVIEW_RUN_TIMEOUT_SECONDS=${gatewayCase === "success" || gatewayCase === "missing-tool" ? 120 : 30}`,
-      "-e", `PR_NUMBER=${f.args.pull_number}`, "-e", `REPO_OWNER=${f.args.owner}`, "-e", `REPO_NAME=${f.args.repo}`,
-      image, "review"], { stdout: "pipe", stderr: "pipe", env: { ...process.env, GITEA_TOKEN: lab.botToken } })
+      "-e", `REVIEW_RUN_TIMEOUT_SECONDS=${gatewayCase === "success" || gatewayCase === "missing-tool" ? 120 : (process.env.REVIEW_TEST_FAST_FAILURE_SECONDS ?? 30)}`,
+      image, "review"]
+    const run = () => Bun.spawn(dockerRun, { stdout: "pipe", stderr: "pipe", env: containerEnv })
+    const processHandle = run()
     let humanSubmitted = false
+    let interruptedKey: string | undefined
     const collectOutput = async () => {
       let text = ""
       for await (const chunk of processHandle.stdout) {
         text += new TextDecoder().decode(chunk, { stream: true })
-        if (draft && !humanSubmitted && text.includes("Waiting for reviewer to submit:")) {
+        if (resume && !interruptedKey && text.match(/Resume key: ([0-9a-f]{64})/)) {
+          interruptedKey = text.match(/Resume key: ([0-9a-f]{64})/)![1]
+          const actor = { ...lab, adminToken: lab.botToken }
+          const pending = await api(actor, `${f.path}/reviews`)
+          const summaries = await api(actor, `${f.path.replace("/pulls/", "/issues/")}/comments`)
+          if (pending.length !== 1 || pending[0].state !== "PENDING" || summaries.length) throw new Error(`${lab.name}: unsafe state before interruption`)
+          const signal = Bun.spawnSync(["docker", "kill", "--signal", "TERM", containerName])
+          if (signal.exitCode !== 0) throw new Error(`${lab.name}: could not interrupt owned review container: ${signal.stderr}`)
+        }
+        if (!resume && draft && !humanSubmitted && text.includes("Waiting for reviewer to submit:")) {
           const actor = { ...lab, adminToken: lab.botToken }
           const review = (await api(actor, `${f.path}/reviews`))[0]
           const other = { ...lab, adminToken: lab.humanToken }
@@ -136,6 +162,48 @@ for (const lab of await labs()) {
     const [status, stdout, stderr] = await Promise.all([processHandle.exited,
       collectOutput(), new Response(processHandle.stderr).text()])
     await writeFile(join(directory, `${caseLabel}.log`), stdout + stderr)
+    if (strictTools && gatewayCase === "success" && rulesCase !== "missing" &&
+        (!sawReviewAgent || JSON.stringify([...offeredTools].sort()) !== JSON.stringify(expectedTools))) {
+      throw new Error(`${lab.name}: resolved agent/tool catalog differed from expected allowlist: ${[...offeredTools]}`)
+    }
+    if (resume) {
+      const actor = { ...lab, adminToken: lab.botToken }
+      const commentsPath = `${f.path.replace("/pulls/", "/issues/")}/comments`
+      const pending = await api(actor, `${f.path}/reviews`)
+      const before = await api(actor, commentsPath)
+      if (status !== 1 || !interruptedKey || !(stdout+stderr).includes("DRAFT_WAIT_INTERRUPTED") ||
+          !stdout.includes("Verified draft:") || pending.length !== 1 || pending[0].state !== "PENDING" || before.length ||
+          calls.filter(name => name === "gitea-pr-diff").length < 2 || !calls.includes("gitea-review") || leakedProjectInstructions) {
+        throw new Error(`${lab.name}: expected controlled interrupt with one saved, unpublished pending review: ${(stdout+stderr).slice(-4000)}`)
+      }
+      const requestCountBefore = requestCount
+      const humanBody = "Human final assessment after interrupted draft"
+      const review = pending[0]
+      await api(actor, `${f.path}/reviews/${review.id}`, { event: "COMMENT", body: humanBody })
+      if ((await api(actor, commentsPath)).length) throw new Error(`${lab.name}: summary written without a resumed watcher`)
+      for (const attempt of [1, 2]) {
+        const watcher = Bun.spawn(["docker", "run", "--rm", ...platformArgs, "--network", `${composeProject}_default`,
+          ...hostArgs, ...targetArgs, "-e", `REVIEW_GATEWAY_URL=http://host.docker.internal:${modelPort}/v1`,
+          "-e", "REVIEW_GATEWAY_KEY=local-fixture", "-e", "OPENCODE_DISABLE_MODELS_FETCH=true",
+          "-v", `${resolve(configPath)}:/app/.opencode-review/opencode.json:ro`,
+          "-e", "REVIEW_OUTPUT_DIR=/review-output", "-e", "DRAFT_WAIT_TIMEOUT_SECONDS=10",
+          "-v", `${output}:/review-output`, image, "draft-watch", interruptedKey],
+          { stdout: "pipe", stderr: "pipe", env: containerEnv })
+        const [exit, text, err] = await Promise.all([watcher.exited, new Response(watcher.stdout).text(), new Response(watcher.stderr).text()])
+        await writeFile(join(directory, `${caseLabel}-watch-${attempt}.log`), text + err)
+        const published = await api(actor, commentsPath)
+        const finished = await api(actor, `${f.path}/reviews/${review.id}`)
+        const reviewList = await api(actor, `${f.path}/reviews`)
+        if (exit !== 0 || requestCount !== requestCountBefore || reviewList.length !== 1 || finished.state !== "COMMENT" || finished.body !== humanBody ||
+            published.length !== 1 || !published[0].body.includes("Deterministic local model integration") ||
+            !published[0].body.includes(`review \`${review.id}\``) ||
+            !text.includes(attempt === 1 ? "AI summary attached:" : "AI summary already attached:")) {
+          throw new Error(`${lab.name}: unsafe resume result ${attempt}: exit=${exit}, requests=${requestCount}, comments=${published.length} ${text+err}`)
+        }
+      }
+      console.log(`${lab.name}: SIGTERM after verified PENDING → native reviewer API submit → draft-watch twice → first attaches one summary, second read-only, zero additional model calls, native human body preserved PASS`)
+      continue
+    }
     if (rulesCase === "missing") {
       const actor = { ...lab, adminToken: lab.botToken }
       const reviews = await api(actor, `${f.path}/reviews`)
@@ -154,11 +222,16 @@ for (const lab of await labs()) {
         status !== 0 && !!diagnostic && requestCount === 0
       const actor = { ...lab, adminToken: lab.botToken }
       const reviews = await api(actor, `${f.path}/reviews`)
-      if (!expected || reviews.length || humanSubmitted || stdout.includes("Verified draft:")) {
+      const summaries = await api(actor, `${f.path.replace("/pulls/", "/issues/")}/comments`)
+      if (!expected || reviews.length || summaries.length || humanSubmitted || /Verified (?:draft|review):/.test(stdout)) {
         throw new Error(`${lab.name} ${gatewayCase}: unexpected exit ${status}, diagnostic ${diagnostic}, requests ${requestCount}, reviews ${reviews.length}`)
       }
-      console.log(`${lab.name}: ${gatewayCase} → ${diagnostic} (exit ${status}), no native review PASS`)
+      console.log(`${lab.name}: ${gatewayCase} → ${diagnostic} (exit ${status}), no native review or issue comment PASS`)
       continue
+    }
+    if (process.env.REVIEW_TEST_DEFAULT_REFRESH === "true" &&
+        (!stdout.includes("OpenCode 2 manages its model catalog") || stderr.includes("Unrecognized flag: --refresh"))) {
+      throw new Error(`${lab.name}: did not observe expected v2 refresh handling`)
     }
     if (!stdout.includes("OpenCode config can select a different model") ||
         (stdout + stderr).includes("No LLM API key detected") || requestCount === 0) {
@@ -173,6 +246,24 @@ for (const lab of await labs()) {
         (rulesCase === "mounted" && (!sawMountedRules || leakedMountPath || humanSubmitted || reviews[0].state !== "PENDING"))) {
       throw new Error(`${lab.name}: missing tool dispatch, review, line comment or verified receipt`)
     }
+    if (!draft) {
+      const summaries = await api(actor, `${f.path.replace("/pulls/", "/issues/")}/comments`)
+      if (reviews[0].state !== "COMMENT" || !reviews[0].body.includes("Deterministic local model integration") || summaries.length ||
+          calls.filter(name => name === "gitea-review").length !== 1) throw new Error(`${lab.name}: submit did not produce one intended native COMMENT review`)
+      if (repeatSubmit) {
+        const again = run()
+        const [exit, log, err] = await Promise.all([again.exited, new Response(again.stdout).text(), new Response(again.stderr).text()])
+        await writeFile(join(directory, `${caseLabel}-repeat.log`), log + err)
+        const after = await api(actor, `${f.path}/reviews`)
+        const afterSummaries = await api(actor, `${f.path.replace("/pulls/", "/issues/")}/comments`)
+        if (exit !== 0 || !log.includes("Verified review:") || !log.includes(", duplicate)") || after.length !== 1 ||
+            after[0].id !== reviews[0].id || after[0].body !== reviews[0].body || after[0].comments_count !== 1 || afterSummaries.length ||
+            calls.filter(name => name === "gitea-review").length !== 2) {
+          throw new Error(`${lab.name}: repeat submit was not idempotent: exit=${exit} after=${after.length} ${(log+err).slice(-3000)}`)
+        }
+        console.log(`${lab.name}: second fresh-container default-submit confirmed duplicate receipt for same review #${after[0].id}, still one native review and line comment PASS`)
+      }
+    }
     if (draft) {
       const summaries = await api(actor, `${f.path.replace("/pulls/", "/issues/")}/comments`)
       if (rulesCase === "mounted" ? summaries.length !== 0 : summaries.length !== 1 || !summaries[0].body.includes("Deterministic local model integration")) {
@@ -183,13 +274,14 @@ for (const lab of await labs()) {
       if (!markdown) throw new Error("Missing persisted draft summary")
       // On Linux the default container user owns the 0600 export. Read it in
       // a container with the same identity instead of weakening its permissions.
-      const saved = Bun.spawnSync(["docker", "run", "--rm", "--entrypoint", "cat",
+      const saved = Bun.spawnSync(["docker", "run", "--rm", ...platformArgs, "--entrypoint", "cat",
         "-v", `${output}:/review-output:ro`, image, `/review-output/${markdown}`])
       if (saved.exitCode !== 0 || !saved.stdout.toString().includes("Deterministic local model integration")) {
         throw new Error("Missing persisted draft summary")
       }
     }
     console.log(`${lab.name}: real OpenCode → production tools → ${rulesCase === "mounted" ? "mounted rules → PENDING (no publication)" : draft ? "PENDING → human submission → automatic summary" : "review"} #${reviews[0].id} → verified receipt PASS`)
+    if (strictTools) console.log(`  Allowed tools: ${[...offeredTools].sort().join(", ")}`)
     console.log(`  ${lab.url}/${f.args.owner}/${f.args.repo}/pulls/${f.args.pull_number}`)
   } finally { if (gatewayCase !== "disconnect") model.stop(true) }
 }

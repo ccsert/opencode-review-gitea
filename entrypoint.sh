@@ -259,6 +259,11 @@ refresh_models() {
         return 0
     fi
 
+    if [ "${OPENCODE_IMAGE_GENERATION:-1}" = "2" ]; then
+        log_info "OpenCode 2 manages its model catalog; skipping the OpenCode 1 refresh command"
+        return 0
+    fi
+
     log_info "Refreshing models cache..."
     if ! opencode models --refresh >/dev/null; then
         log_warn "Failed to refresh models; continuing with the cached model catalog"

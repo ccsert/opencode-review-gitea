@@ -17,8 +17,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install opencode CLI globally
+ARG OPENCODE_GENERATION=1
 ARG OPENCODE_VERSION=latest
-RUN bun add -g "opencode-ai@${OPENCODE_VERSION}" && opencode --version
+RUN case "$OPENCODE_GENERATION" in \
+      1) bun add -g "opencode-ai@${OPENCODE_VERSION}" ;; \
+      2) printf '%s\n' "$OPENCODE_VERSION" | grep -Eq '^2\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || \
+           { echo 'OpenCode 2 requires an exact stable 2.x OPENCODE_VERSION' >&2; exit 1; }; \
+         bun add -g --trust "@opencode/cli@${OPENCODE_VERSION}" ;; \
+      *) echo 'OPENCODE_GENERATION must be 1 or 2' >&2; exit 1 ;; \
+    esac && opencode --version
 
 # Create app directory for built-in config
 WORKDIR /app
@@ -30,11 +37,17 @@ COPY .opencode-review/ /app/.opencode-review/
 WORKDIR /app/.opencode-review
 RUN bun install --frozen-lockfile
 
+# Install the V2 plugin only in the opt-in image. Leave V1 tool discovery intact.
+RUN if [ "$OPENCODE_GENERATION" = 2 ]; then \
+      mkdir -p plugins && cp -R adapters/gitea-review-v2 plugins/; \
+    fi
+
 # Set working directory for user code
 WORKDIR /workspace
 
 # Environment variables with defaults
-ENV OPENCODE_CONFIG_DIR=/app/.opencode-review \
+ENV OPENCODE_IMAGE_GENERATION=${OPENCODE_GENERATION} \
+    OPENCODE_CONFIG_DIR=/app/.opencode-review \
     MODEL=deepseek/deepseek-chat \
     REVIEW_LANGUAGE=auto \
     REVIEW_STYLE=balanced
