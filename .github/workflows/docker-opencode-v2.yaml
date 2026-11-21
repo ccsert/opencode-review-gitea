@@ -8,7 +8,7 @@ on:
       - '.dockerignore'
       - 'entrypoint.sh'
       - '.opencode-review/**'
-      - '.github/scripts/resolve-opencode-v2.mjs'
+      - '.github/scripts/*.mjs'
       - '.github/workflows/docker-opencode-v2.yaml'
       - 'tests/**'
   schedule:
@@ -131,6 +131,9 @@ jobs:
       OPENCODE_VERSION: ${{ needs.version.outputs.opencode }}
       IMAGE: ghcr.io/ccsert/opencode-review
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           pattern: opencode-v2-image-*
@@ -141,9 +144,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Promote both tested image digests without rebuilding
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          [[ "$OPENCODE_VERSION" =~ ^2\.[0-9]+\.[0-9]+$ ]]
+          guard=.github/scripts/opencode-v2-promotion.mjs
+          check_alias() {
+            local decision
+            decision=$(node "$guard" check) || exit 1
+            case "$decision" in
+              promote) ;;
+              already-active) echo 'This run is already active; no alias change.' >> "$GITHUB_STEP_SUMMARY"; exit 0 ;;
+              *) echo 'Unknown promotion decision; alias left unchanged.' >&2; exit 1 ;;
+            esac
+          }
+          check_alias
           release="opencode-v2-$OPENCODE_VERSION-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           refs=()
           for arch in amd64 arm64; do
@@ -165,10 +181,12 @@ jobs:
             [[ "$(docker buildx imagetools inspect --raw "$ref" | jq -er '.config.digest')" == "$config" ]]
             refs+=("$ref")
           done
-          docker buildx imagetools create -t "$IMAGE:$release" "${refs[@]}"
-          # Move the v2 alias only after both uploads and the index are verified.
-          docker buildx imagetools inspect --raw "$IMAGE:$release" | jq -e \
-            --arg amd64 "${refs[0]#*@}" --arg arm64 "${refs[1]#*@}" \
-            '[.manifests[] | [.platform.os, .platform.architecture, .digest]] | sort == ([["linux","amd64",$amd64],["linux","arm64",$arm64]] | sort)'
-          docker buildx imagetools create -t "$IMAGE:opencode-v2" "$IMAGE:$release"
+          # Buildx resolves the exact descriptors without writing a tag. The
+          # guard stages an explicit annotated OCI index even for Docker children.
+          index=$(docker buildx imagetools create --dry-run "${refs[@]}" | \
+            node "$guard" stage "$release" "${refs[0]#*@}" "${refs[1]#*@}")
+          # Re-read the live alias, then use the verified immutable index digest.
+          check_alias
+          docker buildx imagetools create -t "$IMAGE:opencode-v2" "$IMAGE@$index"
+          node "$guard" confirm "$index"
           printf 'Promoted `%s` from the two tested image digests.\n' "$IMAGE:$release" >> "$GITHUB_STEP_SUMMARY"

@@ -109,7 +109,10 @@ test Gitea and Forgejo with a local model fixture. Pull requests only run checks
 Scheduled or manually dispatched default-branch runs promote the two tested
 images, not a rebuild, to a unique `opencode-v2-<version>-<run>-<attempt>` tag and
 then update `:opencode-v2`. A failed candidate leaves the previous `:opencode-v2`
-in place. Pin the unique tag or digest for controlled rollouts. Keep the
+in place. Older workflow runs and lower OpenCode versions cannot replace the
+alias, and rerunning the active workflow run does not move it. If the registry
+cannot verify the current alias, promotion stops. To roll back deliberately,
+pin the desired older unique tag or digest in your deployment. Keep the
 `opencode-v2` prefix reserved for this workflow.
 
 OpenCode 2 manages its model catalog; the v2 container skips the legacy

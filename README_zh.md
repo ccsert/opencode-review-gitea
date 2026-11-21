@@ -103,8 +103,9 @@ docker build --build-arg OPENCODE_GENERATION=2 --build-arg OPENCODE_VERSION=2.3.
 Gitea 和 Forgejo。PR 仅执行检查，不发布。只有默认分支的定时或手动运行才会发布，
 且直接使用两份已验证镜像，不重新构建。先写入唯一的
 `opencode-v2-<版本>-<运行号>-<尝试号>` tag，再更新 `:opencode-v2`。
-候选版本验证失败时保留上一次可用镜像。需要控制升级时，请固定唯一 tag 或摘要。
-`opencode-v2` 前缀由该 workflow 专用。
+候选版本验证失败时保留上一次可用镜像；较旧的 workflow 运行或较低的 OpenCode 版本
+不能覆盖该 tag，重跑已生效的运行也不会修改它。无法验证当前 tag 时停止发布。需要主动
+回退时，请在部署中固定之前的唯一 tag 或摘要。`opencode-v2` 前缀由该 workflow 专用。
 
 v2 容器不再调用 v1 的 `models --refresh`。使用完全自定义或离线模型网关时，只挂载
 [可信的 provider 配置文件](docs/draft-review.md#custom-openai-compatible-gateway)，不要覆盖
